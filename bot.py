@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from pathlib import Path
 from urllib.parse import parse_qsl
 
@@ -49,9 +50,9 @@ async def start(m: Message):
             + (f" — {CASHBACK:g}% cashback" if CASHBACK else "") + "\n"
             "⚡️ Tez yetkazib berish\n\n"
             f"💰 Balansingiz: <b>{som(db.balance(m.from_user.id))}</b>\n\nPastdagi tugmani bosing 👇")
-    if is_admin(m.from_user.id):
-        text += f"\n\n👮 Admin panel: {WEBAPP_URL}/admin"
     await m.answer(text, reply_markup=webapp_kb())
+    if is_admin(m.from_user.id):
+        await m.answer("👮 Siz adminsiz. Admin panel uchun /admin yozing.")
 
 
 @dp.message(Command("balans", "balance"))
@@ -59,15 +60,28 @@ async def balance_cmd(m: Message):
     await m.answer(f"💰 Balansingiz: <b>{som(db.balance(m.from_user.id))}</b>", reply_markup=webapp_kb())
 
 
+def admin_login_url():
+    ts = str(int(time.time()))
+    sig = hmac.new(ADMIN_TOKEN.encode(), ts.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{WEBAPP_URL}/admin/auto?ts={ts}&sig={sig}"
+
+
+def admin_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="👮 Admin panelga kirish", url=admin_login_url())]])
+
+
 @dp.message(Command("admin"))
 async def admin_cmd(m: Message):
     if is_admin(m.from_user.id):
         s = db.stats()
         await m.answer(
-            f"👮 Admin panel: {WEBAPP_URL}/admin\n\n"
+            "👮 <b>Admin panel</b> — pastdagi tugmani bosing (havola 10 daqiqa amal qiladi, "
+            "brauzer sizni 30 kun eslab qoladi).\n\n"
             f"👥 Foydalanuvchilar: {s['users']}\n🎁 Bozorda: {s['active']} · 🔑 Ijarada: {s['rented']}\n"
             f"💳 Chek tekshiruvi: {s['topups_checking']} · 🔗 Ulash kerak: {s['to_link']} · "
-            f"📦 Yuborish kerak: {s['to_deliver']}\n💰 Aylanma: {som(s['revenue'])}")
+            f"📦 Yuborish kerak: {s['to_deliver']}\n💰 Aylanma: {som(s['revenue'])}",
+            reply_markup=admin_kb())
 
 
 @dp.message(F.photo | F.document)
@@ -284,6 +298,18 @@ async def admin_login(request):
     return r
 
 
+async def admin_auto(request):
+    ts, sig = request.query.get("ts", ""), request.query.get("sig", "")
+    good = ts.isdigit() and abs(time.time() - int(ts)) < 600 and hmac.compare_digest(
+        hmac.new(ADMIN_TOKEN.encode(), ts.encode(), hashlib.sha256).hexdigest()[:32], sig)
+    if not good:
+        return web.Response(text="Havola eskirgan. Botga /admin yozib yangisini oling.",
+                            content_type="text/plain", charset="utf-8")
+    r = web.HTTPFound("/admin")
+    r.set_cookie("adm", ADMIN_TOKEN, max_age=30 * 86400, httponly=True, samesite="Lax", secure=True)
+    raise r
+
+
 async def admin_logout(request):
     r = ok()
     r.del_cookie("adm")
@@ -447,6 +473,7 @@ def make_app():
     r.add_post("/api/sell", api_sell)
     r.add_get("/admin", admin_page)
     r.add_post("/admin/login", admin_login)
+    r.add_get("/admin/auto", admin_auto)
     r.add_post("/admin/logout", admin_logout)
     r.add_get("/admin/api/stats", a_stats)
     r.add_get("/admin/api/gifts", a_gifts)
