@@ -40,9 +40,9 @@
   td img.th{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--bg3)}
   .acts{display:flex;gap:6px;flex-wrap:wrap}
   .tag{display:inline-block;padding:3px 8px;border-radius:8px;font-size:12px;font-weight:600;background:var(--bg3)}
-  .t-waiting_payment,.t-pending,.t-reserved{color:var(--warn)}.t-checking{color:var(--acc)}
-  .t-paid{color:#7fd3ff}.t-delivered,.t-returned,.t-active,.t-sold{color:var(--ok)}
-  .t-rented{color:var(--rent)}.t-overdue,.t-cancelled,.t-rejected{color:var(--bad)}
+  .t-waiting,.t-pending,.t-reserved,.t-need_link{color:var(--warn)}.t-checking,.t-linking,.t-paid{color:var(--acc)}
+  .t-delivered,.t-ok,.t-active,.t-sold{color:var(--ok)}
+  .t-rented{color:var(--rent)}.t-ended,.t-cancelled,.t-rejected{color:var(--bad)}
   .muted{color:var(--hint);font-size:12px}
   .empty{padding:40px;text-align:center;color:var(--hint);background:var(--bg2);border-radius:14px}
   .modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
@@ -78,10 +78,11 @@
   <aside id="side">
     <div class="logo">🎁 NFT Bozor</div>
     <a data-v="dash" class="on">📊 Boshqaruv</a>
+    <a data-v="topups">💳 To'ldirishlar <span class="cnt" id="c-top"></span></a>
     <a data-v="orders">🛒 Xaridlar <span class="cnt" id="c-orders"></span></a>
     <a data-v="rents">🔑 Ijaralar <span class="cnt" id="c-rents"></span></a>
     <a data-v="gifts">🎁 Sovg'alar</a>
-    <a data-v="listings">📥 E'lonlar <span class="cnt" id="c-list"></span></a>
+    <a data-v="listings">📥 Sotish arizalari <span class="cnt" id="c-list"></span></a>
     <a data-v="users">👥 Foydalanuvchilar</a>
     <a data-v="broadcast">📢 Xabar yuborish</a>
     <a id="logout" style="margin-top:auto">🚪 Chiqish</a>
@@ -97,9 +98,10 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const som = n => Number(n||0).toLocaleString('ru-RU').replace(/\s|,/g,' ') + " so'm";
 const dt = t => t ? new Date(t*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
-const ST = {waiting_payment:"To'lov kutilmoqda",checking:"Chek tekshiruvi",paid:"To'langan — yuborish kerak",delivered:"Yetkazildi",
-  rented:"Ijarada",returned:"Qaytarildi",overdue:"Muddati o'tgan",cancelled:"Bekor",pending:"Ko'rib chiqilmoqda",active:"Bozorda",
-  reserved:"Band",sold:"Sotilgan",rejected:"Yashirilgan"};
+const ST = {paid:"Yuborish kerak",delivered:"Yetkazildi",need_link:"Havola kutilmoqda",linking:"Ulash kerak",
+  rented:"Ijarada",ended:"Tugagan",cancelled:"Bekor",pending:"Ko'rib chiqilmoqda",active:"Bozorda",
+  reserved:"Band",sold:"Sotilgan",rejected:"Rad/yashirilgan",waiting:"Chek kutilmoqda",checking:"Chek tekshiruvi",ok:"Tasdiqlangan"};
+const PK = {1:"1 kun",3:"3 kun",7:"1 hafta",14:"2 hafta",30:"1 oy",60:"2 oy",90:"3 oy"};
 const tag = s => `<span class="tag t-${s}">${ST[s]||s}</span>`;
 const PH = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3Crect fill='%23333' width='1' height='1'/%3E%3C/svg%3E";
 const img = u => `<img class="th" src="${esc(u)}" onerror="this.src='${PH}'">`;
@@ -139,11 +141,9 @@ const head = t => `<h2><span><button class="btn g s menu-btn" onclick="$('side')
 
 async function counts(){
   const s = await api('stats');
-  $('c-orders').textContent = '';
-  const os = await api('orders?kind=buy');
-  const rs = await api('orders?kind=rent');
-  const need = l => l.filter(o=>['checking','paid','overdue'].includes(o.status)).length || '';
-  $('c-orders').textContent = need(os); $('c-rents').textContent = need(rs);
+  $('c-top').textContent = s.topups_checking || '';
+  $('c-orders').textContent = s.to_deliver || '';
+  $('c-rents').textContent = s.to_link || '';
   $('c-list').textContent = s.pending_gifts || '';
 }
 
@@ -154,21 +154,22 @@ V.dash = async () => {
   const s = await api('stats');
   const card = (k,v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
   return head('📊 Boshqaruv')+'</h2><div class="stats">'+
-    card('💰 Daromad', som(s.revenue)) + card('👥 Foydalanuvchilar', s.users) + card('🎁 Bozorda', s.active)+
-    card('✅ Sotilgan', s.sold) + card('🔑 Ijarada', s.rented) + card('🔎 Chek tekshiruvi', s.checking)+
-    card('📦 Yuborish kerak', s.to_deliver) + card('⚠️ Muddati o\'tgan', s.overdue) + card('📥 Yangi e\'lonlar', s.pending_gifts)+
+    card('💰 Aylanma (xarid+ijara)', som(s.revenue)) + card('💳 Jami to\'ldirilgan', som(s.topped)) + card('👛 Foydalanuvchi balanslari', som(s.balances))+
+    card('👥 Foydalanuvchilar', s.users) + card('🎁 Bozorda', s.active) + card('✅ Sotilgan', s.sold) + card('🔑 Ijarada', s.rented)+
+    card('🔎 Chek tekshiruvi', s.topups_checking) + card('🔗 Ulash kerak', s.to_link) + card('📦 Yuborish kerak', s.to_deliver) + card('📥 Sotish arizalari', s.pending_gifts)+
     '</div>';
 };
 
 function orderActions(o){
   const b = [];
-  if (o.receipt_file) b.push(`<button class="btn g s" onclick="showReceipt('${esc(o.receipt_file)}')">🧾 Chek</button>`);
-  if (['checking','waiting_payment'].includes(o.status)) b.push(`<button class="btn ok s" onclick="act('orders/${o.id}/confirm','To\\'lovni tasdiqlaysizmi?')">✅ Tasdiqlash</button>`);
-  if (['checking','waiting_payment','paid'].includes(o.status)) b.push(`<button class="btn bad s" onclick="act('orders/${o.id}/reject','Buyurtmani bekor qilasizmi?')">❌ Bekor</button>`);
   if (o.status==='paid') b.push(`<button class="btn s" onclick="act('orders/${o.id}/deliver','Sovg\\'ani o\\'tkazdingizmi?')">📦 Yetkazildi</button>`);
-  if (['rented','overdue'].includes(o.status)) b.push(`<button class="btn r s" onclick="act('orders/${o.id}/returned','Sovg\\'a qaytarildimi?')">↩️ Qaytarildi</button>`);
+  if (o.status==='linking') b.push(`<button class="btn ok s" onclick="act('orders/${o.id}/linked','Marketapp\\'da ulandimi?')">✅ Ulandi</button>`,
+     `<button class="btn g s" onclick="act('orders/${o.id}/relink')">🔁 Yangi havola</button>`);
+  if (o.status==='rented') b.push(`<button class="btn r s" onclick="act('orders/${o.id}/end','Ijarani hozir tugatasizmi?')">⏹ Tugatish</button>`);
+  if (['paid','need_link','linking'].includes(o.status)) b.push(`<button class="btn bad s" onclick="act('orders/${o.id}/cancel','Bekor qilinsinmi? Pul balansga qaytadi')">❌ Bekor</button>`);
   return `<div class="acts">${b.join('')}</div>`;
 }
+window.copy = t => { navigator.clipboard?.writeText(t).then(()=>toast('Nusxalandi')); };
 window.showReceipt = fid => modal(`<h3>🧾 To'lov cheki</h3><img class="big" src="/admin/api/file/${encodeURIComponent(fid)}"><button class="btn g" onclick="closeModal()">Yopish</button>`);
 
 const statusSel = (opts, cur) => `<select id="fst"><option value="">Barcha holatlar</option>${opts.map(s=>`<option value="${s}" ${s===cur?'selected':''}>${ST[s]}</option>`).join('')}</select>`;
@@ -176,7 +177,7 @@ let fStatus = {orders:'', rents:''};
 
 V.orders = async () => {
   const list = await api(`orders?kind=buy&status=${fStatus.orders}`);
-  return head('🛒 Xaridlar')+'</h2><div class="bar">'+statusSel(['waiting_payment','checking','paid','delivered','cancelled'],fStatus.orders)+'</div>'+
+  return head('🛒 Xaridlar')+'</h2><div class="bar">'+statusSel(['paid','delivered','cancelled'],fStatus.orders)+'</div>'+
     (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Xaridor</th><th>Summa</th><th>Holat</th><th>Sana</th><th>Amallar</th></tr></thead><tbody>`+
     list.map(o=>`<tr><td data-l="ID">${o.id}</td><td>${img(o.image)}</td><td data-l="Sovg'a"><a href="${esc(o.link)}" target="_blank" style="color:var(--acc)">${esc(o.title)} ${esc(o.number)}</a>${o.seller_id?`<div class="muted">Sotuvchi karta: ${esc(o.seller_card)}</div>`:''}</td>
       <td data-l="Xaridor">${esc(o.full_name)}<div class="muted">@${esc(o.username||'-')} · ${o.buyer_id}</div></td>
@@ -186,14 +187,30 @@ V.orders = async () => {
 
 V.rents = async () => {
   const list = await api(`orders?kind=rent&status=${fStatus.rents}`);
-  return head('🔑 Ijaralar')+'</h2><div class="bar">'+statusSel(['waiting_payment','checking','paid','rented','overdue','returned','cancelled'],fStatus.rents)+'</div>'+
-    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Ijarachi</th><th>Muddat</th><th>To'lov</th><th>Garov qaytarish</th><th>Holat</th><th>Amallar</th></tr></thead><tbody>`+
+  return head('🔑 Ijaralar')+'</h2><div class="bar">'+statusSel(['need_link','linking','rented','ended','cancelled'],fStatus.rents)+'</div>'+
+    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Ijarachi</th><th>Muddat</th><th>To'lov</th><th>Fragment havolasi</th><th>Holat</th><th>Amallar</th></tr></thead><tbody>`+
     list.map(o=>`<tr><td data-l="ID">${o.id}</td><td>${img(o.image)}</td><td data-l="Sovg'a"><a href="${esc(o.link)}" target="_blank" style="color:var(--acc)">${esc(o.title)} ${esc(o.number)}</a></td>
       <td data-l="Ijarachi">${esc(o.full_name)}<div class="muted">@${esc(o.username||'-')} · ${o.buyer_id}</div></td>
-      <td data-l="Muddat">${o.days} kun<div class="muted">${o.ends_at?'tugaydi: '+dt(o.ends_at):''}</div></td>
-      <td data-l="To'lov">${som(o.price)}<div class="muted">garov ${som(o.deposit)}</div></td>
-      <td data-l="Karta" class="muted">${esc(o.card)}</td><td>${tag(o.status)}</td><td>${orderActions(o)}</td></tr>`).join('')+'</tbody></table>'
+      <td data-l="Muddat">${PK[o.days]||o.days+' kun'}<div class="muted">${o.ends_at?'tugaydi: '+dt(o.ends_at):''}</div></td>
+      <td data-l="To'lov">${som(o.price)}</td>
+      <td data-l="Havola">${o.tc_link && o.status==='linking'?`<button class="btn g s" onclick="copy(${esc(JSON.stringify(o.tc_link))})">📋 Nusxalash</button>`:'<span class="muted">—</span>'}</td><td>${tag(o.status)}</td><td>${orderActions(o)}</td></tr>`).join('')+'</tbody></table>'
     : '<div class="empty">Ijaralar yo\'q</div>');
+};
+
+let tSt = 'checking';
+V.topups = async () => {
+  const list = await api('topups?status='+tSt);
+  return head('💳 Balans to\'ldirishlar')+'</h2><div class="bar"><select id="tst">'+['checking','ok','rejected'].map(s=>`<option value="${s}" ${s===tSt?'selected':''}>${ST[s]}</option>`).join('')+'</select></div>'+
+    (list.length ? `<table><thead><tr><th>#</th><th>Foydalanuvchi</th><th>Summa</th><th>Bonus</th><th>Holat</th><th>Sana</th><th>Amallar</th></tr></thead><tbody>`+
+    list.map(t=>`<tr><td data-l="ID">${t.id}</td><td data-l="Foydalanuvchi">${esc(t.full_name)}<div class="muted">@${esc(t.username||'-')} · ${t.user_id}</div></td>
+      <td data-l="Summa"><b>${som(t.amount)}</b></td><td data-l="Bonus" class="muted">${t.bonus?som(t.bonus):'—'}</td><td>${tag(t.status)}</td><td data-l="Sana" class="muted">${dt(t.created)}</td>
+      <td><div class="acts">${t.receipt_file?`<button class="btn g s" onclick="showReceipt('${esc(t.receipt_file)}')">🧾 Chek</button>`:''}
+      ${t.status==='checking'?`<button class="btn ok s" onclick="topOk(${t.id},${t.amount})">✅ Tasdiqlash</button><button class="btn bad s" onclick="act('topups/${t.id}/no','Rad etilsinmi?')">❌ Rad</button>`:''}</div></td></tr>`).join('')+'</tbody></table>'
+    : '<div class="empty">Bo\'sh</div>');
+};
+window.topOk = async (id, amount) => {
+  const v = prompt("Chekdagi summa (to'g'ri bo'lsa o'zgartirmang):", amount); if (!v) return;
+  const r = await api(`topups/${id}/ok`, {amount: parseInt(v.replace(/\s/g,''))}); toast(r.ok ? r.msg : r.error); render(); counts();
 };
 
 let gifts = [], gq = '', gst = '';
@@ -203,7 +220,7 @@ V.gifts = async () => {
     `<div class="bar"><input id="gq" placeholder="Qidirish…" value="${esc(gq)}"><select id="gst"><option value="">Hammasi</option>${['active','reserved','rented','sold','pending','rejected'].map(s=>`<option value="${s}" ${s===gst?'selected':''}>${ST[s]}</option>`).join('')}</select></div>`+
     (gifts.length ? `<table><thead><tr><th>#</th><th></th><th>Nomi</th><th>Sotuv</th><th>Ijara</th><th>Egasi</th><th>Holat</th><th>Amallar</th></tr></thead><tbody>`+
     gifts.map(g=>`<tr><td data-l="ID">${g.id}</td><td>${img(g.image)}</td><td data-l="Nomi"><a href="${esc(g.link)}" target="_blank" style="color:var(--acc)">${esc(g.title)} ${esc(g.number)}</a></td>
-      <td data-l="Sotuv">${g.for_sale?som(g.price):'—'}</td><td data-l="Ijara">${g.for_rent?som(g.rent_price)+'/kun<div class="muted">garov '+som(g.deposit)+'</div>':'—'}</td>
+      <td data-l="Sotuv">${g.for_sale?som(g.price):'—'}</td><td data-l="Ijara">${g.for_rent?som(g.rent_price)+'/kun':'—'}</td>
       <td data-l="Egasi" class="muted">${g.seller_id?g.seller_id:'Do\'kon'}</td><td>${tag(g.status)}</td>
       <td><div class="acts"><button class="btn g s" onclick="giftForm(${g.id})">✏️</button>
       ${g.status==='active'?`<button class="btn bad s" onclick="act('gifts/${g.id}/hide','Bozordan olib tashlansinmi?')">Yashirish</button>`:''}
@@ -212,7 +229,7 @@ V.gifts = async () => {
 };
 
 window.giftForm = id => {
-  const g = gifts.find(x=>x.id===id) || {for_sale:1,price:'',for_rent:0,rent_price:'',deposit:''};
+  const g = gifts.find(x=>x.id===id) || {for_sale:1,price:'',for_rent:0,rent_price:''};
   modal(`<h3>${id?'✏️ Tahrirlash #'+id:'+ Yangi sovg\'a'}</h3>
     <div><label>NFT havola (nom, raqam va rasm avtomatik olinadi)</label><input id="f-link" value="${esc(g.link||'')}" placeholder="https://t.me/nft/PlushPepe-1234"></div>
     <div class="grid2"><div><label>Nomi</label><input id="f-title" value="${esc(g.title||'')}"></div><div><label>Raqam</label><input id="f-number" value="${esc(g.number||'')}"></div></div>
@@ -220,12 +237,13 @@ window.giftForm = id => {
     <label class="ck"><input type="checkbox" id="f-sale" ${g.for_sale?'checked':''}> 🛒 Sotuvda</label>
     <div><label>Sotuv narxi (so'm)</label><input id="f-price" type="number" value="${g.price||''}"></div>
     <label class="ck"><input type="checkbox" id="f-rent" ${g.for_rent?'checked':''}> 🔑 Ijarada</label>
-    <div class="grid2"><div><label>Kunlik ijara (so'm)</label><input id="f-rprice" type="number" value="${g.rent_price||''}"></div><div><label>Garov (so'm)</label><input id="f-dep" type="number" value="${g.deposit||''}"></div></div>
+    <div><label>Kunlik ijara narxi (so'm) — paketlar chegirmasi avtomatik</label><input id="f-rprice" type="number" value="${g.rent_price||''}"></div>
+    <div class="muted">🔑 Ijaraga qo'yiladigan sovg'a sizning TON hamyoningizda bo'lishi va Marketapp'da ijaraga qo'yilgan bo'lishi kerak.</div>
     <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="saveGift(${id||0})">Saqlash</button><button class="btn g" onclick="closeModal()">Bekor</button></div>`);
 };
 window.saveGift = async id => {
   const b = {link:$('f-link').value.trim(), title:$('f-title').value.trim(), number:$('f-number').value.trim(), image:$('f-image').value.trim(),
-    for_sale:$('f-sale').checked?1:0, price:$('f-price').value, for_rent:$('f-rent').checked?1:0, rent_price:$('f-rprice').value, deposit:$('f-dep').value};
+    for_sale:$('f-sale').checked?1:0, price:$('f-price').value, for_rent:$('f-rent').checked?1:0, rent_price:$('f-rprice').value};
   if (!id) ['title','number','image'].forEach(k => { if (!b[k]) delete b[k]; });
   const r = await api(id?`gifts/${id}`:'gifts', b);
   if (r.ok){ toast('Saqlandi'); closeModal(); render(); } else toast(r.error);
@@ -233,10 +251,10 @@ window.saveGift = async id => {
 
 V.listings = async () => {
   const list = await api('gifts?status=pending');
-  return head('📥 Foydalanuvchi e\'lonlari')+'</h2><p class="muted" style="margin-bottom:12px">Sovg\'a do\'kon akkauntiga o\'tkazilganini tekshirib, keyin qabul qiling.</p>'+
-    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Shartlar</th><th>Egasi</th><th>Amallar</th></tr></thead><tbody>`+
+  return head('📥 Foydalanuvchi e\'lonlari')+'</h2><p class="muted" style="margin-bottom:12px">Foydalanuvchi bilan narxni kelishing, sovg\'ani o\'tkazgach pulni kartasiga yuboring va «Qabul» ni bosing — sovg\'a bozorga chiqadi (narxni Sovg\'alar bo\'limida o\'zgartiring).</p>'+
+    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>So'ralgan narx</th><th>Egasi</th><th>Amallar</th></tr></thead><tbody>`+
     list.map(g=>`<tr><td>${g.id}</td><td>${img(g.image)}</td><td data-l="Sovg'a"><a href="${esc(g.link)}" target="_blank" style="color:var(--acc)">${esc(g.title)} ${esc(g.number)}</a></td>
-      <td data-l="Shartlar">${g.for_sale?'🛒 '+som(g.price)+'<br>':''}${g.for_rent?'🔑 '+som(g.rent_price)+'/kun, garov '+som(g.deposit):''}</td>
+      <td data-l="Narx">${som(g.price)}</td>
       <td data-l="Egasi">${g.seller_id}<div class="muted">karta: ${esc(g.seller_card)}</div></td>
       <td><div class="acts"><button class="btn ok s" onclick="act('gifts/${g.id}/approve')">✅ Qabul</button><button class="btn bad s" onclick="act('gifts/${g.id}/reject','Rad etilsinmi?')">❌ Rad</button></div></td></tr>`).join('')+'</tbody></table>'
     : '<div class="empty">Yangi e\'lonlar yo\'q</div>');
@@ -245,10 +263,15 @@ V.listings = async () => {
 V.users = async () => {
   const list = await api('users');
   return head(`👥 Foydalanuvchilar (${list.length})`)+'</h2>'+
-    `<table><thead><tr><th>ID</th><th>Ism</th><th>Username</th><th>Buyurtmalar</th><th>Qo'shilgan</th><th></th></tr></thead><tbody>`+
+    `<table><thead><tr><th>ID</th><th>Ism</th><th>Username</th><th>Balans</th><th>Buyurtmalar</th><th>Qo'shilgan</th><th></th></tr></thead><tbody>`+
     list.map(u=>`<tr><td data-l="ID">${u.id}</td><td data-l="Ism">${esc(u.full_name)}</td><td data-l="Username">${u.username?`<a href="https://t.me/${esc(u.username)}" target="_blank" style="color:var(--acc)">@${esc(u.username)}</a>`:'—'}</td>
+      <td data-l="Balans"><b>${som(u.balance)}</b> <button class="btn g s" onclick="editBal(${u.id})">±</button></td>
       <td data-l="Buyurtmalar">${u.orders}</td><td data-l="Sana" class="muted">${dt(u.created)}</td>
       <td><button class="btn s ${u.banned?'ok':'bad'}" onclick="ban(${u.id},${u.banned?0:1})">${u.banned?'Blokdan chiqarish':'Bloklash'}</button></td></tr>`).join('')+'</tbody></table>';
+};
+window.editBal = async id => {
+  const v = prompt("Balansga qo'shiladigan summa (ayirish uchun minus bilan, masalan -5000):"); if (!v) return;
+  const r = await api(`users/${id}/balance`, {delta: parseInt(v.replace(/\s/g,''))}); toast(r.ok ? r.msg : r.error); render();
 };
 window.ban = async (id, v) => { await api(`users/${id}/ban`, {banned:v}); toast('Saqlandi'); render(); };
 
@@ -265,6 +288,7 @@ async function render(){
   const fst = $('fst'); if (fst) fst.onchange = () => { fStatus[view] = fst.value; render(); };
   const q = $('gq'); if (q) { let t; q.oninput = () => { clearTimeout(t); t = setTimeout(()=>{ gq=q.value; render().then(()=>{ const n=$('gq'); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); },400); }; }
   const s = $('gst'); if (s) s.onchange = () => { gst = s.value; render(); };
+  const ts = $('tst'); if (ts) ts.onchange = () => { tSt = ts.value; render(); };
 }
 async function start(){
   try { await api('stats'); } catch { return; }

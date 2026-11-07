@@ -29,4 +29,6 @@ PORT = int(os.environ.get("PORT", "8080"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = os.environ.get("DB_PATH", str(DATA_DIR / "giftxona.db"))
-COMMISSION = float(os.environ.get("COMMISSION", "5"))      # foydalanuvchi sovg'alaridan % komissiya
+COMMISSION = float(os.environ.get("COMMISSION", "5"))     # foydalanuvchi sovg'alaridan %
+CASHBACK = float(os.environ.get("CASHBACK", "2"))           # balans to'ldirishda bonus %
+MIN_TOPUP = int(os.environ.get("MIN_TOPUP", "5000"))      # eng kam to'ldirish (so'm)

@@ -4,14 +4,15 @@ from config import DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
-  id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, created INTEGER, banned INTEGER DEFAULT 0
+  id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, created INTEGER,
+  banned INTEGER DEFAULT 0, balance INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS gifts(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL, number TEXT, link TEXT, image TEXT,
   for_sale INTEGER DEFAULT 1, price INTEGER DEFAULT 0,        -- sotuv narxi (so'm)
   for_rent INTEGER DEFAULT 0, rent_price INTEGER DEFAULT 0,   -- 1 kunlik ijara narxi
-  deposit INTEGER DEFAULT 0,                                  -- ijara garovi
+  deposit INTEGER DEFAULT 0,                                  -- (eski, ishlatilmaydi)
   seller_id INTEGER, seller_card TEXT,                        -- NULL = do'kon sovg'asi
   status TEXT DEFAULT 'pending',  -- pending | active | reserved | rented | sold | rejected
   created INTEGER
@@ -20,18 +21,29 @@ CREATE TABLE IF NOT EXISTS orders(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT DEFAULT 'buy',          -- buy | rent
   gift_id INTEGER, buyer_id INTEGER,
-  price INTEGER,                    -- jami to'lov (ijara uchun: ijara + garov)
-  days INTEGER DEFAULT 0, deposit INTEGER DEFAULT 0,
-  card TEXT,                        -- garov qaytariladigan karta (ijara)
-  status TEXT DEFAULT 'waiting_payment',
-  -- waiting_payment | checking | paid | delivered | rented | returned | overdue | cancelled
-  receipt_file TEXT, ends_at INTEGER, reminded INTEGER DEFAULT 0, created INTEGER
+  price INTEGER, days INTEGER DEFAULT 0, deposit INTEGER DEFAULT 0, card TEXT,
+  status TEXT DEFAULT 'paid',
+  -- buy:  paid -> delivered | cancelled
+  -- rent: need_link -> linking -> rented -> ended | cancelled
+  tc_link TEXT, receipt_file TEXT, ends_at INTEGER, reminded INTEGER DEFAULT 0, created INTEGER
+);
+CREATE TABLE IF NOT EXISTS topups(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER, amount INTEGER, bonus INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'waiting',    -- waiting | checking | ok | rejected
+  receipt_file TEXT, created INTEGER
 );
 """
 
+# Eski bazaga yangi ustunlar qo'shish
+MIGRATIONS = [
+    ("users", "balance", "INTEGER DEFAULT 0"),
+    ("orders", "tc_link", "TEXT"),
+]
+
 
 def conn():
-    c = sqlite3.connect(DB_PATH)
+    c = sqlite3.connect(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
     return c
 
@@ -39,6 +51,10 @@ def conn():
 def init():
     with conn() as c:
         c.executescript(SCHEMA)
+        for table, col, typ in MIGRATIONS:
+            cols = [r["name"] for r in c.execute(f"PRAGMA table_info({table})")]
+            if col not in cols:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
 
 def _all(sql, args=()):
@@ -69,7 +85,20 @@ def get_user(uid):
     return _one("SELECT * FROM users WHERE id=?", (uid,))
 
 
-def list_users(limit=500):
+def balance(uid):
+    u = get_user(uid)
+    return u["balance"] if u else 0
+
+
+def add_balance(uid, amount):
+    _exec("UPDATE users SET balance=balance+? WHERE id=?", (amount, uid))
+
+
+def set_balance(uid, amount):
+    _exec("UPDATE users SET balance=? WHERE id=?", (amount, uid))
+
+
+def list_users(limit=1000):
     return _all("SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.buyer_id=u.id) AS orders "
                 "FROM users u ORDER BY created DESC LIMIT ?", (limit,))
 
@@ -80,6 +109,12 @@ def all_user_ids():
 
 def set_banned(uid, v):
     _exec("UPDATE users SET banned=? WHERE id=?", (1 if v else 0, uid))
+
+
+def top_users(limit=50):
+    return _all("SELECT u.id, u.username, u.full_name, COUNT(o.id) AS cnt, COALESCE(SUM(o.price),0) AS total "
+                "FROM orders o JOIN users u ON u.id=o.buyer_id "
+                "WHERE o.status NOT IN ('cancelled') GROUP BY u.id ORDER BY total DESC LIMIT ?", (limit,))
 
 
 # ── gifts ──
@@ -106,32 +141,32 @@ def get_gift(gid):
 
 
 def list_gifts(q="", sort="new", mode="all", statuses=("active",)):
-    order = {"cheap": "price ASC", "expensive": "price DESC"}.get(sort, "id DESC")
+    order = {"cheap": "price ASC", "expensive": "price DESC",
+             "rent_cheap": "rent_price ASC"}.get(sort, "id DESC")
     cond = {"sale": "AND for_sale=1", "rent": "AND for_rent=1"}.get(mode, "")
     ph = ",".join("?" * len(statuses))
     return _all(f"SELECT * FROM gifts WHERE status IN ({ph}) {cond} "
-                f"AND (title LIKE ? OR number LIKE ?) ORDER BY {order} LIMIT 500",
+                f"AND (title LIKE ? OR number LIKE ?) ORDER BY {order} LIMIT 1000",
                 (*statuses, f"%{q}%", f"%{q}%"))
 
 
-# ── orders ──
-def create_order(kind, gid, buyer_id, days=0, card=None):
-    """Sovg'ani band qiladi va buyurtma ochadi. Band/noto'g'ri bo'lsa None."""
+# ── orders (balansdan to'lanadi) ──
+def pay_order(kind, gid, buyer_id, price, days=0):
+    """Balansdan yechib, sovg'ani band qiladi. (order_id, xato) qaytaradi."""
     with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
         g = c.execute("SELECT * FROM gifts WHERE id=? AND status='active'", (gid,)).fetchone()
         if not g or (kind == "buy" and not g["for_sale"]) or (kind == "rent" and not g["for_rent"]):
-            return None
-        if c.execute("UPDATE gifts SET status='reserved' WHERE id=? AND status='active'", (gid,)).rowcount == 0:
-            return None
-        if kind == "rent":
-            deposit = g["deposit"]
-            price = g["rent_price"] * days + deposit
-        else:
-            deposit, price = 0, g["price"]
-        cur = c.execute("INSERT INTO orders(kind,gift_id,buyer_id,price,days,deposit,card,created) "
-                        "VALUES(?,?,?,?,?,?,?,?)",
-                        (kind, gid, buyer_id, price, days, deposit, card, int(time.time())))
-        return cur.lastrowid
+            return None, "Bu sovg'a hozir band"
+        bal = c.execute("SELECT balance FROM users WHERE id=?", (buyer_id,)).fetchone()
+        if not bal or bal["balance"] < price:
+            return None, "Balans yetarli emas"
+        c.execute("UPDATE users SET balance=balance-? WHERE id=?", (price, buyer_id))
+        c.execute("UPDATE gifts SET status=? WHERE id=?", ("reserved" if kind == "buy" else "rented", gid))
+        status = "paid" if kind == "buy" else "need_link"
+        cur = c.execute("INSERT INTO orders(kind,gift_id,buyer_id,price,days,status,created) VALUES(?,?,?,?,?,?,?)",
+                        (kind, gid, buyer_id, price, days, status, int(time.time())))
+        return cur.lastrowid, None
 
 
 def get_order(oid):
@@ -142,8 +177,9 @@ def set_order(oid, **f):
     _exec(f"UPDATE orders SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), oid))
 
 
-def user_waiting_order(uid):
-    return _one("SELECT * FROM orders WHERE buyer_id=? AND status='waiting_payment' ORDER BY id DESC LIMIT 1", (uid,))
+def user_order_needing_link(uid):
+    return _one("SELECT * FROM orders WHERE buyer_id=? AND kind='rent' AND status='need_link' "
+                "ORDER BY id DESC LIMIT 1", (uid,))
 
 
 ORDER_JOIN = ("SELECT o.*, g.title, g.number, g.image, g.link, g.seller_id, g.seller_card, "
@@ -152,10 +188,10 @@ ORDER_JOIN = ("SELECT o.*, g.title, g.number, g.image, g.link, g.seller_id, g.se
 
 
 def user_orders(uid):
-    return _all(ORDER_JOIN + "WHERE o.buyer_id=? ORDER BY o.id DESC LIMIT 50", (uid,))
+    return _all(ORDER_JOIN + "WHERE o.buyer_id=? ORDER BY o.id DESC LIMIT 100", (uid,))
 
 
-def list_orders(kind=None, status=None, limit=300):
+def list_orders(kind=None, status=None, limit=500):
     where, args = [], []
     if kind:
         where.append("o.kind=?"); args.append(kind)
@@ -165,17 +201,48 @@ def list_orders(kind=None, status=None, limit=300):
     return _all(ORDER_JOIN + f"{w} ORDER BY o.id DESC LIMIT ?", (*args, limit))
 
 
-def expired_unpaid(max_age):
-    return _all("SELECT * FROM orders WHERE status='waiting_payment' AND created<?", (int(time.time()) - max_age,))
-
-
 def rentals_ending(within_sec):
     return _all("SELECT * FROM orders WHERE status='rented' AND reminded=0 AND ends_at<?",
                 (int(time.time()) + within_sec,))
 
 
-def rentals_overdue(grace_sec):
-    return _all("SELECT * FROM orders WHERE status='rented' AND ends_at<?", (int(time.time()) - grace_sec,))
+def rentals_expired():
+    return _all("SELECT * FROM orders WHERE status='rented' AND ends_at<?", (int(time.time()),))
+
+
+def stale_need_link(max_age):
+    return _all("SELECT * FROM orders WHERE status='need_link' AND reminded=0 AND created<?",
+                (int(time.time()) - max_age,))
+
+
+# ── topups ──
+def create_topup(uid, amount):
+    with conn() as c:
+        c.execute("UPDATE topups SET status='rejected' WHERE user_id=? AND status='waiting'", (uid,))
+        return c.execute("INSERT INTO topups(user_id,amount,created) VALUES(?,?,?)",
+                         (uid, amount, int(time.time()))).lastrowid
+
+
+def waiting_topup(uid):
+    return _one("SELECT * FROM topups WHERE user_id=? AND status='waiting' ORDER BY id DESC LIMIT 1", (uid,))
+
+
+def get_topup(tid):
+    return _one("SELECT * FROM topups WHERE id=?", (tid,))
+
+
+def set_topup(tid, **f):
+    _exec(f"UPDATE topups SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), tid))
+
+
+def list_topups(status=None, limit=500):
+    w, args = ("WHERE t.status=?", (status,)) if status else ("WHERE t.status!='waiting'", ())
+    return _all("SELECT t.*, u.username, u.full_name FROM topups t LEFT JOIN users u ON u.id=t.user_id "
+                f"{w} ORDER BY t.id DESC LIMIT ?", (*args, limit))
+
+
+def expired_topups(max_age):
+    return _all("SELECT * FROM topups WHERE status='waiting' AND created<?", (int(time.time()) - max_age,))
 
 
 def stats():
@@ -186,9 +253,10 @@ def stats():
         "sold": one("SELECT COUNT(*) v FROM gifts WHERE status='sold'"),
         "rented": one("SELECT COUNT(*) v FROM orders WHERE status='rented'"),
         "pending_gifts": one("SELECT COUNT(*) v FROM gifts WHERE status='pending'"),
-        "checking": one("SELECT COUNT(*) v FROM orders WHERE status='checking'"),
+        "topups_checking": one("SELECT COUNT(*) v FROM topups WHERE status='checking'"),
         "to_deliver": one("SELECT COUNT(*) v FROM orders WHERE status='paid'"),
-        "overdue": one("SELECT COUNT(*) v FROM orders WHERE status='overdue'"),
-        "revenue": one("SELECT COALESCE(SUM(price-deposit),0) v FROM orders "
-                       "WHERE status IN ('paid','delivered','rented','returned','overdue')"),
+        "to_link": one("SELECT COUNT(*) v FROM orders WHERE status='linking'"),
+        "balances": one("SELECT COALESCE(SUM(balance),0) v FROM users"),
+        "topped": one("SELECT COALESCE(SUM(amount),0) v FROM topups WHERE status='ok'"),
+        "revenue": one("SELECT COALESCE(SUM(price),0) v FROM orders WHERE status NOT IN ('cancelled')"),
     }

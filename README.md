@@ -23,12 +23,32 @@ Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
 - Ijara tugashiga 24 soat qolganda eslatma
 - Muddatdan 12 soat o'tsa — «Muddati o'tgan», adminga xabar
 
-## Ijara qanday ishlaydi
-1. Ijarachi kunlar sonini tanlaydi va **ijara haqi + garov** to'laydi.
-2. Admin chekni tasdiqlaydi va sovg'ani ijarachiga o'tkazadi → «Yetkazildi».
-3. Muddat tugagach ijarachi sovg'ani `SHOP_ACCOUNT` ga qaytaradi → admin «Qaytarildi» bosadi.
-4. Garov ijarachining kartasiga qaytariladi. Qaytarmasa, garov qolib ketadi (sovg'a egasiga beriladi).
-   Garovni sovg'a qiymatiga teng yoki undan yuqori qo'ying!
+## Balans
+Foydalanuvchi Mini App → Profil → «Balansni to'ldirish» → summa → bot karta raqamini yuboradi →
+chek rasmini botga jo'natadi → admin tasdiqlaydi → balans + cashback (`CASHBACK`, standart 2%).
+Xarid va ijara balansdan bir zumda to'lanadi.
+
+## Garovsiz ijara (GiftXona uslubida)
+Narx: kunlik narx × kun, chegirma bilan: 3 kun -3%, 1 hafta -17%, 2 hafta -23%, 1 oy -29%, 2 oy -35%, 3 oy -38%.
+
+**Sovg'a sizning TON hamyoningizda qoladi** — ijarachi uni o'tkaza yoki sota olmaydi, shuning uchun garov kerak emas.
+
+### Bir martalik tayyorgarlik (admin)
+1. Ijaraga beriladigan sovg'ani TON blokcheynga chiqaring (Telegram: sovg'a → Transfer → Send via blockchain → Fragment).
+2. https://marketapp.ws da hamyoningizni ulang → sovg'a → **Rent out** → eng kichik narx (masalan 0.01 TON/kun),
+   «avtomatik qayta qo'yish» ni yoqing.
+3. Ijaraga olish uchun Marketapp'da **ikkinchi hamyon** kerak (unda ozgina TON: har ijara ~0.2 TON + ijara haqi o'zingizga qaytadi).
+4. Admin panel → Sovg'alar → sovg'ani qo'shing, «🔑 Ijarada» + kunlik narx (so'm).
+
+### Har bir ijara
+1. Mijoz balansdan to'laydi → bot unga ko'rsatma yuboradi: fragment.com → Connect TON → `tc://…` havolani yuborish.
+2. Sizga havola keladi → Marketapp (2-hamyon) → sovg'ani mijoz tanlagan muddatga ijaraga oling →
+   Rented → **Assign to Telegram** → havolani qo'ying → botda **✅ Ulandi**.
+3. Mijoz fragment.com → My Assets → **Display in Telegram** — sovg'a profilida chiqadi.
+4. Muddat tugaganda Marketapp sovg'ani qaytaradi, bot mijozga va sizga xabar beradi.
+
+Havola eskirgan bo'lsa — **🔁 Yangi havola** tugmasi. Bekor qilinsa pul mijoz balansiga qaytadi.
+Eslatma: Fragment bir sovg'ani kuniga ulash sonini cheklaydi.
 
 ## Serverga joylash (Railway — eng oson yo'l)
 1. https://github.com da ro'yxatdan o'ting → **New repository** → shu papkadagi fayllarni yuklang
@@ -44,6 +64,7 @@ Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
    | `CARD_OWNER` | karta egasi ismi |
    | `SHOP_ACCOUNT` | sovg'alar qaytariladigan akkaunt, masalan `@giftshop_admin` |
    | `COMMISSION` | komissiya foizi, masalan `5` |
+   | `CASHBACK` | balans to'ldirishda bonus %, masalan `2` |
 4. **Settings → Networking → Generate Domain** (domen avtomatik ulanadi).
 5. **Settings → Volumes → Add Volume**, mount path: `/data` (ma'lumotlar o'chib ketmasligi uchun).
 6. @BotFather → `/mybots` → botingiz → **Bot Settings → Configure Mini App** → Railway domenini kiriting.
