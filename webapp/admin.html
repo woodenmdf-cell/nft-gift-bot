@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin panel — NFT Bozor</title>
+<style>
+  :root{--bg:#0d0f14;--bg2:#161a22;--bg3:#1f2430;--line:#2a3040;--text:#e8eaf0;--hint:#8a91a3;
+        --acc:#2ea6ff;--ok:#2ecc71;--bad:#ff5c5c;--warn:#ffb020;--rent:#9b5cff}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  button{cursor:pointer;font:inherit}
+  input,select,textarea{background:var(--bg3);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;width:100%;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--acc)}
+  .btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:600;white-space:nowrap}
+  .btn.s{padding:6px 10px;font-size:12px}.btn.ok{background:var(--ok)}.btn.bad{background:var(--bad)}
+  .btn.g{background:var(--bg3);color:var(--text);border:1px solid var(--line)}.btn.r{background:var(--rent)}
+  /* login */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .lbox{background:var(--bg2);padding:28px;border-radius:18px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:12px}
+  .lbox h1{font-size:22px;text-align:center}
+  /* layout */
+  #app{display:none;min-height:100vh}
+  aside{position:fixed;top:0;left:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--line);padding:18px 10px;display:flex;flex-direction:column;gap:4px}
+  aside .logo{font-weight:700;font-size:17px;padding:4px 10px 16px}
+  aside a{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;color:var(--hint);text-decoration:none;cursor:pointer}
+  aside a.on,aside a:hover{background:var(--bg3);color:var(--text)}
+  .cnt{background:var(--bad);color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;font-weight:700}
+  .cnt:empty{display:none}
+  main{margin-left:220px;padding:24px;max-width:1300px}
+  h2{font-size:22px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+  .stat{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .stat .v{font-size:24px;font-weight:700;margin-top:6px}.stat .k{color:var(--hint);font-size:13px}
+  .bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}.bar>*{width:auto;min-width:140px}
+  table{width:100%;border-collapse:collapse;background:var(--bg2);border-radius:14px;overflow:hidden}
+  th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{color:var(--hint);font-weight:500;font-size:12px;text-transform:uppercase;background:var(--bg3)}
+  tr:last-child td{border-bottom:0}
+  td img.th{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--bg3)}
+  .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .tag{display:inline-block;padding:3px 8px;border-radius:8px;font-size:12px;font-weight:600;background:var(--bg3)}
+  .t-waiting_payment,.t-pending,.t-reserved{color:var(--warn)}.t-checking{color:var(--acc)}
+  .t-paid{color:#7fd3ff}.t-delivered,.t-returned,.t-active,.t-sold{color:var(--ok)}
+  .t-rented{color:var(--rent)}.t-overdue,.t-cancelled,.t-rejected{color:var(--bad)}
+  .muted{color:var(--hint);font-size:12px}
+  .empty{padding:40px;text-align:center;color:var(--hint);background:var(--bg2);border-radius:14px}
+  .modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+  .modal.on{display:flex}
+  .mbox{background:var(--bg2);border-radius:18px;padding:22px;width:100%;max-width:520px;max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+  .mbox h3{font-size:18px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mbox label{font-size:12px;color:var(--hint);display:block;margin-bottom:4px}
+  .ck{display:flex;gap:8px;align-items:center}.ck input{width:18px;height:18px}
+  .mbox img.big{max-width:100%;border-radius:12px}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--line);padding:12px 18px;border-radius:12px;display:none;z-index:30}
+  .menu-btn{display:none}
+  @media(max-width:800px){
+    aside{transform:translateX(-100%);transition:.2s;z-index:15;width:240px}aside.open{transform:none}
+    main{margin-left:0;padding:14px}.menu-btn{display:inline-block}
+    table,thead,tbody,tr,td{display:block}thead{display:none}
+    tr{border-bottom:1px solid var(--line);padding:8px 0}td{border:0;padding:5px 12px}
+    td[data-l]::before{content:attr(data-l)": ";color:var(--hint);font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="lbox">
+    <h1>👮 Admin panel</h1>
+    <input type="password" id="pw" placeholder="Parol" autofocus>
+    <button class="btn" id="lgo">Kirish</button>
+    <div class="muted" id="lerr"></div>
+  </div>
+</div>
+
+<div id="app">
+  <aside id="side">
+    <div class="logo">🎁 NFT Bozor</div>
+    <a data-v="dash" class="on">📊 Boshqaruv</a>
+    <a data-v="orders">🛒 Xaridlar <span class="cnt" id="c-orders"></span></a>
+    <a data-v="rents">🔑 Ijaralar <span class="cnt" id="c-rents"></span></a>
+    <a data-v="gifts">🎁 Sovg'alar</a>
+    <a data-v="listings">📥 E'lonlar <span class="cnt" id="c-list"></span></a>
+    <a data-v="users">👥 Foydalanuvchilar</a>
+    <a data-v="broadcast">📢 Xabar yuborish</a>
+    <a id="logout" style="margin-top:auto">🚪 Chiqish</a>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<div class="modal" id="modal"><div class="mbox" id="mbox"></div></div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const som = n => Number(n||0).toLocaleString('ru-RU').replace(/\s|,/g,' ') + " so'm";
+const dt = t => t ? new Date(t*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+const ST = {waiting_payment:"To'lov kutilmoqda",checking:"Chek tekshiruvi",paid:"To'langan — yuborish kerak",delivered:"Yetkazildi",
+  rented:"Ijarada",returned:"Qaytarildi",overdue:"Muddati o'tgan",cancelled:"Bekor",pending:"Ko'rib chiqilmoqda",active:"Bozorda",
+  reserved:"Band",sold:"Sotilgan",rejected:"Yashirilgan"};
+const tag = s => `<span class="tag t-${s}">${ST[s]||s}</span>`;
+const PH = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3Crect fill='%23333' width='1' height='1'/%3E%3C/svg%3E";
+const img = u => `<img class="th" src="${esc(u)}" onerror="this.src='${PH}'">`;
+
+function toast(m){ const t=$('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2500); }
+async function api(path, body){
+  const r = await fetch('/admin/api/'+path, body===undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if (r.status===401){ showLogin(); throw new Error('login'); }
+  return r.json();
+}
+async function act(path, confirmText){
+  if (confirmText && !confirm(confirmText)) return;
+  const r = await api(path, {});
+  toast(r.ok ? (r.msg||'Bajarildi') : (r.error||'Xato'));
+  render(); counts();
+}
+const modal = html => { $('mbox').innerHTML = html; $('modal').classList.add('on'); };
+const closeModal = () => $('modal').classList.remove('on');
+$('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
+
+/* ── auth ── */
+function showLogin(){ $('login').style.display='flex'; $('app').style.display='none'; }
+async function doLogin(){
+  const r = await fetch('/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('pw').value})}).then(r=>r.json());
+  if (r.ok) start(); else $('lerr').textContent = r.error;
+}
+$('lgo').onclick = doLogin; $('pw').onkeydown = e => e.key==='Enter' && doLogin();
+$('logout').onclick = async () => { await fetch('/admin/logout',{method:'POST'}); showLogin(); };
+
+/* ── nav ── */
+let view = 'dash';
+document.querySelectorAll('aside a[data-v]').forEach(a => a.onclick = () => {
+  view = a.dataset.v; document.querySelectorAll('aside a').forEach(x=>x.classList.toggle('on',x===a));
+  $('side').classList.remove('open'); render();
+});
+const head = t => `<h2><span><button class="btn g s menu-btn" onclick="$('side').classList.toggle('open')">☰</button> ${t}</span>`;
+
+async function counts(){
+  const s = await api('stats');
+  $('c-orders').textContent = '';
+  const os = await api('orders?kind=buy');
+  const rs = await api('orders?kind=rent');
+  const need = l => l.filter(o=>['checking','paid','overdue'].includes(o.status)).length || '';
+  $('c-orders').textContent = need(os); $('c-rents').textContent = need(rs);
+  $('c-list').textContent = s.pending_gifts || '';
+}
+
+/* ── views ── */
+const V = {};
+
+V.dash = async () => {
+  const s = await api('stats');
+  const card = (k,v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  return head('📊 Boshqaruv')+'</h2><div class="stats">'+
+    card('💰 Daromad', som(s.revenue)) + card('👥 Foydalanuvchilar', s.users) + card('🎁 Bozorda', s.active)+
+    card('✅ Sotilgan', s.sold) + card('🔑 Ijarada', s.rented) + card('🔎 Chek tekshiruvi', s.checking)+
+    card('📦 Yuborish kerak', s.to_deliver) + card('⚠️ Muddati o\'tgan', s.overdue) + card('📥 Yangi e\'lonlar', s.pending_gifts)+
+    '</div>';
+};
+
+function orderActions(o){
+  const b = [];
+  if (o.receipt_file) b.push(`<button class="btn g s" onclick="showReceipt('${esc(o.receipt_file)}')">🧾 Chek</button>`);
+  if (['checking','waiting_payment'].includes(o.status)) b.push(`<button class="btn ok s" onclick="act('orders/${o.id}/confirm','To\\'lovni tasdiqlaysizmi?')">✅ Tasdiqlash</button>`);
+  if (['checking','waiting_payment','paid'].includes(o.status)) b.push(`<button class="btn bad s" onclick="act('orders/${o.id}/reject','Buyurtmani bekor qilasizmi?')">❌ Bekor</button>`);
+  if (o.status==='paid') b.push(`<button class="btn s" onclick="act('orders/${o.id}/deliver','Sovg\\'ani o\\'tkazdingizmi?')">📦 Yetkazildi</button>`);
+  if (['rented','overdue'].includes(o.status)) b.push(`<button class="btn r s" onclick="act('orders/${o.id}/returned','Sovg\\'a qaytarildimi?')">↩️ Qaytarildi</button>`);
+  return `<div class="acts">${b.join('')}</div>`;
+}
+window.showReceipt = fid => modal(`<h3>🧾 To'lov cheki</h3><img class="big" src="/admin/api/file/${encodeURIComponent(fid)}"><button class="btn g" onclick="closeModal()">Yopish</button>`);
+
+const statusSel = (opts, cur) => `<select id="fst"><option value="">Barcha holatlar</option>${opts.map(s=>`<option value="${s}" ${s===cur?'selected':''}>${ST[s]}</option>`).join('')}</select>`;
+let fStatus = {orders:'', rents:''};
+
+V.orders = async () => {
+  const list = await api(`orders?kind=buy&status=${fStatus.orders}`);
+  return head('🛒 Xaridlar')+'</h2><div class="bar">'+statusSel(['waiting_payment','checking','paid','delivered','cancelled'],fStatus.orders)+'</div>'+
+    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Xaridor</th><th>Summa</th><th>Holat</th><th>Sana</th><th>Amallar</th></tr></thead><tbody>`+
+    list.map(o=>`<tr><td data-l="ID">${o.id}</td><td>${img(o.image)}</td><td data-l="Sovg'a"><a href="${esc(o.link)}" target="_blank" style="color:var(--acc)">${esc(o.title)} ${esc(o.number)}</a>${o.seller_id?`<div class="muted">Sotuvchi karta: ${esc(o.seller_card)}</div>`:''}</td>
+      <td data-l="Xaridor">${esc(o.full_name)}<div class="muted">@${esc(o.username||'-')} · ${o.buyer_id}</div></td>
+      <td data-l="Summa">${som(o.price)}</td><td>${tag(o.status)}</td><td data-l="Sana" class="muted">${dt(o.created)}</td><td>${orderActions(o)}</td></tr>`).join('')+'</tbody></table>'
+    : '<div class="empty">Xaridlar yo\'q</div>');
+};
+
+V.rents = async () => {
+  const list = await api(`orders?kind=rent&status=${fStatus.rents}`);
+  return head('🔑 Ijaralar')+'</h2><div class="bar">'+statusSel(['waiting_payment','checking','paid','rented','overdue','returned','cancelled'],fStatus.rents)+'</div>'+
+    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Ijarachi</th><th>Muddat</th><th>To'lov</th><th>Garov qaytarish</th><th>Holat</th><th>Amallar</th></tr></thead><tbody>`+
+    list.map(o=>`<tr><td data-l="ID">${o.id}</td><td>${img(o.image)}</td><td data-l="Sovg'a"><a href="${esc(o.link)}" target="_blank" style="color:var(--acc)">${esc(o.title)} ${esc(o.number)}</a></td>
+      <td data-l="Ijarachi">${esc(o.full_name)}<div class="muted">@${esc(o.username||'-')} · ${o.buyer_id}</div></td>
+      <td data-l="Muddat">${o.days} kun<div class="muted">${o.ends_at?'tugaydi: '+dt(o.ends_at):''}</div></td>
+      <td data-l="To'lov">${som(o.price)}<div class="muted">garov ${som(o.deposit)}</div></td>
+      <td data-l="Karta" class="muted">${esc(o.card)}</td><td>${tag(o.status)}</td><td>${orderActions(o)}</td></tr>`).join('')+'</tbody></table>'
+    : '<div class="empty">Ijaralar yo\'q</div>');
+};
+
+let gifts = [], gq = '', gst = '';
+V.gifts = async () => {
+  gifts = await api(`gifts?q=${encodeURIComponent(gq)}&status=${gst}`);
+  return head('🎁 Sovg\'alar')+'<button class="btn" onclick="giftForm()">+ Sovg\'a qo\'shish</button></h2>'+
+    `<div class="bar"><input id="gq" placeholder="Qidirish…" value="${esc(gq)}"><select id="gst"><option value="">Hammasi</option>${['active','reserved','rented','sold','pending','rejected'].map(s=>`<option value="${s}" ${s===gst?'selected':''}>${ST[s]}</option>`).join('')}</select></div>`+
+    (gifts.length ? `<table><thead><tr><th>#</th><th></th><th>Nomi</th><th>Sotuv</th><th>Ijara</th><th>Egasi</th><th>Holat</th><th>Amallar</th></tr></thead><tbody>`+
+    gifts.map(g=>`<tr><td data-l="ID">${g.id}</td><td>${img(g.image)}</td><td data-l="Nomi"><a href="${esc(g.link)}" target="_blank" style="color:var(--acc)">${esc(g.title)} ${esc(g.number)}</a></td>
+      <td data-l="Sotuv">${g.for_sale?som(g.price):'—'}</td><td data-l="Ijara">${g.for_rent?som(g.rent_price)+'/kun<div class="muted">garov '+som(g.deposit)+'</div>':'—'}</td>
+      <td data-l="Egasi" class="muted">${g.seller_id?g.seller_id:'Do\'kon'}</td><td>${tag(g.status)}</td>
+      <td><div class="acts"><button class="btn g s" onclick="giftForm(${g.id})">✏️</button>
+      ${g.status==='active'?`<button class="btn bad s" onclick="act('gifts/${g.id}/hide','Bozordan olib tashlansinmi?')">Yashirish</button>`:''}
+      ${g.status==='rejected'?`<button class="btn ok s" onclick="act('gifts/${g.id}/activate')">Faollashtirish</button>`:''}</div></td></tr>`).join('')+'</tbody></table>'
+    : '<div class="empty">Sovg\'alar yo\'q</div>');
+};
+
+window.giftForm = id => {
+  const g = gifts.find(x=>x.id===id) || {for_sale:1,price:'',for_rent:0,rent_price:'',deposit:''};
+  modal(`<h3>${id?'✏️ Tahrirlash #'+id:'+ Yangi sovg\'a'}</h3>
+    <div><label>NFT havola (nom, raqam va rasm avtomatik olinadi)</label><input id="f-link" value="${esc(g.link||'')}" placeholder="https://t.me/nft/PlushPepe-1234"></div>
+    <div class="grid2"><div><label>Nomi</label><input id="f-title" value="${esc(g.title||'')}"></div><div><label>Raqam</label><input id="f-number" value="${esc(g.number||'')}"></div></div>
+    <div><label>Rasm URL</label><input id="f-image" value="${esc(g.image||'')}"></div>
+    <label class="ck"><input type="checkbox" id="f-sale" ${g.for_sale?'checked':''}> 🛒 Sotuvda</label>
+    <div><label>Sotuv narxi (so'm)</label><input id="f-price" type="number" value="${g.price||''}"></div>
+    <label class="ck"><input type="checkbox" id="f-rent" ${g.for_rent?'checked':''}> 🔑 Ijarada</label>
+    <div class="grid2"><div><label>Kunlik ijara (so'm)</label><input id="f-rprice" type="number" value="${g.rent_price||''}"></div><div><label>Garov (so'm)</label><input id="f-dep" type="number" value="${g.deposit||''}"></div></div>
+    <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="saveGift(${id||0})">Saqlash</button><button class="btn g" onclick="closeModal()">Bekor</button></div>`);
+};
+window.saveGift = async id => {
+  const b = {link:$('f-link').value.trim(), title:$('f-title').value.trim(), number:$('f-number').value.trim(), image:$('f-image').value.trim(),
+    for_sale:$('f-sale').checked?1:0, price:$('f-price').value, for_rent:$('f-rent').checked?1:0, rent_price:$('f-rprice').value, deposit:$('f-dep').value};
+  if (!id) ['title','number','image'].forEach(k => { if (!b[k]) delete b[k]; });
+  const r = await api(id?`gifts/${id}`:'gifts', b);
+  if (r.ok){ toast('Saqlandi'); closeModal(); render(); } else toast(r.error);
+};
+
+V.listings = async () => {
+  const list = await api('gifts?status=pending');
+  return head('📥 Foydalanuvchi e\'lonlari')+'</h2><p class="muted" style="margin-bottom:12px">Sovg\'a do\'kon akkauntiga o\'tkazilganini tekshirib, keyin qabul qiling.</p>'+
+    (list.length ? `<table><thead><tr><th>#</th><th></th><th>Sovg'a</th><th>Shartlar</th><th>Egasi</th><th>Amallar</th></tr></thead><tbody>`+
+    list.map(g=>`<tr><td>${g.id}</td><td>${img(g.image)}</td><td data-l="Sovg'a"><a href="${esc(g.link)}" target="_blank" style="color:var(--acc)">${esc(g.title)} ${esc(g.number)}</a></td>
+      <td data-l="Shartlar">${g.for_sale?'🛒 '+som(g.price)+'<br>':''}${g.for_rent?'🔑 '+som(g.rent_price)+'/kun, garov '+som(g.deposit):''}</td>
+      <td data-l="Egasi">${g.seller_id}<div class="muted">karta: ${esc(g.seller_card)}</div></td>
+      <td><div class="acts"><button class="btn ok s" onclick="act('gifts/${g.id}/approve')">✅ Qabul</button><button class="btn bad s" onclick="act('gifts/${g.id}/reject','Rad etilsinmi?')">❌ Rad</button></div></td></tr>`).join('')+'</tbody></table>'
+    : '<div class="empty">Yangi e\'lonlar yo\'q</div>');
+};
+
+V.users = async () => {
+  const list = await api('users');
+  return head(`👥 Foydalanuvchilar (${list.length})`)+'</h2>'+
+    `<table><thead><tr><th>ID</th><th>Ism</th><th>Username</th><th>Buyurtmalar</th><th>Qo'shilgan</th><th></th></tr></thead><tbody>`+
+    list.map(u=>`<tr><td data-l="ID">${u.id}</td><td data-l="Ism">${esc(u.full_name)}</td><td data-l="Username">${u.username?`<a href="https://t.me/${esc(u.username)}" target="_blank" style="color:var(--acc)">@${esc(u.username)}</a>`:'—'}</td>
+      <td data-l="Buyurtmalar">${u.orders}</td><td data-l="Sana" class="muted">${dt(u.created)}</td>
+      <td><button class="btn s ${u.banned?'ok':'bad'}" onclick="ban(${u.id},${u.banned?0:1})">${u.banned?'Blokdan chiqarish':'Bloklash'}</button></td></tr>`).join('')+'</tbody></table>';
+};
+window.ban = async (id, v) => { await api(`users/${id}/ban`, {banned:v}); toast('Saqlandi'); render(); };
+
+V.broadcast = async () => head('📢 Barcha foydalanuvchilarga xabar')+'</h2>'+
+  `<div style="max-width:600px;display:flex;flex-direction:column;gap:10px"><textarea id="bt" rows="7" placeholder="Xabar matni (HTML: <b>qalin</b>, <i>kursiv</i>)"></textarea>
+   <button class="btn" onclick="sendBc()">Yuborish</button></div>`;
+window.sendBc = async () => {
+  const text = $('bt').value; if (!text.trim() || !confirm('Hammaga yuborilsinmi?')) return;
+  const r = await api('broadcast', {text}); toast(r.ok ? r.msg : r.error); if (r.ok) $('bt').value = '';
+};
+
+async function render(){
+  try { $('main').innerHTML = await V[view](); } catch(e){ if (e.message!=='login') $('main').innerHTML = '<div class="empty">Xato: '+esc(e.message)+'</div>'; return; }
+  const fst = $('fst'); if (fst) fst.onchange = () => { fStatus[view] = fst.value; render(); };
+  const q = $('gq'); if (q) { let t; q.oninput = () => { clearTimeout(t); t = setTimeout(()=>{ gq=q.value; render().then(()=>{ const n=$('gq'); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); },400); }; }
+  const s = $('gst'); if (s) s.onchange = () => { gst = s.value; render(); };
+}
+async function start(){
+  try { await api('stats'); } catch { return; }
+  $('login').style.display='none'; $('app').style.display='block';
+  render(); counts(); setInterval(()=>{ counts(); if (view==='dash') render(); }, 30000);
+}
+start();
+</script>
+</body>
+</html>
