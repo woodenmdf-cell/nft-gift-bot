@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import hmac
 import json
+import os
+import sqlite3
 import logging
 import time
 from pathlib import Path
@@ -11,12 +13,12 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandStart
-from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+from aiogram.types import (CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup,
                            MenuButtonWebApp, Message, WebAppInfo)
 
 import db
 import services as S
-from config import (ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CARD_NUMBER, CARD_OWNER, CASHBACK,
+from config import (DATA_DIR, DB_PATH, ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CARD_NUMBER, CARD_OWNER, CASHBACK,
                     COMMISSION, HOST, MIN_TOPUP, PORT, SHOP_ACCOUNT, WEBAPP_URL)
 
 logging.basicConfig(level=logging.INFO)
@@ -107,7 +109,7 @@ async def receipt(m: Message):
             logging.warning("admin %s: %s", a, e)
 
 
-@dp.message(F.text)
+@dp.message(F.text & ~F.text.startswith("/"))
 async def text_msg(m: Message):
     link = S.extract_tc_link(m.text)
     if link and await S.receive_tc_link(bot, m.from_user.id, link):
@@ -442,6 +444,87 @@ async def a_file(request):
         raise web.HTTPNotFound()
 
 
+# ═══════════════════════ ZAXIRA NUSXA ═══════════════════════
+
+BACKUP_DIR = Path(DATA_DIR) / "backups"
+BACKUP_CHAT = [int(x) for x in os.environ.get("BACKUP_CHAT_ID", "").replace(" ", "").split(",") if x.lstrip("-").isdigit()]
+REQUIRED_TABLES = {"users", "gifts", "orders", "topups"}
+
+
+def make_backup() -> Path:
+    """Ishlayotgan bazaning izchil nusxasi (sqlite backup API)."""
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    path = BACKUP_DIR / time.strftime("giftbozor_%Y-%m-%d_%H-%M.db")
+    src, dst = sqlite3.connect(DB_PATH), sqlite3.connect(path)
+    with dst:
+        src.backup(dst)
+    src.close(); dst.close()
+    for old in sorted(BACKUP_DIR.glob("giftbozor_*.db"))[:-48]:  # oxirgi 48 tasi saqlanadi
+        old.unlink(missing_ok=True)
+    return path
+
+
+async def send_backup(chats=None, silent=True):
+    path = make_backup()
+    s = db.stats()
+    cap = (f"💾 <b>Zaxira nusxa</b> · {time.strftime('%d.%m.%Y %H:%M')}\n"
+           f"👥 {s['users']} · 👛 balanslar {som(s['balances'])} · 🔑 ijarada {s['rented']}\n"
+           f"Tiklash: shu faylga javob (reply) qilib /restore yozing.")
+    for chat in chats or BACKUP_CHAT or list(ADMIN_IDS):
+        try:
+            await bot.send_document(chat, FSInputFile(path), caption=cap, disable_notification=silent)
+        except Exception as e:
+            logging.warning("backup -> %s: %s", chat, e)
+
+
+async def backup_loop():
+    await asyncio.sleep(120)
+    while True:
+        try:
+            await send_backup()
+        except Exception as e:
+            logging.exception("backup: %s", e)
+        await asyncio.sleep(3600)
+
+
+@dp.message(Command("backup"))
+async def backup_cmd(m: Message):
+    if is_admin(m.from_user.id):
+        await send_backup([m.chat.id], silent=False)
+
+
+@dp.message(Command("restore"))
+async def restore_cmd(m: Message):
+    if not is_admin(m.from_user.id):
+        return
+    doc = m.reply_to_message.document if m.reply_to_message else None
+    if not doc or not (doc.file_name or "").endswith(".db"):
+        return await m.answer("Zaxira (.db) faylga <b>javob (reply)</b> qilib /restore yozing.")
+    tmp = Path(DATA_DIR) / "restore_tmp.db"
+    await bot.download(doc, destination=tmp)
+    try:
+        c = sqlite3.connect(tmp)
+        tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        c.close()
+        if not REQUIRED_TABLES <= tables:
+            raise ValueError("bu bot bazasi emas")
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        return await m.answer(f"❌ Fayl yaroqsiz: {e}")
+    safety = make_backup()  # tiklashdan oldingi holat ham saqlanadi
+    src, dst = sqlite3.connect(tmp), sqlite3.connect(DB_PATH)
+    with dst:
+        src.backup(dst)
+    src.close(); dst.close(); tmp.unlink(missing_ok=True)
+    db.init()
+    await m.answer(f"✅ Baza tiklandi. Oldingi holat ham saqlandi: <code>{safety.name}</code>")
+
+
+async def a_backup(request):
+    path = make_backup()
+    return web.FileResponse(path, headers={"Content-Disposition": f'attachment; filename="{path.name}"'})
+
+
 # ═══════════════════════ ISHGA TUSHIRISH ═══════════════════════
 
 async def ticker():
@@ -489,6 +572,7 @@ def make_app():
     r.add_post("/admin/api/users/{id:\\d+}/balance", a_balance)
     r.add_post("/admin/api/broadcast", a_broadcast)
     r.add_get("/admin/api/file/{fid}", a_file)
+    r.add_get("/admin/api/backup", a_backup)
     return app
 
 
@@ -503,6 +587,10 @@ async def main():
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="🎁 Bozor", web_app=WebAppInfo(url=WEBAPP_URL)))
     asyncio.create_task(ticker())
+    asyncio.create_task(backup_loop())
+    if not os.path.ismount("/data") and str(DATA_DIR).startswith("/data"):
+        await S.notify_admins(bot, "⚠️ <b>Diqqat:</b> Railway'da <code>/data</code> volume ulanmagan! "
+                                   "Har yangilanishda ma'lumotlar o'chadi. Volume qo'shing (Mount path: /data).")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
