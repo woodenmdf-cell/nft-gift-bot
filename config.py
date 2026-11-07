@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 # .env faylni o'qish (qo'shimcha kutubxonasiz)
@@ -10,13 +11,13 @@ if _env.exists():
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.split(" #")[0].strip())
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-ADMIN_IDS = {int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()}
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
+ADMIN_IDS = {int(x) for x in re.split(r"[,\s]+", os.environ.get("ADMIN_IDS", "")) if x.strip().lstrip("-").isdigit()}
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin12345")
 
 # Mini App manzili. Railway / Render o'zi domen beradi — avtomatik olinadi.
 _domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or ""
-WEBAPP_URL = (os.environ.get("WEBAPP_URL")
+WEBAPP_URL = (os.environ.get("WEBAPP_URL", "").strip().rstrip("/")
               or os.environ.get("RENDER_EXTERNAL_URL")
               or (f"https://{_domain}" if _domain else ""))
 

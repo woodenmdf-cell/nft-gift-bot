@@ -30,6 +30,8 @@ def is_admin(uid):
 
 
 def webapp_kb():
+    if not WEBAPP_URL.startswith("https://"):
+        return None
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="🎁 Bozorni ochish", web_app=WebAppInfo(url=WEBAPP_URL))]])
 
@@ -362,11 +364,15 @@ async def ticker():
         await asyncio.sleep(60)
 
 
+async def health(request):
+    return web.Response(text="ok")
+
+
 def make_app():
     app = web.Application(middlewares=[admin_guard])
     r = app.router
     r.add_get("/", index)
-    r.add_get("/health", lambda _: web.Response(text="ok"))
+    r.add_get("/health", health)
     r.add_get("/api/config", api_config)
     r.add_get("/api/gifts", api_gifts)
     r.add_post("/api/order", api_order)
@@ -395,7 +401,8 @@ async def main():
     await runner.setup()
     await web.TCPSite(runner, HOST, PORT).start()
     logging.info("Server: %s:%s | Mini App: %s | Admin: %s/admin", HOST, PORT, WEBAPP_URL, WEBAPP_URL)
-    if WEBAPP_URL:
+    logging.info("Adminlar: %s", ADMIN_IDS or "YO'Q — ADMIN_IDS ni tekshiring")
+    if WEBAPP_URL.startswith("https://"):
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="🎁 Bozor", web_app=WebAppInfo(url=WEBAPP_URL)))
     asyncio.create_task(ticker())
