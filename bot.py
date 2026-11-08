@@ -385,6 +385,10 @@ async def a_upload(request):
     return ok(url=save_media(bytes(data), ext))
 
 
+async def guide_video(request):
+    return web.FileResponse(WEB / "ijara_qollanma.mp4", headers={"Cache-Control": "public, max-age=86400"})
+
+
 async def media(request):
     name = request.match_info["name"]
     path = MEDIA_DIR / name
@@ -642,6 +646,7 @@ def make_app():
     r.add_get("/admin/api/backup", a_backup)
     r.add_post("/admin/api/upload", a_upload)
     r.add_get("/media/{name}", media)
+    r.add_get("/ijara_qollanma.mp4", guide_video)
     return app
 
 

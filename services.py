@@ -2,9 +2,10 @@
 import logging
 import re
 import time
+from pathlib import Path
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup as Kb
+from aiogram.types import FSInputFile, InlineKeyboardButton as Btn, InlineKeyboardMarkup as Kb
 
 import db
 from config import ADMIN_IDS, CASHBACK, COMMISSION, SHOP_ACCOUNT
@@ -125,6 +126,25 @@ async def buy(bot, uid, gid):
     return True, "Sotib olindi"
 
 
+GUIDE_VIDEO = Path(__file__).parent / "webapp" / "ijara_qollanma.mp4"
+_guide_file_id = None
+
+
+async def send_guide(bot, uid):
+    """Ijarani profilga ulash bo'yicha video qo'llanma (birinchi marta yuklanadi, keyin file_id qayta ishlatiladi)."""
+    global _guide_file_id
+    if not GUIDE_VIDEO.exists():
+        return
+    try:
+        msg = await bot.send_video(uid, _guide_file_id or FSInputFile(GUIDE_VIDEO),
+                                   caption="🎬 <b>Video qo'llanma:</b> sovg'ani profilingizga 1 daqiqada ulang",
+                                   supports_streaming=True)
+        if msg and msg.video:
+            _guide_file_id = msg.video.file_id
+    except Exception as e:
+        logging.warning("guide video %s: %s", uid, e)
+
+
 async def rent(bot, uid, gid, days):
     g = db.get_gift(gid)
     if not g or not g["for_rent"]:
@@ -138,6 +158,7 @@ async def rent(bot, uid, gid, days):
     o = db.get_order(oid)
     await send(bot, uid, f"✅ {order_text(o, g)}\nTo'lov balansdan yechildi.\n\n" + LINK_HELP,
                disable_web_page_preview=True)
+    await send_guide(bot, uid)
     await notify_admins(bot, f"🔑 Yangi {order_text(o, g)}\n👤 <code>{uid}</code>\n"
                              f"Ijarachi Fragment havolasini yuborishini kutyapmiz.")
     return True, "Ijaraga olindi"

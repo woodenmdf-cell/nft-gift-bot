@@ -166,6 +166,17 @@
       <div class="tbl"><div><span>Kunlik narx</span><b id="d-daily"></b></div></div>
       <h4>Muddatni tanlang</h4>
       <div class="pk" id="d-pk"></div>
+      <div class="step" style="margin-top:14px">
+        <h3>Qanday ishlaydi</h3>
+        <ol>
+          <li>Muddatni tanlaysiz — pul <b>balansingizdan</b> yechiladi</li>
+          <li>fragment.com'dagi <b>Connect TON</b> havolasini botga yuborasiz</li>
+          <li>Biz ulaymiz, siz <b>Display in Telegram</b> ni bosasiz — sovg'a profilingizda</li>
+          <li>Muddat tugagach sovg'a <b>o'zi qaytadi</b> — hech nima qilmaysiz</li>
+        </ol>
+        <div style="color:var(--hint);font-size:13px;margin-top:8px">Sovg'a bizning hamyonimizda qoladi va sotib olinmaydi — shuning uchun <b style="color:var(--text)">garovsiz</b> va xariddan ancha arzon.</div>
+        <button class="btn g" style="margin-top:10px" onclick="openGuide()">▶️ Video qo'llanma (1 daqiqa)</button>
+      </div>
     </div>
     <div id="d-buybox"><div class="tbl"><div><span>Narx</span><b id="d-price"></b></div><div><span>Yetkazish</span><b>Profilingizga</b></div></div></div>
   </div>
@@ -375,7 +386,8 @@ function showOrder(id){
       <div style="color:var(--hint);font-size:13px;margin-bottom:8px">Sovg'a profilingizda ko'rinishi uchun uni Fragment akkauntingizga ulaymiz.</div>
       <ol><li><b>fragment.com</b> ni oching va Telegram bilan kiring</li><li>Yuqori o'ngdagi ko'k <b>Connect TON</b> ni bosing</li>
       <li>Chiqqan havolani <b>nusxalang</b> (tc://… bilan boshlanadi)</li><li>Pastga qo'yib, <b>Yuborish</b> ni bosing</li></ol>
-      <button class="btn g" style="margin:10px 0" onclick="tg.openLink('https://fragment.com')">🌐 fragment.com ni ochish</button>
+      <button class="btn g" style="margin:10px 0 6px" onclick="tg.openLink('https://fragment.com')">🌐 fragment.com ni ochish</button>
+      <button class="btn g" style="margin:0 0 10px" onclick="openGuide()">▶️ Qanday qilinadi? Video</button>
       <input id="o-link" placeholder="tc://…" style="margin-bottom:8px"><button class="btn" onclick="sendLink()">Yuborish</button>
       <div style="color:var(--hint);font-size:12px;margin-top:8px">🔒 Faqat sovg'ani ko'rsatish uchun ulanadi — akkauntingiz va pulingizga kirish berilmaydi. Admin ulaguncha Fragment sahifasini yopmang.</div></div>`;
   if (o.status === 'linking') body += `<div class="step"><h3>⏳ Ulanmoqda</h3><div style="color:var(--hint);font-size:14px">Admin sovg'ani ulayapti (odatda 1–10 daqiqa). Tayyor bo'lgach bot xabar beradi. Fragment sahifasini yopmang.</div></div>`;
@@ -398,6 +410,8 @@ async function sendLink(){
     if (!r.ok) return alertMsg(r.error);
     await loadMe(); showOrder(openOrder); } catch(e) { alertMsg(e.message); }
 }
+
+function openGuide(){ try { tg.openLink(location.origin + '/ijara_qollanma.mp4'); } catch(e) { location.href = '/ijara_qollanma.mp4'; } }
 
 /* ── REYTING ── */
 async function loadTop(){
