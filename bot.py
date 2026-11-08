@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
+import uuid
 import os
 import sqlite3
 import logging
@@ -9,7 +11,7 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qsl
 
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, web
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandStart
@@ -328,6 +330,69 @@ async def a_gifts(request):
     return web.json_response(db.list_gifts(request.query.get("q", ""), "new", "all", statuses))
 
 
+MEDIA_DIR = Path(DATA_DIR) / "media"
+IMG_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
+
+
+def save_media(data: bytes, ext: str) -> str:
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    name = uuid.uuid4().hex[:16] + ext
+    (MEDIA_DIR / name).write_bytes(data)
+    return f"/media/{name}"
+
+
+async def resolve_image(url: str, link: str = "") -> str:
+    """Rasm maydonini to'g'rilaydi: bo'sh -> NFT rasmi; t.me post -> rasmini yuklab saqlaydi."""
+    url = (url or "").strip()
+    if not url or "t.me/nft/" in url:
+        p = S.parse_nft_link(url or link)
+        return p["image"] if p else url
+    if url.startswith("/media/"):
+        return url
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=15), headers={"User-Agent": "Mozilla/5.0"}) as s:
+            m = re.match(r"https?://t\.me/(s/)?([A-Za-z0-9_]+)/(\d+)", url)
+            if m:  # Telegram kanal posti -> undagi rasmni topamiz
+                async with s.get(f"https://t.me/{m.group(2)}/{m.group(3)}?embed=1&mode=tme") as r:
+                    html = await r.text()
+                found = (re.search(r"tgme_widget_message_photo_wrap[^>]*background-image:url\('([^']+)'\)", html)
+                         or re.search(r'<meta property="og:image" content="([^"]+)"', html))
+                if not found:
+                    raise ValueError("postda rasm topilmadi")
+                url = found.group(1)
+            async with s.get(url) as r:
+                ct = r.headers.get("Content-Type", "").split(";")[0]
+                if ct in IMG_TYPES:
+                    return save_media(await r.read(), IMG_TYPES[ct])
+    except Exception as e:
+        logging.warning("rasm olinmadi %s: %s", url, e)
+    return url
+
+
+async def a_upload(request):
+    """Admin telefondan rasm yuklaydi."""
+    reader = await request.multipart()
+    part = await reader.next()
+    if not part or part.name != "file":
+        return err("Fayl topilmadi")
+    ct = (part.headers.get("Content-Type") or "").split(";")[0]
+    ext = IMG_TYPES.get(ct) or (Path(part.filename or "").suffix.lower() if Path(part.filename or "").suffix.lower() in IMG_TYPES.values() else None)
+    if not ext:
+        return err("Faqat rasm yuklash mumkin (jpg, png, webp)")
+    data = await part.read(decode=False)
+    if len(data) > 8 * 1024 * 1024:
+        return err("Rasm 8 MB dan katta")
+    return ok(url=save_media(bytes(data), ext))
+
+
+async def media(request):
+    name = request.match_info["name"]
+    path = MEDIA_DIR / name
+    if "/" in name or ".." in name or not path.is_file():
+        raise web.HTTPNotFound()
+    return web.FileResponse(path, headers={"Cache-Control": "public, max-age=31536000"})
+
+
 async def a_gift_save(request):
     body = await request.json()
     gid = int(request.match_info.get("id", 0))
@@ -335,6 +400,8 @@ async def a_gift_save(request):
     for k in ("price", "rent_price", "deposit", "for_sale", "for_rent"):
         if k in f:
             f[k] = int(f[k] or 0)
+    if "image" in f or not gid:
+        f["image"] = await resolve_image(f.get("image", ""), body.get("link", ""))
     if not gid:
         p = S.parse_nft_link(body.get("link", ""))
         if p:
@@ -573,6 +640,8 @@ def make_app():
     r.add_post("/admin/api/broadcast", a_broadcast)
     r.add_get("/admin/api/file/{fid}", a_file)
     r.add_get("/admin/api/backup", a_backup)
+    r.add_post("/admin/api/upload", a_upload)
+    r.add_get("/media/{name}", media)
     return app
 
 

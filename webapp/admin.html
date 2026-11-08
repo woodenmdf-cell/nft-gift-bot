@@ -235,13 +235,27 @@ window.giftForm = id => {
   modal(`<h3>${id?'✏️ Tahrirlash #'+id:'+ Yangi sovg\'a'}</h3>
     <div><label>NFT havola (nom, raqam va rasm avtomatik olinadi)</label><input id="f-link" value="${esc(g.link||'')}" placeholder="https://t.me/nft/PlushPepe-1234"></div>
     <div class="grid2"><div><label>Nomi</label><input id="f-title" value="${esc(g.title||'')}"></div><div><label>Raqam</label><input id="f-number" value="${esc(g.number||'')}"></div></div>
-    <div><label>Rasm URL</label><input id="f-image" value="${esc(g.image||'')}"></div>
+    <div><label>Rasm</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <img id="f-prev" src="${esc(g.image||'')}" onerror="this.style.visibility='hidden'" onload="this.style.visibility='visible'" style="width:64px;height:64px;border-radius:12px;object-fit:cover;background:var(--bg3);flex:none">
+        <label class="btn g" style="margin:0;cursor:pointer;flex:none">📷 Rasm yuklash<input type="file" accept="image/*" id="f-file" style="display:none" onchange="uploadImg(this)"></label>
+      </div>
+      <input id="f-image" value="${esc(g.image||'')}" placeholder="Bo'sh qoldiring — NFT rasmi avtomatik. Yoki kanal post havolasi: t.me/kanal/3" style="margin-top:8px" oninput="$('f-prev').src=this.value">
+    </div>
     <label class="ck"><input type="checkbox" id="f-sale" ${g.for_sale?'checked':''}> 🛒 Sotuvda</label>
     <div><label>Sotuv narxi (so'm)</label><input id="f-price" type="number" value="${g.price||''}"></div>
     <label class="ck"><input type="checkbox" id="f-rent" ${g.for_rent?'checked':''}> 🔑 Ijarada</label>
     <div><label>Kunlik ijara narxi (so'm) — paketlar chegirmasi avtomatik</label><input id="f-rprice" type="number" value="${g.rent_price||''}"></div>
     <div class="muted">🔑 Ijaraga qo'yiladigan sovg'a sizning TON hamyoningizda bo'lishi va Marketapp'da ijaraga qo'yilgan bo'lishi kerak.</div>
     <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="saveGift(${id||0})">Saqlash</button><button class="btn g" onclick="closeModal()">Bekor</button></div>`);
+};
+window.uploadImg = async inp => {
+  const file = inp.files[0]; if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  toast('Yuklanmoqda…');
+  const r = await fetch('/admin/api/upload', {method:'POST', body: fd}).then(r=>r.json()).catch(()=>({ok:false,error:'Tarmoq xatosi'}));
+  if (!r.ok) return toast(r.error || 'Xato');
+  $('f-image').value = r.url; $('f-prev').src = r.url; toast('Rasm yuklandi ✅');
 };
 window.saveGift = async id => {
   const b = {link:$('f-link').value.trim(), title:$('f-title').value.trim(), number:$('f-number').value.trim(), image:$('f-image').value.trim(),
