@@ -19,7 +19,7 @@ RATES_CSV = "https://raw.githubusercontent.com/Atlannn/telegram-gifts-floor-pric
 COINGECKO = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network,gram&vs_currencies=usd"
 CBU_USD = "https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/"
 
-BUY_PCT = float(os.environ.get("BUY_PCT", "80"))  # foydalanuvchidan sotib olish: floor narxning necha foizi
+BUY_PCT = float(os.environ.get("BUY_PCT", "55"))  # foydalanuvchidan sotib olish: floor narxning 55% (45% arzon)
 
 STATE = {"floors": {}, "date": None, "gram_usd": None, "usd_uzs": None, "updated": 0, "error": None}
 
