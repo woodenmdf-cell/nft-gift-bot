@@ -19,6 +19,7 @@ from aiogram.types import (BotCommand, CallbackQuery, FSInputFile, InlineKeyboar
                            MenuButtonWebApp, Message, WebAppInfo)
 
 import db
+import pricing
 import services as S
 from config import (DATA_DIR, DB_PATH, ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CARD_NUMBER, CARD_OWNER, CASHBACK,
                     COMMISSION, HOST, MIN_TOPUP, PORT, SHOP_ACCOUNT, WEBAPP_URL)
@@ -243,6 +244,27 @@ async def api_topup(request):
     return ok(id=tid)
 
 
+def link_quote(link):
+    m = re.search(r"t\.me/nft/([A-Za-z0-9]+)-\d+", link or "")
+    return pricing.quote(m.group(1)) if m else None
+
+
+async def api_quote(request):
+    body = await request.json()
+    link = body.get("link", "")
+    if not S.parse_nft_link(link):
+        return err("Havola noto'g'ri. Misol: https://t.me/nft/PlushPepe-1234")
+    q = link_quote(link)
+    if not q:
+        return err("Bu kolleksiya narxi hozircha topilmadi — narxni o'zingiz yozing, admin ko'rib chiqadi")
+    return ok(**q, buy_pct=pricing.BUY_PCT)
+
+
+async def a_quote(request):
+    q = link_quote(request.query.get("link", ""))
+    return ok(**q) if q else err("Bozor narxi topilmadi")
+
+
 async def api_sell(request):
     """Foydalanuvchi sovg'asini bizga sotadi."""
     user, body = await auth(request)
@@ -256,8 +278,11 @@ async def api_sell(request):
     if len(card.replace(" ", "")) < 16:
         return err("Pul tushadigan karta raqamini kiriting")
     gid = db.add_gift(**p, for_sale=1, price=price, seller_id=user["id"], seller_card=card, status="pending")
+    q = link_quote(p["link"])
+    market = (f"📊 Bozor (floor): {som(q['floor_uzs'])} ({q['floor_gram']} GRAM, {q['date']})\n"
+              f"🤖 Avto-taklif ({pricing.BUY_PCT:g}%): {som(q['offer_uzs'])}\n") if q else "📊 Bozor narxi topilmadi\n"
     await S.notify_admins(
-        bot, f"📥 <b>Sotish arizasi #{gid}</b>\n🎁 {S.gname(p)}\n🔗 {p['link']}\n💰 So'ralgan narx: {som(price)}\n"
+        bot, f"📥 <b>Sotish arizasi #{gid}</b>\n🎁 {S.gname(p)}\n🔗 {p['link']}\n💰 So'ralgan narx: {som(price)}\n{market}"
              f"💳 {card}\n👤 @{user.get('username') or '-'} <code>{user['id']}</code>\n\n"
              f"Kelishilgach sovg'ani {SHOP_ACCOUNT} ga o'tkazishini so'rang va pulni kartaga o'tkazing. "
              f"Qabul qilinsa sovg'a shu narxda bozorga chiqadi (narxni admin panelda o'zgartirsa bo'ladi).",
@@ -630,6 +655,8 @@ def make_app():
     r.add_post("/api/link", api_link)
     r.add_post("/api/topup", api_topup)
     r.add_post("/api/sell", api_sell)
+    r.add_post("/api/quote", api_quote)
+    r.add_get("/admin/api/quote", a_quote)
     r.add_get("/admin", admin_page)
     r.add_post("/admin/login", admin_login)
     r.add_get("/admin/auto", admin_auto)
@@ -673,6 +700,7 @@ async def main():
         logging.warning("commands: %s", e)
     asyncio.create_task(ticker())
     asyncio.create_task(backup_loop())
+    asyncio.create_task(pricing.loop())
     if not os.path.ismount("/data") and str(DATA_DIR).startswith("/data"):
         await S.notify_admins(bot, "⚠️ <b>Diqqat:</b> Railway'da <code>/data</code> volume ulanmagan! "
                                    "Har yangilanishda ma'lumotlar o'chadi. Volume qo'shing (Mount path: /data).")

@@ -242,12 +242,19 @@ window.giftForm = id => {
       </div>
       <input id="f-image" value="${esc(g.image||'')}" placeholder="Bo'sh qoldiring — NFT rasmi avtomatik. Yoki kanal post havolasi: t.me/kanal/3" style="margin-top:8px" oninput="$('f-prev').src=this.value">
     </div>
+    <button class="btn g" type="button" onclick="marketPrice()">💡 Bozor narxini qo'yish</button><div class="muted" id="f-mkt"></div>
     <label class="ck"><input type="checkbox" id="f-sale" ${g.for_sale?'checked':''}> 🛒 Sotuvda</label>
     <div><label>Sotuv narxi (so'm)</label><input id="f-price" type="number" value="${g.price||''}"></div>
     <label class="ck"><input type="checkbox" id="f-rent" ${g.for_rent?'checked':''}> 🔑 Ijarada</label>
     <div><label>Kunlik ijara narxi (so'm) — paketlar chegirmasi avtomatik</label><input id="f-rprice" type="number" value="${g.rent_price||''}"></div>
     <div class="muted">🔑 Ijaraga qo'yiladigan sovg'a sizning TON hamyoningizda bo'lishi va Marketapp'da ijaraga qo'yilgan bo'lishi kerak.</div>
     <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="saveGift(${id||0})">Saqlash</button><button class="btn g" onclick="closeModal()">Bekor</button></div>`);
+};
+window.marketPrice = async () => {
+  const r = await api('quote?link=' + encodeURIComponent($('f-link').value.trim()));
+  if (!r.ok) { $('f-mkt').textContent = r.error; return; }
+  $('f-price').value = r.floor_uzs; $('f-rprice').value = r.rent_daily;
+  $('f-mkt').innerHTML = `Bozor (floor): <b>${som(r.floor_uzs)}</b> = ${r.floor_gram} GRAM · ${r.date}<br>Sotuv narxi va kunlik ijara (${som(r.rent_daily)}) qo'yildi — xohlasangiz o'zgartiring.`;
 };
 window.uploadImg = async inp => {
   const file = inp.files[0]; if (!file) return;

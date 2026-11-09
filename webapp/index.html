@@ -207,6 +207,7 @@
 <div class="sheet" id="sh-sell"><div class="gap">
   <h3>💸 Sovg'angizni bizga soting</h3>
   <input id="s-link" placeholder="https://t.me/nft/PlushPepe-1234">
+  <div id="s-quote" class="hide" style="background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:12px 14px"></div>
   <input id="s-price" type="number" inputmode="numeric" placeholder="Qancha so'raysiz? (so'm)">
   <input id="s-card" inputmode="numeric" placeholder="Karta raqami: 8600 …">
   <div style="color:var(--hint);font-size:13px">Havolani profilingizdagi sovg'a → «Ulashish» orqali oling. Admin narxni tasdiqlagach sovg'ani o'tkazasiz va pul kartangizga tushadi.</div>
@@ -435,6 +436,20 @@ $('t-go').onclick = async () => {
   } catch(e) { alertMsg(e.message); }
 };
 function openSell(){ $('sh-sell').classList.add('on'); }
+let qT;
+$('s-link').oninput = () => { clearTimeout(qT); qT = setTimeout(async () => {
+  const box = $('s-quote'); const link = $('s-link').value.trim();
+  if (!/t\.me\/nft\//.test(link)) { box.classList.add('hide'); return; }
+  box.classList.remove('hide'); box.innerHTML = '⏳ Bozor narxi hisoblanmoqda…';
+  try {
+    const r = await (await fetch('/api/quote', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({link})})).json();
+    if (!r.ok) { box.innerHTML = `<span style="color:var(--hint)">${esc(r.error)}</span>`; return; }
+    box.innerHTML = `<div style="color:var(--hint);font-size:13px">📊 Bozordagi eng arzon narx</div><div style="font-weight:700">${som(r.floor_uzs)} <span style="color:var(--hint);font-size:12px">(${r.floor_gram} GRAM)</span></div>
+      <div style="color:var(--hint);font-size:13px;margin-top:6px">🤝 Bizning taklif</div><div style="font-weight:800;font-size:20px;color:var(--ok)">${som(r.offer_uzs)}</div>
+      <div style="color:var(--hint);font-size:12px;margin-top:4px">Noyob model yoki raqam bo'lsa — yuqoriroq narx yozing, admin ko'rib chiqadi.</div>`;
+    $('s-price').value = r.offer_uzs;
+  } catch(e) { box.innerHTML = '<span style="color:var(--hint)">Narxni olib bo\'lmadi</span>'; }
+}, 500); };
 $('s-go').onclick = async () => {
   try { const r = await post('/api/sell', {link:$('s-link').value.trim(), price:$('s-price').value, card:$('s-card').value});
     if (!r.ok) return alertMsg(r.error);

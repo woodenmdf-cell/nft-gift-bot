@@ -77,3 +77,11 @@ pip install -r requirements.txt
 cp .env.example .env   # to'ldiring, WEBAPP_URL ni ham yozing (HTTPS)
 python bot.py
 ```
+
+## Avtomatik narxlash
+Bot har 6 soatda bozor narxlarini yangilaydi:
+- Kolleksiya floor narxlari (GRAM): *Telegram gifts floor prices, Baltic Assets* — https://balticassets.eu (CC BY 4.0)
+- GRAM → USD: o'sha to'plam yoki CoinGecko; USD → so'm: O'zbekiston Markaziy banki (cbu.uz)
+
+`BUY_PCT` (standart 80) — foydalanuvchidan sovg'ani floor narxning necha foiziga sotib olishni taklif qilish.
+Floor — eng arzon *sotuvga qo'yilgan* narx, sotilgan narx emas; noyob model/raqamlar qimmatroq turadi.
