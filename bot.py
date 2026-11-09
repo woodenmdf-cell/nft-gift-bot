@@ -119,8 +119,8 @@ async def text_msg(m: Message):
     if link:
         return await m.answer("Sizda ulanishni kutayotgan ijara yo'q.")
     if db.user_order_needing_link(m.from_user.id):
-        return await m.answer("Bu havola emas. Fragment'dagi <b>Connect TON</b> oynasidan "
-                              "<code>tc://</code> bilan boshlanadigan havolani nusxalab yuboring.")
+        return await m.answer("Bu havola emas. Fragment'dagi <b>Connect TON</b> oynasida "
+                              "<b>Copy Link</b> ni bosib, nusxalangan havolani yuboring.")
     await m.answer("Bozorni ochish uchun pastdagi tugmani bosing 👇", reply_markup=webapp_kb())
 
 
@@ -217,7 +217,7 @@ async def api_link(request):
     user, body = await auth(request)
     link = S.extract_tc_link(body.get("link", ""))
     if not link:
-        return err("Havola noto'g'ri. U tc:// bilan boshlanishi kerak")
+        return err("Havola noto'g'ri. Fragment'dagi Connect TON oynasida «Copy Link» ni bosib nusxalang")
     if not await S.receive_tc_link(bot, user["id"], link):
         return err("Ulanishni kutayotgan ijara yo'q")
     return ok()

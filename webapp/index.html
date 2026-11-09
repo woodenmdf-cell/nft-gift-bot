@@ -170,7 +170,7 @@
         <h3>Qanday ishlaydi</h3>
         <ol>
           <li>Muddatni tanlaysiz — pul <b>balansingizdan</b> yechiladi</li>
-          <li>fragment.com'dagi <b>Connect TON</b> havolasini botga yuborasiz</li>
+          <li>fragment.com'da <b>Connect TON → Copy Link</b> qilib, havolani botga yuborasiz</li>
           <li>Biz ulaymiz, siz <b>Display in Telegram</b> ni bosasiz — sovg'a profilingizda</li>
           <li>Muddat tugagach sovg'a <b>o'zi qaytadi</b> — hech nima qilmaysiz</li>
         </ol>
@@ -384,11 +384,11 @@ function showOrder(id){
   if (o.status === 'need_link') body += `
     <div class="step"><h3>🔗 Oxirgi qadam</h3>
       <div style="color:var(--hint);font-size:13px;margin-bottom:8px">Sovg'a profilingizda ko'rinishi uchun uni Fragment akkauntingizga ulaymiz.</div>
-      <ol><li><b>fragment.com</b> ni oching va Telegram bilan kiring</li><li>Yuqori o'ngdagi ko'k <b>Connect TON</b> ni bosing</li>
-      <li>Chiqqan havolani <b>nusxalang</b> (tc://… bilan boshlanadi)</li><li>Pastga qo'yib, <b>Yuborish</b> ni bosing</li></ol>
+      <ol><li><b>fragment.com</b> ni <b>Safari/Chrome'da</b> oching va Telegram bilan kiring</li><li>Yuqori o'ngdagi ko'k <b>Connect TON</b> ni bosing</li>
+      <li><b>Copy Link</b> ni bosing — hamyon nomini bosmang</li><li>Pastga qo'yib, <b>Yuborish</b> ni bosing</li></ol>
       <button class="btn g" style="margin:10px 0 6px" onclick="tg.openLink('https://fragment.com')">🌐 fragment.com ni ochish</button>
       <button class="btn g" style="margin:0 0 10px" onclick="openGuide()">▶️ Qanday qilinadi? Video</button>
-      <input id="o-link" placeholder="tc://…" style="margin-bottom:8px"><button class="btn" onclick="sendLink()">Yuborish</button>
+      <input id="o-link" placeholder="Nusxalangan havolani shu yerga qo\'ying" style="margin-bottom:8px"><button class="btn" onclick="sendLink()">Yuborish</button>
       <div style="color:var(--hint);font-size:12px;margin-top:8px">🔒 Faqat sovg'ani ko'rsatish uchun ulanadi — akkauntingiz va pulingizga kirish berilmaydi. Admin ulaguncha Fragment sahifasini yopmang.</div></div>`;
   if (o.status === 'linking') body += `<div class="step"><h3>⏳ Ulanmoqda</h3><div style="color:var(--hint);font-size:14px">Admin sovg'ani ulayapti (odatda 1–10 daqiqa). Tayyor bo'lgach bot xabar beradi. Fragment sahifasini yopmang.</div></div>`;
   if (o.status === 'rented') body += `<div class="step" style="text-align:center"><div style="color:var(--hint)">Qolgan vaqt</div><div class="big" id="o-left"></div>

