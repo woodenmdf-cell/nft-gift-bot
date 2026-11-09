@@ -15,7 +15,7 @@ from aiohttp import ClientSession, ClientTimeout, web
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandStart
-from aiogram.types import (CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup,
+from aiogram.types import (BotCommand, CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup,
                            MenuButtonWebApp, Message, WebAppInfo)
 
 import db
@@ -57,6 +57,11 @@ async def start(m: Message):
     await m.answer(text, reply_markup=webapp_kb())
     if is_admin(m.from_user.id):
         await m.answer("👮 Siz adminsiz. Admin panel uchun /admin yozing.")
+
+
+@dp.message(Command("qollanma", "guide"))
+async def guide_cmd(m: Message):
+    await S.send_guide(m.bot, m.chat.id)
 
 
 @dp.message(Command("balans", "balance"))
@@ -660,6 +665,12 @@ async def main():
     if WEBAPP_URL.startswith("https://"):
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="🎁 Bozor", web_app=WebAppInfo(url=WEBAPP_URL)))
+    try:
+        await bot.set_my_commands([BotCommand(command="start", description="Bozorni ochish"),
+                                   BotCommand(command="balans", description="Balansim"),
+                                   BotCommand(command="qollanma", description="Ijara bo'yicha video qo'llanma")])
+    except Exception as e:
+        logging.warning("commands: %s", e)
     asyncio.create_task(ticker())
     asyncio.create_task(backup_loop())
     if not os.path.ismount("/data") and str(DATA_DIR).startswith("/data"):
