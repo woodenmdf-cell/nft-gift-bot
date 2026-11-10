@@ -343,6 +343,12 @@ async def game_asset(request):
     return web.FileResponse(WEB / name, headers={"Cache-Control": cache})
 
 
+async def on_coins(user, price, coins):
+    await S.notify_admins(bot, f"🪙 <b>Tanga xaridi</b> (Shahar Arena)\n"
+                               f"👤 @{user.get('username') or '-'} <code>{user['id']}</code>\n"
+                               f"💰 {som(price)} → {coins} tanga")
+
+
 async def on_vip(user, until):
     await S.notify_admins(bot, f"👑 <b>Yangi VIP obuna</b> (Shahar Arena)\n"
                                f"👤 @{user.get('username') or '-'} <code>{user['id']}</code>\n"
@@ -694,7 +700,7 @@ def make_app():
     r.add_get("/health", health)
     r.add_get("/game", game_page)
     r.add_get("/{name:three\\.min\\.js|city3d\\.js}", game_asset)
-    game.setup(r, auth, ok, err, on_vip, verify=check_init_data)
+    game.setup(r, auth, ok, err, on_vip, verify=check_init_data, on_coins=on_coins)
     r.add_get("/api/config", api_config)
     r.add_get("/api/gifts", api_gifts)
     r.add_get("/api/top", api_top)

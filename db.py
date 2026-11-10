@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS game_payments(
 MIGRATIONS = [
     ("users", "balance", "INTEGER DEFAULT 0"),
     ("orders", "tc_link", "TEXT"),
+    ("game_payments", "kind", "TEXT DEFAULT 'vip'"),
+    ("game_payments", "coins", "INTEGER DEFAULT 0"),
 ]
 
 
@@ -318,3 +320,23 @@ def game_buy_vip(uid, price, days):
 def game_top(limit=30):
     return _all("SELECT g.xp, g.wins, g.games, g.vip_until, u.username, u.full_name FROM game_profiles g "
                 "LEFT JOIN users u ON u.id=g.user_id ORDER BY g.xp DESC LIMIT ?", (limit,))
+
+
+def game_buy_coins(uid, price, coins):
+    """Bot balansidan tanga paketi (donat). (yangi tanga soni, xato) qaytaradi."""
+    now = int(time.time())
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        c.execute("INSERT OR IGNORE INTO game_profiles(user_id,created) VALUES(?,?)", (uid, now))
+        bal = c.execute("SELECT balance FROM users WHERE id=?", (uid,)).fetchone()
+        if not bal or bal["balance"] < price:
+            return None, "Balans yetarli emas"
+        c.execute("UPDATE users SET balance=balance-? WHERE id=?", (price, uid))
+        c.execute("UPDATE game_profiles SET coins=coins+? WHERE user_id=?", (coins, uid))
+        c.execute("INSERT INTO game_payments(user_id,amount,days,kind,coins,created) VALUES(?,?,0,'coins',?,?)",
+                  (uid, price, coins, now))
+        return c.execute("SELECT coins FROM game_profiles WHERE user_id=?", (uid,)).fetchone()["coins"], None
+
+
+def game_coin_purchases(uid):
+    return _one("SELECT COUNT(*) v FROM game_payments WHERE user_id=? AND kind='coins'", (uid,))["v"]

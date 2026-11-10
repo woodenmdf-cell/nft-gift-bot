@@ -2,7 +2,7 @@
  * Ochiq shahar: piyoda yurish, istalgan mashinaga o'tirish, transport oqimi, piyodalar,
  * kun/tun almashinuvi, politsiya ta'qibi, topshiriqlar va tangalar.
  * game.html dagi umumiy funksiyalardan foydalanadi: P, getMove, input, toast, sfx, haptic, $, esc, fmt,
- * CAR_STATS, MISSION_COINS, PICKUP_COINS, SOUND, AC.
+ * CAR_STATS, PICKUP_COINS, SHOP, SOUND, AC.
  */
 (function () {
 'use strict';
@@ -807,7 +807,7 @@ let G = null;
 let camYaw = 0, camPitch = 0.32, camDrag = 0, camDist = 6, tNow = 0;
 function newGiver() { const types = ['deliver', 'taxi', 'race']; return Object.assign(farPoint(player, 50, 220), {type: pick(types)}); }
 function start() {
-  G = {missions: 0, pickups: 0, wanted: 0, mission: null, givers: [], coins: [], bust: 0, calm: 0, crashCd: 0, time: 0, shake: 0, hitPedCd: 0};
+  G = {missions: 0, mBy: {deliver: 0, taxi: 0, race: 0}, pickups: 0, wanted: 0, mission: null, givers: [], coins: [], bust: 0, calm: 0, crashCd: 0, time: 0, shake: 0, hitPedCd: 0};
   // o'yinchi va uning mashinasi
   const mid = Math.floor(N / 2), sx = roadC(mid) + RD / 2 + 1.0, sz = roadC(mid) + 24;
   Object.assign(player, {x: sx, z: sz, y: 0, vy: 0, yaw: Math.PI, sp: 0});
@@ -835,7 +835,12 @@ function stop() {
   if (cur) { cur.ai = 'parked'; cur = null; }
   headL.intensity = 0;
 }
-function sessionCoins() { return G ? (G.missions * MISSION_COINS + G.pickups * PICKUP_COINS) * (P.vip ? 2 : 1) : 0; }
+function missionReward(t) { const r = (SHOP && SHOP.missions) || {deliver: 50, taxi: 70, race: 90}; return r[t] || 50; }
+function sessionCoins() {
+  if (!G) return 0;
+  const base = Object.entries(G.mBy).reduce((a, [t, n]) => a + missionReward(t) * n, 0) + G.pickups * PICKUP_COINS;
+  return Math.floor(base * (1 + (P.level_bonus || 0) / 100)) * (P.vip ? 2 : 1) + (G.raceCoins || 0);
+}
 function addWanted(n, msg) {
   if (G.wanted >= 5) return;
   G.wanted = Math.min(5, G.wanted + n); G.calm = 0;
@@ -1222,8 +1227,8 @@ function updateWorldObjs(dt) {
       ms.idx++; sfx(990, 0.1); haptic('light');
       if (ms.type === 'taxi' && ms.idx === 1) toast('🙋 Yo\'lovchi o\'tirdi', 'Manzilga olib boring');
       if (ms.idx >= ms.pts.length) {
-        G.missions++; G.mission = null; sfx(1320, 0.25, 'triangle', 0.06); haptic('heavy');
-        toast('✅ Bajarildi!', `+${MISSION_COINS * (P.vip ? 2 : 1)} tanga`);
+        const mt = ms.type; G.missions++; G.mBy[mt] = (G.mBy[mt] || 0) + 1; G.mission = null; sfx(1320, 0.25, 'triangle', 0.06); haptic('heavy');
+        toast('✅ Bajarildi!', `+${Math.floor(missionReward(mt) * (1 + (P.level_bonus || 0) / 100)) * (P.vip ? 2 : 1)} tanga`);
       } else if (ms.type === 'race') ms.time += 4;
     } else if (ms.time <= 0) { G.mission = null; toast('⌛ Vaqt tugadi', 'Topshiriq bajarilmadi'); sfx(160, 0.3, 'triangle', 0.06); }
   }
@@ -1504,7 +1509,7 @@ const API = {
   racing() { return !!(G && G.race); }, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
   stop() { API.active = false; stop(); },
-  stats() { return {missions: G ? G.missions : 0, pickups: G ? G.pickups : 0}; },
+  stats() { return {missions: G ? Object.assign({}, G.mBy) : {}, total: G ? G.missions : 0, pickups: G ? G.pickups : 0}; },
   coins: sessionCoins,
   quality() { return QUALITY; },
   setQuality(q) { try { localStorage.setItem('sa_q', String(q)); } catch (e) {} location.reload(); },
