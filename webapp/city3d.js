@@ -770,10 +770,26 @@ function carCollide(v) {
   }
   return impact;
 }
+// Ikki mashina to'qnashuvi — aylana emas, haqiqiy to'rtburchak shakli bo'yicha (SAT)
+function boxOverlap(a, b) {
+  const box = v => { const fx = Math.sin(v.yaw || 0), fz = Math.cos(v.yaw || 0); return {ax: [[fx, fz], [-fz, fx]], h: [v.L * 0.48, v.W * 0.48]}; };
+  const A = box(a), B = box(b), dx = a.x - b.x, dz = a.z - b.z;
+  let best = 1e9, bn = null;
+  for (const ax of [...A.ax, ...B.ax]) {
+    const pr = o => o.h[0] * Math.abs(o.ax[0][0] * ax[0] + o.ax[0][1] * ax[1]) + o.h[1] * Math.abs(o.ax[1][0] * ax[0] + o.ax[1][1] * ax[1]);
+    const d = dx * ax[0] + dz * ax[1], over = pr(A) + pr(B) - Math.abs(d);
+    if (over <= 0) return null;
+    if (over < best) { best = over; bn = d < 0 ? [-ax[0], -ax[1]] : ax; }
+  }
+  return {nx: bn[0], nz: bn[1], depth: best};
+}
+let lastHit = {rel: 0, into: 0};
 function vehPush(a, b) {
-  const dx = a.x - b.x, dz = a.z - b.z, d = Math.hypot(dx, dz), R = (a.L + b.L) * 0.3;
-  if (d >= R || d === 0) return 0;
-  const nx = dx / d, nz = dz / d, k = (R - d);
+  lastHit = {rel: 0, into: 0};
+  if (Math.abs(a.x - b.x) > (a.L + b.L) / 2 + 1 || Math.abs(a.z - b.z) > (a.L + b.L) / 2 + 1) return 0;
+  const h = boxOverlap(a, b);
+  if (!h) return 0;
+  const {nx, nz, depth: k} = h;
   const am = a.ai === 'traffic' ? 0 : 1, bm = b.ai === 'traffic' ? 0 : 1, tot = am + bm || 1;
   a.x += nx * k * am / tot; a.z += nz * k * am / tot; b.x -= nx * k * bm / tot; b.z -= nz * k * bm / tot;
   const rel = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
@@ -781,6 +797,8 @@ function vehPush(a, b) {
     if (am) { a.vx -= nx * rel * 0.7 * (bm ? 0.5 : 1); a.vz -= nz * rel * 0.7 * (bm ? 0.5 : 1); }
     if (bm) { b.vx += nx * rel * 0.5; b.vz += nz * rel * 0.5; }
   }
+  // into: a ning o'zi b tomonga qanchalik tez harakatlangani (aybdorlikni aniqlash uchun)
+  lastHit = {rel: -rel, into: -(a.vx * nx + a.vz * nz)};
   return -rel;
 }
 
@@ -991,7 +1009,8 @@ function updatePeds(dt) {
         const side = Math.sign(dx * Math.cos(fast.yaw) - dz * Math.sin(fast.yaw)) || 1;
         p.ox += Math.cos(fast.yaw) * side * 0.1; p.oz += -Math.sin(fast.yaw) * side * 0.1; p.flee = 1.2; p.jx = Math.cos(fast.yaw) * side * 5; p.jz = -Math.sin(fast.yaw) * side * 5;
       }
-      if (d < 1.6 && G && G.hitPedCd <= 0) {
+      const lf = -dx * Math.sin(fast.yaw) - dz * Math.cos(fast.yaw), lr = -dx * -Math.cos(fast.yaw) - dz * Math.sin(fast.yaw);
+      if (Math.abs(lf) < fast.L / 2 + 0.3 && Math.abs(lr) < fast.W / 2 + 0.3 && G && G.hitPedCd <= 0) {
         p.down = 4; G.hitPedCd = 1.5; sfx(120, 0.2, 'triangle', 0.06); haptic('heavy'); addWanted(1, 'Piyodani urib yubordingiz!');
         continue;
       }
@@ -1069,7 +1088,8 @@ function updateCar(dt) {
       if (o.ai === 'traffic') o.stun = 1.5;
       if (rel > 7 && G.crashCd <= 0) {
         G.crashCd = 1.2; G.shake = 0.5; sfx(80, 0.25, 'sawtooth', 0.08); haptic('heavy');
-        if ((o.ai === 'traffic' || o.ai === 'police') && Math.abs(v.vF || 0) > 7) addWanted(1, o.ai === 'police' ? 'Politsiyaga urildingiz!' : 'Avariya! Politsiya kelyapti');
+        // yulduz faqat o'yinchi o'zi tez kelib urilganda (orqadan urilish yoki yengil tegish hisobga olinmaydi)
+        if ((o.ai === 'traffic' || o.ai === 'police') && lastHit.into > 8 && rel > 9) addWanted(1, o.ai === 'police' ? 'Politsiyaga urildingiz!' : 'Avariya! Politsiya kelyapti');
       }
     }
   }
@@ -1086,7 +1106,7 @@ function updateCar(dt) {
   } else G.inPaint = false;
   for (const r of remotes.values()) {
     if (!r.carT || Math.abs(r.x - v.x) > 7 || Math.abs(r.z - v.z) > 7) continue;
-    const rel = vehPush(v, {x: r.x, z: r.z, L: 4.4, W: 1.9, ai: 'traffic', vx: 0, vz: 0});
+    const rel = vehPush(v, {x: r.x, z: r.z, yaw: r.cyaw, L: (VT[r.carT] || VT.sedan).L, W: (VT[r.carT] || VT.sedan).W, ai: 'traffic', vx: 0, vz: 0});
     if (rel > 6 && G.crashCd <= 0) { G.crashCd = 1; G.shake = 0.4; sfx(80, 0.2, 'sawtooth', 0.07); haptic('heavy'); }
   }
   v.mesh.position.set(v.x, 0, v.z); v.mesh.rotation.set(0, v.yaw, 0);
