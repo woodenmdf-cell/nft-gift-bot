@@ -339,7 +339,7 @@ async def game_page(request):
 
 async def game_asset(request):
     name = request.match_info["name"]
-    cache = "public, max-age=2592000" if name == "three.min.js" else "no-cache"
+    cache = "public, max-age=2592000" if name in ("three.min.js", "gltf.js") else "no-cache"
     return web.FileResponse(WEB / name, headers={"Cache-Control": cache})
 
 
@@ -699,7 +699,8 @@ def make_app():
     r.add_get("/", index)
     r.add_get("/health", health)
     r.add_get("/game", game_page)
-    r.add_get("/{name:three\\.min\\.js|city3d\\.js}", game_asset)
+    r.add_get("/{name:three\\.min\\.js|city3d\\.js|gltf\\.js}", game_asset)
+    r.add_static("/assets", WEB / "assets")
     game.setup(r, auth, ok, err, on_vip, verify=check_init_data, on_coins=on_coins)
     r.add_get("/api/config", api_config)
     r.add_get("/api/gifts", api_gifts)

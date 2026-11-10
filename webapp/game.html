@@ -207,6 +207,7 @@
 <div id="loading">Yuklanmoqda…</div>
 
 <script src="/three.min.js"></script>
+<script src="/gltf.js"></script>
 <script src="/city3d.js"></script>
 <script>
 'use strict';
@@ -475,8 +476,7 @@ window.onRaceInvite = (from, name) => {
 
 // ═════════════ PERSONAJ (garderob) ═════════════
 const LOOK_UI = [
-  ['skin', 'Teri rangi', null], ['hair', 'Soch turmagi', ['Qisqa', 'Uzun', 'Kepka', 'Kal', 'Irokez', 'Jingalak']], ['hc', 'Soch rangi', null],
-  ['top', 'Kiyim', ['Futbolka', 'Kurtka', 'Xudi', 'Oltin pidjak']], ['tc', 'Kiyim rangi', null], ['pc', 'Shim rangi', null],
+  ['char', 'Personaj', ['Aziz', 'Bobur', 'Jasur', 'Sardor', 'Temur', 'Shoh', 'Laylo', 'Nilufar', 'Zarina', 'Dilnoza', 'Sevara', 'Malika']],
   ['acc', 'Aksessuar', ['Yo\'q', 'Ko\'zoynak', 'Qora ko\'zoynak', 'Toj', 'Oltin zanjir']],
 ];
 let draft = null;
@@ -487,7 +487,7 @@ function lookCost() {
 }
 function openLook() {
   if (!SHOP || !SHOP.look) return alertMsg('Yuklanmoqda…');
-  draft = Object.assign({skin: 1, hair: 0, hc: 0, top: 0, tc: 1, pc: 0, acc: 0}, P.look || {});
+  draft = Object.assign({char: 0, acc: 0}, P.look || {});
   sheet(`<h3>🧍 Personaj <button onclick="closeSheet()">✕</button></h3><canvas id="pvc"></canvas><div id="lkbody">${lookBody()}</div>`);
   if (City3D.ok) City3D.preview($('pvc'), draft); else $('pvc').classList.add('hide');
 }
@@ -655,7 +655,7 @@ async function openTop() {
 (async function boot() {
   try { SHOP = await (await fetch('/api/game/shop')).json(); } catch (e) {}
   if (!GUEST) { const r = await api('me'); if (r.ok) { P = r.profile; SHOP = r.shop; } }
-  City3D.init(); $('gl').style.display = 'block';
+  await City3D.init(p => { $('loading').textContent = 'Yuklanmoqda… ' + Math.round(p * 100) + '%'; }); $('gl').style.display = 'block';
   renderMenu(); $('loading').classList.add('hide');
   requestAnimationFrame(frame);
 })();
