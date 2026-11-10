@@ -11,7 +11,10 @@ if _env.exists():
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.split(" #")[0].strip())
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
+_raw_token = os.environ.get("BOT_TOKEN", "")
+# Token ba'zan qo'shtirnoq, bo'sh joy yoki "BOT_TOKEN=" bilan nusxalanadi — toza tokenni ajratib olamiz
+_m = re.search(r"\d{5,}:[A-Za-z0-9_-]{30,}", _raw_token)
+BOT_TOKEN = _m.group(0) if _m else _raw_token.strip().strip("'\"")
 ADMIN_IDS = {int(x) for x in re.split(r"[,\s]+", os.environ.get("ADMIN_IDS", "")) if x.strip().lstrip("-").isdigit()}
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin12345")
 
