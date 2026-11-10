@@ -7,7 +7,7 @@
 (function () {
 'use strict';
 const T = window.THREE;
-const N = 8, BL = 46, RD = 14, CELL = BL + RD, WORLD = N * CELL + RD, SW = 2.6, LANE = 3.4;
+const N = 14, BL = 46, RD = 14, CELL = BL + RD, WORLD = N * CELL + RD, SW = 2.6, LANE = 3.4;
 const roadC = i => i * CELL + RD / 2;
 const cl = (v, a, b) => v < a ? a : v > b ? b : v;
 const rr = (a, b) => a + Math.random() * (b - a);
@@ -48,7 +48,7 @@ const PAL = [0xd9d4c7, 0xc9b8a0, 0xa9b4c2, 0xe0c9a6, 0xb7c4b0, 0xcfa79a, 0x9fb1c
   }
 })();
 // Toshkent uslubidagi maxsus joylar (barcha mijozlarda bir xil joyda)
-const SPECIAL = {dome: [3, 3], tower: [5, 2], fuel: [2, 5], paint: [5, 5]};
+const SPECIAL = {dome: [6, 6], tower: [10, 3], fuel: [4, 9], paint: [9, 9], fuel2: [11, 11]};
 const ZONES = {};
 for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
   const b = blocks[sj * N + si], cx = b.x + BL / 2, cz = b.z + BL / 2;
@@ -60,20 +60,22 @@ for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
   } else if (type === 'tower') {
     b.trees.push({x: cx, z: cz, r: 3.4, tower: true});
     for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; b.trees.push({x: cx + Math.cos(a) * 14, z: cz + Math.sin(a) * 14, r: 0.5}); }
-  } else if (type === 'fuel') {
+  } else if (type === 'fuel' || type === 'fuel2') {
+    b.type = 'fuel';
     b.solids.push({x: b.x + 9, z: b.z + 5, w: 28, d: 8, h: 4.5, top: 5, custom: true});
     for (const [a, c] of [[-10, -3], [10, -3], [-10, 5], [10, 5]]) b.trees.push({x: cx + a, z: cz + 4 + c, r: 0.35, pillar: true});
     b.trees.push({x: cx - 4, z: cz + 5, r: 0.6, pump: true}, {x: cx + 4, z: cz + 5, r: 0.6, pump: true});
-    ZONES.fuel = {x: cx - 13, z: cz - 2, w: 26, d: 14};
+    (ZONES.fuels = ZONES.fuels || []).push({x: cx - 13, z: cz - 2, w: 26, d: 14});
   } else {
     b.solids.push({x: b.x + 7, z: b.z + 4, w: 32, d: 13, h: 8, top: 8.5, custom: true});
     ZONES.paint = {x: cx - 7, z: cz + 2, w: 14, d: 12};
   }
 }
 const inZone = (z, p) => z && p.x > z.x && p.x < z.x + z.w && p.z > z.z && p.z < z.z + z.d;
-const DISTRICTS = [['Olmazor', 'Shayxontohur', 'Yunusobod'], ['Chilonzor', 'Markaz', 'Mirzo Ulug\'bek'], ['Sergeli', 'Yakkasaroy', 'Mirobod']];
+const DISTRICTS = [['Olmazor', 'Shayxontohur', 'Yunusobod', 'Qoraqamish'], ['Chilonzor', 'Markaz', 'Mirzo Ulug\'bek', 'Yashnobod'],
+                   ['Uchtepa', 'Yakkasaroy', 'Mirobod', 'Bektemir'], ['Sergeli', 'Chorsu', 'Beshyog\'och', 'Qo\'yliq']];
 function districtAt(x, z) {
-  const gi = cl(Math.floor((x / WORLD) * 3), 0, 2), gj = cl(Math.floor((z / WORLD) * 3), 0, 2);
+  const gi = cl(Math.floor((x / WORLD) * 4), 0, 3), gj = cl(Math.floor((z / WORLD) * 4), 0, 3);
   return DISTRICTS[gj][gi];
 }
 // chiroq ustunlari (chorrahalar burchagida)
@@ -160,7 +162,7 @@ function merge(parts) {
 }
 
 function buildGround() {
-  const S = 2048, k = S / WORLD, c = document.createElement('canvas'); c.width = c.height = S;
+  const S = QUALITY > 0 ? 3072 : 2048, k = S / WORLD, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
   g.fillStyle = '#3a3d44'; g.fillRect(0, 0, S, S);
   for (let i = 0; i < 14000; i++) { g.fillStyle = Math.random() < 0.5 ? '#35383e' : '#42454c'; g.fillRect(Math.random() * S, Math.random() * S, 2, 2); }
@@ -248,7 +250,14 @@ function buildBuildings() {
     if (Math.random() < 0.38) { const l = 170 + Math.random() * 85 | 0; h.fillStyle = `rgb(${l},${l * 0.84 | 0},${l * 0.52 | 0})`; h.fillRect(X + 14, Y + 12, 36, 36); }
   }
   const map = canvasTex(a, true), emi = canvasTex(e, true);
-  const P = [], Nn = [], U = [], C = [], col = new T.Color();
+  // binolar 4×4 kvartallik bo'laklarga bo'linadi — kamera ko'rmaydigan bo'laklar chizilmaydi
+  let P, Nn, U, C, SP, SU;
+  const col = new T.Color(), chunks = {};
+  const useChunk = b => {
+    const key = Math.floor(b.i / 4) + ',' + Math.floor(b.j / 4);
+    const ch = chunks[key] || (chunks[key] = {P: [], Nn: [], U: [], C: [], SP: [], SU: []});
+    ({P, Nn, U, C, SP, SU} = ch);
+  };
   function quad(p, n, uv, hex) {
     col.setHex(hex);
     for (const i of [0, 1, 2, 0, 2, 3]) { P.push(p[i][0], p[i][1], p[i][2]); Nn.push(n[0], n[1], n[2]); U.push(uv[i][0], uv[i][1]); C.push(col.r, col.g, col.b); }
@@ -263,13 +272,13 @@ function buildBuildings() {
     quad([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], uvw(d), hex);
     quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], Z4, roof);
   }
-  const SP = [], SU = [];
   const signQuad = (x0, x1, y0, y1, z, cell) => {
     const col = cell % 2, row = Math.floor(cell / 2), u0 = col / 2, u1 = u0 + 0.5, v1 = 1 - row / 8, v0 = v1 - 1 / 8;
     for (const [px, py, u, v] of [[x0, y0, u0, v0], [x1, y0, u1, v0], [x1, y1, u1, v1], [x0, y0, u0, v0], [x1, y1, u1, v1], [x0, y1, u0, v1]]) { SP.push(px, py, z); SU.push(u, v); }
   };
   for (const b of blocks) for (const s of b.solids) {
     if (s.custom) continue;
+    useChunk(b);
     const roof = shade(s.c, 0.6);
     box(s.x, 0, s.z, s.w, s.h, s.d, s.c, roof, true);
     box(s.x - 0.15, s.h, s.z - 0.15, s.w + 0.3, 0.6, s.d + 0.3, shade(s.c, 0.8), roof, false);
@@ -288,11 +297,15 @@ function buildBuildings() {
     const sw2 = Math.min(2.6, s.w / 2 - 0.5), mx = s.x + s.w / 2;
     signQuad(mx - sw2, mx + sw2, 3.35, 3.35 + sw2 * 0.4, s.z + s.d + 0.06, Math.floor(srnd() * 16));
   }
-  const geo = new T.BufferGeometry();
-  geo.setAttribute('position', new T.Float32BufferAttribute(P, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(Nn, 3));
-  geo.setAttribute('uv', new T.Float32BufferAttribute(U, 2)); geo.setAttribute('color', new T.Float32BufferAttribute(C, 3));
   bldMat = new T.MeshLambertMaterial({map, emissiveMap: emi, emissive: 0xffffff, emissiveIntensity: 0, vertexColors: true});
-  const m = new T.Mesh(geo, bldMat); m.castShadow = m.receiveShadow = true; scene.add(m);
+  for (const ch of Object.values(chunks)) {
+    if (!ch.P.length) continue;
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute(ch.P, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(ch.Nn, 3));
+    geo.setAttribute('uv', new T.Float32BufferAttribute(ch.U, 2)); geo.setAttribute('color', new T.Float32BufferAttribute(ch.C, 3));
+    geo.computeBoundingSphere();
+    const m = new T.Mesh(geo, bldMat); m.castShadow = m.receiveShadow = true; scene.add(m);
+  }
   // peshtaxtalar (bitta tekstura atlasida 16 ta nom)
   const SIGNS = ['CHOYXONA', 'NON', 'SOMSA', 'DORIXONA', 'MARKET', 'OSHXONA', 'KAFE', 'SARTAROSH', 'GULLAR', 'TELEFONLAR', 'KIYIMLAR', 'MEVALAR', 'KITOBLAR', 'SHIRINLIKLAR', 'BANK', 'POYABZAL'];
   const SBG = ['#1f6f8b', '#b03a2e', '#117a65', '#7d3c98', '#c0392b', '#1a5276', '#d35400', '#2c3e50'];
@@ -304,10 +317,13 @@ function buildBuildings() {
     sg.fillStyle = '#fff'; sg.font = 'bold 64px sans-serif'; sg.textAlign = 'center'; sg.textBaseline = 'middle'; sg.fillText(t, X + 256, Y + 68, 470);
   });
   const st = canvasTex(sc);
-  const sgeo = new T.BufferGeometry();
-  sgeo.setAttribute('position', new T.Float32BufferAttribute(SP, 3)); sgeo.setAttribute('uv', new T.Float32BufferAttribute(SU, 2)); sgeo.computeVertexNormals();
   signMat = new T.MeshLambertMaterial({map: st, emissiveMap: st, emissive: 0xffffff, emissiveIntensity: 0});
-  scene.add(new T.Mesh(sgeo, signMat));
+  for (const ch of Object.values(chunks)) {
+    if (!ch.SP.length) continue;
+    const sgeo = new T.BufferGeometry();
+    sgeo.setAttribute('position', new T.Float32BufferAttribute(ch.SP, 3)); sgeo.setAttribute('uv', new T.Float32BufferAttribute(ch.SU, 2)); sgeo.computeVertexNormals();
+    scene.add(new T.Mesh(sgeo, signMat));
+  }
 }
 
 // ── diqqatga sazovor joylar ──
@@ -540,21 +556,21 @@ function laneOf(v) {
     : {x: roadC(v.k) - v.dir * LANE, z: v.along, yaw: v.dir > 0 ? 0 : Math.PI};
 }
 function spawnTraffic() {
-  const n = QUALITY > 0 ? 34 : 22;
+  const n = QUALITY > 0 ? 60 : 36;
   for (let i = 0; i < n; i++) {
     const type = pick(TTYPES), v = makeVehicle(type, type === 'taxi' ? 0xf2c200 : pick(TCOL), 0, 0, 0, 'traffic');
     v.ax = Math.random() < 0.5 ? 'x' : 'z'; v.k = Math.floor(Math.random() * (N + 1)); v.dir = Math.random() < 0.5 ? 1 : -1;
     v.along = rr(20, WORLD - 20); v.sp = rr(8, 13); v.cv = 0; v.lastNode = -1;
     const l = laneOf(v); v.x = l.x; v.z = l.z; v.yaw = l.yaw;
   }
-  for (let i = 0; i < 4; i++) {
-    const v = makeVehicle('bus', [0x1e88e5, 0x43a047, 0xe53935, 0xfb8c00][i], 0, 0, 0, 'traffic');
-    v.ax = i % 2 ? 'x' : 'z'; v.k = 1 + i * 2; v.dir = i < 2 ? 1 : -1; v.along = rr(40, WORLD - 40); v.sp = rr(7, 8.5); v.cv = 0; v.lastNode = -1;
+  for (let i = 0; i < 7; i++) {
+    const v = makeVehicle('bus', [0x1e88e5, 0x43a047, 0xe53935, 0xfb8c00][i % 4], 0, 0, 0, 'traffic');
+    v.ax = i % 2 ? 'x' : 'z'; v.k = 1 + i * 2; v.dir = i % 3 ? 1 : -1; v.along = rr(40, WORLD - 40); v.sp = rr(7, 8.5); v.cv = 0; v.lastNode = -1;
     const l = laneOf(v); v.x = l.x; v.z = l.z; v.yaw = l.yaw;
   }
 }
 function spawnParked() {
-  for (const b of blocks) for (const s of b.spots) if (Math.random() < 0.35) {
+  for (const b of blocks) for (const s of b.spots) if (Math.random() < 0.22) {
     const type = pick(['sedan', 'suv', 'sport', 'sedan', 'van']);
     makeVehicle(type, pick(TCOL), s.x, s.z, s.yaw, 'parked');
   }
@@ -568,7 +584,7 @@ function pedPath(b, s) {
 const pedGeos = [];
 function spawnPeds() {
   for (let i = 0; i < 10; i++) pedGeos.push(personGeo(pick(SHIRTS), pick(PANTS), pick(SKINS), pick([0x1a1a1a, 0x3b2a1a, 0x6b4a2b, 0x222222, 0xb08d57])));
-  const pm = new T.MeshLambertMaterial({vertexColors: true}), n = QUALITY > 0 ? 40 : 24;
+  const pm = new T.MeshLambertMaterial({vertexColors: true}), n = QUALITY > 0 ? 70 : 40;
   for (let i = 0; i < n; i++) {
     const mesh = new T.Mesh(pick(pedGeos), pm); mesh.castShadow = QUALITY > 0; scene.add(mesh);
     const b = pick(blocks), s = Math.random() * 200;
@@ -670,7 +686,7 @@ function buildMarkers() {
   arrow.renderOrder = 11; scene.add(arrow); arrow.visible = false;
 }
 const PAINTS = [0x3a7bd5, 0xd32f2f, 0x2e7d4f, 0xf2c200, 0x161616, 0xf4f4f4, 0x8e24aa, 0xff6f00, 0x00acc1, 0xe91e63, 0x6d4c41, 0x546e7a, 0xd4af37, 0xcfd8dc];
-const COINS = 60;
+const COINS = 110;
 function buildCoins() {
   const g = new T.CylinderGeometry(0.55, 0.55, 0.14, 16); g.rotateX(Math.PI / 2);
   coinMesh = new T.InstancedMesh(g, new T.MeshLambertMaterial({color: 0xf5c542, emissive: 0x5a3c00}), COINS);
@@ -775,7 +791,7 @@ function newGiver() { const types = ['deliver', 'taxi', 'race']; return Object.a
 function start() {
   G = {missions: 0, pickups: 0, wanted: 0, mission: null, givers: [], coins: [], bust: 0, calm: 0, crashCd: 0, time: 0, shake: 0, hitPedCd: 0};
   // o'yinchi va uning mashinasi
-  const sx = roadC(4) + RD / 2 + 1.0, sz = roadC(4) + 24;
+  const mid = Math.floor(N / 2), sx = roadC(mid) + RD / 2 + 1.0, sz = roadC(mid) + 24;
   Object.assign(player, {x: sx, z: sz, y: 0, vy: 0, yaw: Math.PI, sp: 0});
   const st = {x: sx, z: sz, y: 0, vy: 0, yaw: Math.PI, sp: 0};
   scene.remove(player.g); player = Object.assign(makePlayer(P.look), st);
@@ -785,7 +801,7 @@ function start() {
   const type = CAR_STATS[P.car] ? P.car : 'sedan';
   const pi = P.paint && P.paint[type];
   const col = (pi != null && PAINTS[pi] != null) ? PAINTS[pi] : {sedan: 0x3a7bd5, taxi: 0xf2c200, suv: 0x2e7d4f, sport: 0xd32f2f, super: 0xd4af37}[type];
-  const mine = makeVehicle(type, col, roadC(4) + RD / 2 - 1.5, sz - 2.5, Math.PI, 'parked');
+  const mine = makeVehicle(type, col, roadC(mid) + RD / 2 - 1.5, sz - 2.5, Math.PI, 'parked');
   mine.own = true; mine.spec = specFor(type, true); mine.nitro = mine.spec.cap;
   for (let i = 0; i < 3; i++) G.givers.push(newGiver());
   for (let i = 0; i < COINS; i++) G.coins.push(Object.assign(roadPoint(), {ph: Math.random() * 6}));
@@ -1058,7 +1074,7 @@ function updateCar(dt) {
     }
   }
   // yoqilg'i shoxobchasi va bo'yash ustaxonasi
-  if (inZone(ZONES.fuel, v)) {
+  if ((ZONES.fuels || []).some(z => inZone(z, v))) {
     if (!G.inFuel) { G.inFuel = true; v.nitro = v.spec.cap; toast('⛽ Nitro to\'ldirildi!', 'Yoqilg\'i shoxobchasi'); sfx(520, 0.1, 'triangle', 0.05); setTimeout(() => sfx(780, 0.15, 'triangle', 0.05), 120); }
   } else G.inFuel = false;
   if (inZone(ZONES.paint, v)) {
@@ -1205,8 +1221,8 @@ function updateWorldObjs(dt) {
 function updateCamera(dt, menu) {
   if (menu) {
     const a = tNow * 0.04;
-    camera.position.set(WORLD / 2 + Math.cos(a) * 190, 85, WORLD / 2 + Math.sin(a) * 190);
-    camera.lookAt(WORLD / 2, 0, WORLD / 2); camera.fov = 55; camera.updateProjectionMatrix();
+    camera.position.set(WORLD / 2 + Math.cos(a) * WORLD * 0.36, 110, WORLD / 2 + Math.sin(a) * WORLD * 0.36);
+    camera.lookAt(WORLD / 2, 0, WORLD / 2); camera.fov = 55; camera.far = 1100; scene.fog.far = 900; camera.updateProjectionMatrix();
     return;
   }
   const d = input.dragX || 0, e = input.dragY || 0;
@@ -1235,6 +1251,7 @@ function updateCamera(dt, menu) {
   const sh = G && G.shake ? G.shake : 0; if (G) G.shake = Math.max(0, G.shake - dt * 2);
   camera.position.set(tx - fx * camDist * ch * k + rr(-sh, sh), ty + (camDist * shh + 0.6) * k + rr(-sh, sh), tz - fz * camDist * ch * k);
   camera.lookAt(tx, ty + 0.4, tz);
+  if (camera.far !== 360) { camera.far = 360; scene.fog.far = 320; camera.updateProjectionMatrix(); }
   if (Math.abs(camera.fov - fov) > 0.2) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
 }
 
@@ -1259,7 +1276,7 @@ function drawMinimap(tgt) {
   for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
     const b = blocks[sj * N + si];
     g.save(); g.translate((b.x + BL / 2) * k, (b.z + BL / 2) * k); g.rotate(-rot);
-    g.fillText({dome: '🕌', tower: '📡', fuel: '⛽', paint: '🎨'}[type], 0, 0); g.restore();
+    g.fillText({dome: '🕌', tower: '📡', fuel: '⛽', fuel2: '⛽', paint: '🎨'}[type], 0, 0); g.restore();
   }
   g.restore();
   // o'yinchi strelkasi
@@ -1491,9 +1508,12 @@ const API = {
     if (menu) {
       tNow += dt; updateLights(tNow); updateTraffic(dt); updatePeds(dt); updateDay(dt * 0.5, WORLD / 2, WORLD / 2); updateCamera(dt, true);
     }
+    const cx = camera.position.x, cz = camera.position.z, D = QUALITY > 0 ? 230 : 170;
+    for (const v of vehicles) v.mesh.visible = Math.abs(v.x - cx) < D && Math.abs(v.z - cz) < D;
+    for (const p of peds) p.mesh.visible = Math.abs(p.x - cx) < D * 0.6 && Math.abs(p.z - cz) < D * 0.6;
     renderer.render(scene, camera);
   },
 };
-API._dbg = {cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
+API._dbg = {scene: () => scene, cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
 window.City3D = API;
 })();

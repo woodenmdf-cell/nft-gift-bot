@@ -306,7 +306,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
 # Bir xonada 25 tagacha o'yinchi bir-birini ko'radi. Har bir mijoz o'z holatini ~10 marta/soniya
 # yuboradi, server esa xonadagi hamma holatlarni 10 marta/soniya tarqatadi.
 ROOM_MAX = 25
-WORLD = 494
+WORLD = 14 * 60 + 14          # 854 m — city3d.js dagi N=14 bilan bir xil
 CAR_TYPES = {"", "sedan", "taxi", "suv", "sport", "super", "van", "bus", "police"}
 CHAT = 8                     # tayyor iboralar soni (mijozda)
 _rooms = []                  # [{cid: Client}]
@@ -325,7 +325,7 @@ _race_wins = {}              # uid -> [vaqtlar]
 
 
 def _road_point(rng):
-    k = rng.randint(0, 8)
+    k = rng.randint(0, 14)
     along, off = rng.uniform(15, WORLD - 15), rng.uniform(-3, 3)
     c = k * 60 + 7
     return [round(along, 1), round(c + off, 1)] if rng.random() < 0.5 else [round(c + off, 1), round(along, 1)]
