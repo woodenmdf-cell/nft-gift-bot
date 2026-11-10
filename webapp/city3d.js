@@ -837,7 +837,97 @@ function engineStart() {
     o.connect(f); f.connect(g); g.connect(AC.destination); o.start(); eng = {o, g};
   } catch (e) { eng = null; }
 }
-function engineStop() { if (eng) { try { eng.o.stop(); } catch (e) {} eng = null; } }
+function engineStop() {
+  if (eng) { try { eng.o.stop(); } catch (e) {} eng = null; }
+  if (siren) { try { siren.o.stop(); siren.lfo.stop(); } catch (e) {} siren = null; }
+  if (radio) { radio.out.gain.value = 0; radio.paused = true; }
+}
+
+// ── sirena, radio, signal ──
+function actx() { if (!SOUND) return null; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); return AC; } catch (e) { return null; } }
+let siren = null;
+function updateSiren() {
+  const ac = actx(), me = pos();
+  let d = 1e9; for (const v of police) d = Math.min(d, dxz(v, me));
+  const want = G && G.wanted > 0 && d < 160;
+  if (want && ac && !siren) {
+    const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), g = ac.createGain();
+    o.type = 'triangle'; o.frequency.value = 780; lfo.frequency.value = 0.55; lg.gain.value = 230;
+    lfo.connect(lg); lg.connect(o.frequency); o.connect(g); g.connect(ac.destination); g.gain.value = 0;
+    o.start(); lfo.start(); siren = {o, lfo, g};
+  }
+  if (siren) {
+    if (!want) { try { siren.o.stop(); siren.lfo.stop(); } catch (e) {} siren = null; return; }
+    siren.g.gain.value = 0.045 * Math.max(0, 1 - d / 160);
+  }
+}
+const STATIONS = [
+  {name: 'Radio o\'chiq'},
+  {name: '📻 Shahar FM', bpm: 120, scale: [57, 60, 62, 64, 67, 69, 72, 74], roots: [45, 41, 43, 40], lead: 'square'},
+  {name: '📻 Chill FM', bpm: 84, scale: [60, 62, 64, 67, 69, 72, 74, 76], roots: [48, 45, 41, 43], lead: 'triangle'},
+  {name: '📻 Bazm FM', bpm: 132, scale: [62, 63, 66, 67, 69, 70, 74, 75], roots: [50, 50, 48, 46], lead: 'sawtooth'},
+];
+let station = 0, radio = null;
+try { station = +(localStorage.getItem('sa_radio') || 1) % STATIONS.length; } catch (e) {}
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+let noiseBuf = null;
+function noise(ac) {
+  if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const s = ac.createBufferSource(); s.buffer = noiseBuf; return s;
+}
+function note(ac, out, type, f, t, dur, vol, cutoff) {
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  if (cutoff) { const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = cutoff; o.connect(fl); fl.connect(g); } else o.connect(g);
+  g.connect(out); o.start(t); o.stop(t + dur + 0.02);
+}
+function drum(ac, out, kind, t) {
+  if (kind === 'k') { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.25); return; }
+  const n = noise(ac), f = ac.createBiquadFilter(), g = ac.createGain();
+  f.type = kind === 'h' ? 'highpass' : 'bandpass'; f.frequency.value = kind === 'h' ? 7000 : 1800;
+  const dur = kind === 'h' ? 0.04 : 0.14; g.gain.setValueAtTime(kind === 'h' ? 0.25 : 0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  n.connect(f); f.connect(g); g.connect(out); n.start(t); n.stop(t + dur + 0.02);
+}
+let melSeed = 1;
+const mrnd = () => { melSeed = (melSeed * 16807) % 2147483647; return melSeed / 2147483647; };
+function radioTick(on) {
+  const ac = actx();
+  if (!ac || !on || !station) { if (radio) { radio.out.gain.value = 0; radio.paused = true; } return; }
+  const S = STATIONS[station];
+  if (!radio || radio.st !== station) {
+    if (radio) radio.out.disconnect();
+    const out = ac.createGain(); out.gain.value = 0.05; out.connect(ac.destination);
+    radio = {st: station, out, next: ac.currentTime + 0.1, step: 0, mel: []};
+    melSeed = station * 7919 + 13;
+    for (let b = 0; b < 4; b++) for (let i = 0; i < 16; i++) radio.mel.push(mrnd() < (station === 2 ? 0.3 : 0.55) ? S.scale[Math.floor(mrnd() * S.scale.length)] : 0);
+  }
+  if (radio.paused) { radio.paused = false; radio.next = ac.currentTime + 0.05; }
+  radio.out.gain.value = 0.05;
+  const sp = 60 / S.bpm / 4;
+  while (radio.next < ac.currentTime + 0.3) {
+    const t = radio.next, i = radio.step % 16, bar = Math.floor(radio.step / 16) % 4, root = S.roots[bar];
+    if (station === 2) {
+      if (i === 0) for (const iv of [0, 4, 7, 11]) note(ac, radio.out, 'triangle', mtof(root + 12 + iv), t, sp * 15, 0.08, 1200);
+      if (i === 0 || i === 10) drum(ac, radio.out, 'k', t);
+      if (i === 8) drum(ac, radio.out, 's', t);
+      if (i % 4 === 2) drum(ac, radio.out, 'h', t);
+    } else {
+      if (i % 4 === 0) drum(ac, radio.out, 'k', t);
+      if (i === 4 || i === 12) drum(ac, radio.out, 's', t);
+      if (i % 2 === 1) drum(ac, radio.out, 'h', t);
+      if (i % 2 === 0) note(ac, radio.out, 'sawtooth', mtof(root - 12 + (i % 8 === 6 ? 7 : 0)), t, sp * 1.6, 0.12, 500);
+    }
+    const m = radio.mel[(radio.step) % radio.mel.length];
+    if (m) note(ac, radio.out, S.lead, mtof(m), t, sp * (station === 2 ? 3 : 1.4), station === 2 ? 0.06 : 0.05, 2600);
+    radio.next += sp; radio.step++;
+  }
+}
+function honk() {
+  const ac = actx();
+  if (ac) { const t = ac.currentTime; note(ac, ac.destination, 'square', 392, t, 0.4, 0.05, 1500); note(ac, ac.destination, 'square', 494, t, 0.4, 0.04, 1500); }
+  const me = pos();
+  for (const p of peds) if (!p.down && dxz(p, me) < 14 && p.flee <= 0) { p.flee = 0.8; const a = Math.atan2(p.x - me.x, p.z - me.z); p.jx = Math.sin(a) * 3; p.jz = Math.cos(a) * 3; }
+}
 
 // ═════════════ YANGILASH ═════════════
 function updateTraffic(dt) {
@@ -1188,6 +1278,7 @@ function hud(tgt) {
     $('bA').querySelector('span').textContent = cur ? '🔥' : '🏃'; $('lA').textContent = cur ? 'NITRO' : 'YUGURISH';
     $('bB').querySelector('span').textContent = cur ? '🛑' : '⤴️'; $('lB').textContent = cur ? 'TORMOZ' : 'SAKRASH';
   }
+  $('bH').classList.toggle('hide', !cur); $('h-radio').classList.toggle('hide', !cur);
   const nb = $('nitro');
   if (cur) { nb.classList.remove('hide'); nb.firstElementChild.style.width = (cur.nitro / cur.spec.cap * 100) + '%'; } else nb.classList.add('hide');
   $('bust').classList.toggle('hide', G.bust < 0.25);
@@ -1330,6 +1421,7 @@ const API = {
   },
   start() { lastCtx = ''; API.active = true; start(); },
   paints: PAINTS,
+  radioNext() { station = (station + 1) % STATIONS.length; try { localStorage.setItem('sa_radio', String(station)); } catch (e) {} toast(STATIONS[station].name, ''); return STATIONS[station].name; },
   repaint(type, idx) { const v = vehicles.find(q => q.own); if (!v || v.type !== type) return; v.color = PAINTS[idx]; v.mesh.geometry = carGeometry(v.type, v.color); toast('🎨 Mashina bo\'yaldi!', ''); },
   phrases: PHRASES, preview, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
@@ -1349,7 +1441,8 @@ const API = {
     const tgt = updateWorldObjs(dt);
     const me = pos(); updateDay(dt, me.x, me.z);
     updateCamera(dt, false);
-    updateNet(dt);
+    updateNet(dt); updateSiren(); radioTick(!!cur);
+    if (input.hHit && cur) honk();
     hud(tgt);
   },
   render(menu, dt) {

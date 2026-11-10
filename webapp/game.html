@@ -21,6 +21,8 @@
   #nitro span{position:absolute;top:-15px;left:0;font-size:10px;font-weight:800}
   #bust{position:absolute;top:28%;left:50%;transform:translateX(-50%);color:#ff3b30;font-weight:900;font-size:18px;text-shadow:0 2px 8px #000;white-space:nowrap}
   .chatb{position:absolute;left:8px;top:calc(52px + env(safe-area-inset-top))}
+  .radiob{position:absolute;left:52px;top:calc(52px + env(safe-area-inset-top))}
+  .btn.hb{position:absolute;right:24px;bottom:calc(122px + env(safe-area-inset-bottom));width:56px;height:56px;pointer-events:auto}
   #chatpick{position:absolute;left:8px;top:calc(94px + env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px;pointer-events:auto;z-index:4}
   #chatpick button{background:#000c;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;text-align:left}
   #chatfeed{position:absolute;left:8px;bottom:calc(175px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;max-width:60%}
@@ -160,6 +162,8 @@
   <div id="bust" class="hide">🚓 Politsiya yaqin — qoching!</div>
   <div id="mission" class="hide"></div>
   <button class="x chatb hide" id="h-chat" onclick="toggleChat()">💬</button>
+  <button class="x radiob hide" id="h-radio" onclick="City3D.radioNext()">📻</button>
+  <button class="btn hb hide" id="bH"><div><span>📯</span></div></button>
   <div id="chatpick" class="hide"></div>
   <div id="chatfeed"></div>
   <div id="toast"></div>
@@ -229,7 +233,7 @@ function resize() { W = innerWidth; H = innerHeight; }
 addEventListener('resize', resize); resize();
 
 // ═════════════ BOSHQARUV ═════════════
-const input = {jx: 0, jy: 0, a: false, b: false, e: false, aHit: false, bHit: false, eHit: false, dragX: 0, dragY: 0};
+const input = {jx: 0, jy: 0, a: false, b: false, e: false, h: false, aHit: false, bHit: false, eHit: false, hHit: false, dragX: 0, dragY: 0};
 const keys = {};
 let joyId = null, jx0 = 0, jy0 = 0;
 const JR = 55;
@@ -277,12 +281,14 @@ function bindBtn(el, k) {
   el.addEventListener('touchstart', on, {passive: false}); el.addEventListener('touchend', off); el.addEventListener('touchcancel', off);
   el.addEventListener('mousedown', on); el.addEventListener('mouseup', off); el.addEventListener('mouseleave', off);
 }
-bindBtn($('bA'), 'a'); bindBtn($('bB'), 'b'); bindBtn($('bE'), 'e');
+bindBtn($('bA'), 'a'); bindBtn($('bB'), 'b'); bindBtn($('bE'), 'e'); bindBtn($('bH'), 'h');
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' || e.code === 'KeyJ') { if (!input.a) input.aHit = true; input.a = true; }
   if (e.code === 'ShiftLeft' || e.code === 'KeyK') { if (!input.b) input.bHit = true; input.b = true; }
   if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') { if (!input.e) input.eHit = true; input.e = true; }
+  if (e.code === 'KeyH') { if (!input.h) input.hHit = true; input.h = true; }
+  if (e.code === 'KeyR' && mode === 'city') City3D.radioNext();
   if (e.code === 'Escape' && mode !== 'menu') askExit();
 });
 addEventListener('keyup', e => {
@@ -290,6 +296,7 @@ addEventListener('keyup', e => {
   if (e.code === 'Space' || e.code === 'KeyJ') input.a = false;
   if (e.code === 'ShiftLeft' || e.code === 'KeyK') input.b = false;
   if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') input.e = false;
+  if (e.code === 'KeyH') input.h = false;
 });
 function getMove() {
   let x = input.jx, y = input.jy;
@@ -372,7 +379,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (mode === 'city') { if (!paused) City3D.update(dt); City3D.render(false, dt); }
   else if (!document.hidden) City3D.render(true, dt);
-  input.aHit = input.bHit = input.eHit = false;
+  input.aHit = input.bHit = input.eHit = input.hHit = false;
   requestAnimationFrame(frame);
 }
 
