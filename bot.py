@@ -738,6 +738,9 @@ async def main():
     await web.TCPSite(runner, HOST, PORT).start()
     logging.info("Server: %s:%s | Mini App: %s | Admin: %s/admin", HOST, PORT, WEBAPP_URL, WEBAPP_URL)
     logging.info("Adminlar: %s", ADMIN_IDS or "YO'Q — ADMIN_IDS ni tekshiring")
+    if not WEBAPP_URL:
+        logging.error("Mini App manzili yo'q: Railway → Settings → Networking → Generate Domain bosing "
+                      "yoki Variables'ga WEBAPP_URL=https://domeningiz qo'ying. Tugmalar chiqmaydi!")
     if WEBAPP_URL.startswith("https://"):
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="🎁 Bozor", web_app=WebAppInfo(url=WEBAPP_URL)))

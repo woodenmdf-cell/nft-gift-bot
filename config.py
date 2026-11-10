@@ -20,9 +20,12 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin12345")
 
 # Mini App manzili. Railway / Render o'zi domen beradi — avtomatik olinadi.
 _domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or ""
-WEBAPP_URL = (os.environ.get("WEBAPP_URL", "").strip().rstrip("/")
+WEBAPP_URL = (os.environ.get("WEBAPP_URL", "").strip().strip("'\"").rstrip("/")
               or os.environ.get("RENDER_EXTERNAL_URL")
               or (f"https://{_domain}" if _domain else ""))
+# "domen.up.railway.app" yoki "http://..." ko'rinishida yozilgan bo'lsa ham https:// ga keltiramiz
+if WEBAPP_URL and not WEBAPP_URL.startswith("https://"):
+    WEBAPP_URL = "https://" + re.sub(r"^\w+://", "", WEBAPP_URL)
 
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "8600 0000 0000 0000")
 CARD_OWNER = os.environ.get("CARD_OWNER", "Ism Familiya")
