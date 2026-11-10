@@ -1194,9 +1194,9 @@ function updateWorldObjs(dt) {
   // yo'nalish strelkasi
   const tgt = G.mission ? G.mission.pts[G.mission.idx] : G.givers.reduce((a, b) => dxz(a, me) < dxz(b, me) ? a : b);
   arrow.material.color.setHex(G.mission ? 0x34c759 : 0xf5c542);
-  const aa = Math.atan2(tgt.x - me.x, tgt.z - me.z), ar = (cur ? 4.2 : 1.6) + Math.sin(tNow * 5) * 0.15;
+  const aa = Math.atan2(tgt.x - me.x, tgt.z - me.z), ar = (cur ? 4.2 : 2.2) + Math.sin(tNow * 5) * 0.15;
   arrow.position.set(me.x + Math.sin(aa) * ar, 0.12, me.z + Math.cos(aa) * ar);
-  arrow.rotation.y = aa; arrow.scale.setScalar(cur ? 1.3 : 0.75);
+  arrow.rotation.y = aa; arrow.scale.setScalar(cur ? 1.3 : 0.5);
   arrow.visible = dxz(tgt, me) > 8;
   return tgt;
 }
