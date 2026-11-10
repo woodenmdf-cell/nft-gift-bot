@@ -152,6 +152,7 @@
   <button data-p="rent"><span>🔑</span>Ijara</button>
   <button data-p="top"><span>🏆</span>Reyting</button>
   <button data-p="profile"><span>👤</span>Profil</button>
+  <button onclick="location.href='/game'"><span>🎮</span>O'yin</button>
 </nav>
 
 <!-- Sovg'a sahifasi -->
@@ -466,7 +467,7 @@ function go(p){
   if (p==='market') loadGifts(); if (p==='rent') loadMe().then(loadRent); if (p==='top') loadTop(); if (p==='profile') loadMe();
   window.scrollTo(0,0);
 }
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.p));
+document.querySelectorAll('nav button[data-p]').forEach(b => b.onclick = () => go(b.dataset.p));
 let t1, t2;
 $('q').oninput = () => { clearTimeout(t1); t1 = setTimeout(()=>{ if($('q').value) { view='all'; col=null; document.querySelectorAll('#p-market .chip[data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v==='all')); } loadGifts(); }, 300); };
 $('rq').oninput = () => { clearTimeout(t2); t2 = setTimeout(loadRent, 300); };
