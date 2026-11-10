@@ -23,6 +23,37 @@ Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
 - Ijara tugashiga 24 soat qolganda eslatma
 - Muddatdan 12 soat o'tsa — «Muddati o'tgan», adminga xabar
 
+## 🎮 Shahar Arena — o'yin (`/game`, botda `/oyin`)
+Mini App ichidagi bepul 3D shahar o'yini:
+- 🏙 **Shahar (3D)** — ochiq 3D shahar (three.js, `webapp/city3d.js`): piyoda yurish, yugurish, sakrash;
+  istalgan mashinaga o'tirish (yo'ldagisini olsangiz — politsiya qidiradi), o'z garaj mashinangiz yoningizda turadi.
+  Transport oqimi, piyodalar, kun/tun (tunda derazalar, ko'cha chiroqlari va faralar yonadi), mini-xarita,
+  yetkazib berish / taksi / poyga topshiriqlari, tangalar, ⭐ qidiruv darajasi va politsiya ta'qibi.
+  Boshqaruv: chap tomonda joystik, o'ng tomonni surib kamerani aylantirish; menyuda «Grafika: yuqori/tezkor»
+  (kuchsiz telefonlar uchun soyalar o'chadi).
+- 🧍 **Personaj** — teri, soch turmagi va rangi, kiyim (futbolka/kurtka/xudi), ranglar, aksessuarlar.
+  Bir qismi bepul, bir qismi tangaga (bir marta sotib olinadi), oltin pidjak, toj, oltin zanjir va oltin rang — faqat VIP.
+- 🕌 **Toshkent uslubi** — tumanlar (Chilonzor, Yunusobod, Mirobod...), do'kon peshtaxtalari (Choyxona, Somsa, Non...),
+  ko'k gumbazli madrasa, teleminora, svetoforlar (transport qizilda to'xtaydi), avtobuslar.
+- ⛽ **Yoqilg'i shoxobchasi** — nitroni to'ldiradi; 🎨 **bo'yash ustaxonasi** — o'z mashinangizni 150 tangaga bo'yatish
+  (oltin va xrom — faqat VIP).
+- 📻 **Tovushlar** — mashina radiosi (Shahar FM, Chill FM, Bazm FM — musiqa o'yinda yaratiladi), signal 📯, politsiya sirenasi.
+- 🏁 **Onlayn poyga** — 💬 → «Poygaga chaqirish» (60 m ichidagi o'yinchi, ikkalasi ham mashinada). 5 ta nazorat nuqtasini
+  server tanlaydi va o'zi tekshiradi (teleport hisobga o'tmaydi). G'olib 150 tanga (VIP — 300), sutkada 20 tagacha.
+- 👥 **Onlayn shahar** — `/ws/city` WebSocket: bir xonada 25 tagacha o'yinchi bir-birini real vaqtda ko'radi
+  (yurish, mashinada haydash, ism yorlig'i, 👑 VIP belgisi), tayyor iboralar bilan chat. Transport, piyodalar va
+  politsiya har o'yinchida o'ziniki. Xonalar server xotirasida — bitta server jarayoni bilan ishlaydi.
+
+Tangalarga garajda mashinalar (Taksi, Yo'ltanlamas, Sport kupe) va yaxshilashlar
+(dvigatel, nitro, boshqaruv) sotib olinadi. Kunlik bonus, XP/daraja, reyting bor.
+
+**👑 VIP obuna — ixtiyoriy** (`GAME_VIP_PRICE` so'm / `GAME_VIP_DAYS` kun, bot balansidan to'lanadi):
+×2 tanga, +15% kuch, oltin superkar, VIP kiyimlar, tezroq nitro, kunlik bonus 300 tanga.
+VIP sotib olinganda adminga xabar keladi; admin panelda o'yinchilar soni, faol VIP va VIP daromadi ko'rinadi.
+
+Mukofot vaqti serverda o'lchanadi (`/api/game/start` → `/api/game/reward`), shuning uchun soxta natija bilan
+cheksiz tanga yig'ib bo'lmaydi. Telegram'dan tashqarida ochilsa — mehmon rejimi (natija saqlanmaydi).
+
 ## Balans
 Foydalanuvchi Mini App → Profil → «Balansni to'ldirish» → summa → bot karta raqamini yuboradi →
 chek rasmini botga jo'natadi → admin tasdiqlaydi → balans + cashback (`CASHBACK`, standart 2%).
