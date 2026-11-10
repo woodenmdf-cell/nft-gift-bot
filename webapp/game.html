@@ -6,7 +6,8 @@
 <title>Shahar Arena</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  :root{--bg:#0b0d12;--bg2:#161a22;--bg3:#202633;--line:#2a3140;--text:#f4f5f7;--hint:#8d95a5;
+  :root{--st:max(env(safe-area-inset-top),calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px)));
+        --sb:max(env(safe-area-inset-bottom),calc(var(--tg-safe-area-inset-bottom,0px) + var(--tg-content-safe-area-inset-bottom,0px)));--bg:#0b0d12;--bg2:#161a22;--bg3:#202633;--line:#2a3140;--text:#f4f5f7;--hint:#8d95a5;
         --acc:#ff4d2e;--gold:#f5c542;--ok:#34c759;--blue:#3b82f6}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,Roboto,sans-serif;font-size:15px;touch-action:none}
@@ -14,22 +15,22 @@
   canvas{position:fixed;inset:0;display:block}
   #gl{display:none}
   #touch{position:fixed;inset:0;z-index:2;touch-action:none}
-  #mm{position:absolute;inset:auto;right:10px;top:calc(56px + env(safe-area-inset-top));width:120px;height:120px}
-  #h-dist{position:absolute;right:10px;top:calc(180px + env(safe-area-inset-top));width:120px;text-align:center;font-size:11px;font-weight:800;text-shadow:0 1px 4px #000}
-  #nitro{position:absolute;left:16px;bottom:calc(150px + env(safe-area-inset-bottom));width:130px;height:10px;background:#0008;border-radius:6px}
+  #mm{position:absolute;inset:auto;right:10px;top:calc(56px + var(--st));width:120px;height:120px}
+  #h-dist{position:absolute;right:10px;top:calc(180px + var(--st));width:120px;text-align:center;font-size:11px;font-weight:800;text-shadow:0 1px 4px #000}
+  #nitro{position:absolute;left:16px;bottom:calc(150px + var(--sb));width:130px;height:10px;background:#0008;border-radius:6px}
   #nitro i{display:block;height:100%;background:linear-gradient(90deg,#4fc3ff,#b388ff);border-radius:6px}
   #nitro span{position:absolute;top:-15px;left:0;font-size:10px;font-weight:800}
   #bust{position:absolute;top:28%;left:50%;transform:translateX(-50%);color:#ff3b30;font-weight:900;font-size:18px;text-shadow:0 2px 8px #000;white-space:nowrap}
-  .chatb{position:absolute;left:8px;top:calc(52px + env(safe-area-inset-top))}
-  .radiob{position:absolute;left:52px;top:calc(52px + env(safe-area-inset-top))}
-  .btn.hb{position:absolute;right:24px;bottom:calc(122px + env(safe-area-inset-bottom));width:56px;height:56px;pointer-events:auto}
-  #chatpick{position:absolute;left:8px;top:calc(94px + env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px;pointer-events:auto;z-index:4}
+  .chatb{position:absolute;left:8px;top:calc(52px + var(--st))}
+  .radiob{position:absolute;left:52px;top:calc(52px + var(--st))}
+  .btn.hb{position:absolute;right:24px;bottom:calc(122px + var(--sb));width:56px;height:56px;pointer-events:auto}
+  #chatpick{position:absolute;left:8px;top:calc(94px + var(--st));display:flex;flex-direction:column;gap:5px;pointer-events:auto;z-index:4}
   #chatpick button{background:#000c;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;text-align:left}
   #count{position:absolute;top:19%;left:50%;transform:translate(-50%,-50%);font-size:96px;font-weight:900;color:#fff;text-shadow:0 4px 20px #000,0 0 30px #b388ff}
-  #raceinv{position:absolute;top:calc(100px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#1b1530ee;border:1px solid #b388ff88;border-radius:16px;padding:12px;width:min(320px,90%);pointer-events:auto;text-align:center;font-weight:700}
+  #raceinv{position:absolute;top:calc(100px + var(--st));left:50%;transform:translateX(-50%);background:#1b1530ee;border:1px solid #b388ff88;border-radius:16px;padding:12px;width:min(320px,90%);pointer-events:auto;text-align:center;font-weight:700}
   #raceinv .r{display:flex;gap:8px;margin-top:10px}#raceinv button{flex:1;border-radius:11px;padding:10px;font-weight:800;background:#34c759}#raceinv button.n{background:#3a3f4b}
   #chatpick .rb{background:#5b3fb8cc}
-  #chatfeed{position:absolute;left:8px;bottom:calc(175px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;max-width:60%}
+  #chatfeed{position:absolute;left:8px;bottom:calc(175px + var(--sb));display:flex;flex-direction:column;gap:4px;max-width:60%}
   #chatfeed div{background:#000a;border-radius:10px;padding:5px 9px;font-size:12px;font-weight:600}
   .lk h4{color:var(--hint);font-size:12px;font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:.5px}
   .opts{display:flex;flex-wrap:wrap;gap:6px}
@@ -43,7 +44,7 @@
   .btn.e{width:68px;height:68px;background:#34c75988;border-color:#7ee49a;align-self:center}
   .hide{display:none!important}
   /* MENU */
-  #menu{position:fixed;inset:0;overflow:auto;padding:14px 16px calc(20px + env(safe-area-inset-bottom));
+  #menu{position:fixed;inset:0;overflow:auto;padding:calc(14px + var(--st)) max(16px,calc(50vw - 270px)) calc(20px + var(--sb));
         background:linear-gradient(180deg,#0b0d12ee 0%,#0b0d12aa 45%,#0b0d12f2 100%);z-index:5;touch-action:pan-y}
   .top{display:flex;align-items:center;gap:10px}
   .lvl{width:46px;height:46px;border-radius:14px;background:var(--bg3);display:grid;place-items:center;font-weight:800;font-size:18px;border:2px solid var(--line);position:relative}
@@ -72,25 +73,25 @@
   .vipbar b{color:var(--gold)}
   /* HUD */
   #hud{position:fixed;inset:0;pointer-events:none;z-index:3}
-  .hbar{position:absolute;top:calc(8px + env(safe-area-inset-top));left:8px;right:8px;display:flex;gap:6px;align-items:flex-start}
+  .hbar{position:absolute;top:calc(8px + var(--st));left:8px;right:8px;display:flex;gap:6px;align-items:flex-start}
   .chip{background:#000a;border-radius:12px;padding:6px 10px;font-weight:800;font-size:14px;backdrop-filter:blur(6px)}
   .x{pointer-events:auto;width:36px;height:36px;border-radius:12px;background:#000a;font-size:16px;flex:none}
   #stars{color:#555;letter-spacing:1px}#stars b{color:var(--gold)}
-  #mission{position:absolute;top:calc(52px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:8px 14px;font-weight:700;font-size:14px;text-align:center;white-space:nowrap}
+  #mission{position:absolute;top:calc(52px + var(--st));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:8px 14px;font-weight:700;font-size:14px;text-align:center;white-space:nowrap}
   #mission small{display:block;color:var(--gold);font-size:12px}
   #toast{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%);font-weight:900;font-size:26px;text-align:center;text-shadow:0 3px 12px #000;opacity:0;transition:opacity .25s;white-space:nowrap}
   #toast.on{opacity:1}#toast small{display:block;font-size:14px;font-weight:700}
-  .btns{position:absolute;right:14px;bottom:calc(22px + env(safe-area-inset-bottom));display:flex;gap:14px;align-items:flex-end;pointer-events:auto}
+  .btns{position:absolute;right:14px;bottom:calc(22px + var(--sb));display:flex;gap:14px;align-items:flex-end;pointer-events:auto}
   .btn{width:76px;height:76px;border-radius:50%;font-weight:900;font-size:12px;display:grid;place-items:center;background:#ffffff22;border:2px solid #ffffff55;backdrop-filter:blur(4px);touch-action:none}
   .btn span{font-size:24px;display:block;line-height:1}
   .btn.a{width:88px;height:88px;background:#ff4d2e88;border-color:#ff8a70}
   .btn.on{transform:scale(.92);filter:brightness(1.4)}
   #joy{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid #ffffff44;background:#ffffff11;transform:translate(-50%,-50%);display:none}
   #joy i{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:#ffffff66}
-  .hint{position:absolute;left:16px;bottom:calc(120px + env(safe-area-inset-bottom));max-width:52%;color:#fffa;font-size:12px;font-weight:600;text-shadow:0 1px 4px #000}
+  .hint{position:absolute;left:16px;bottom:calc(120px + var(--sb));max-width:52%;color:#fffa;font-size:12px;font-weight:600;text-shadow:0 1px 4px #000}
   /* SHEET */
   #sheet{position:fixed;inset:0;background:#000a;z-index:10;display:flex;align-items:flex-end}
-  .sh{background:var(--bg2);width:100%;max-height:86%;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));touch-action:pan-y}
+  .sh{background:var(--bg2);width:100%;max-height:86%;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px calc(18px + var(--sb));touch-action:pan-y}
   .sh h3{font-size:20px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
   .sh h3 button{background:var(--bg3);width:32px;height:32px;border-radius:50%;font-size:14px}
   .tabs{display:flex;background:var(--bg);border-radius:12px;padding:3px;margin-bottom:12px}
@@ -117,6 +118,19 @@
   .ups{background:linear-gradient(90deg,#3a2a06,#1f1a0c);border:1px solid #f5c54255;border-radius:14px;padding:10px;font-size:13px;margin-top:8px}
   .ups b{color:var(--gold)}
   #loading{position:fixed;inset:0;display:grid;place-items:center;z-index:20;background:var(--bg);font-weight:800;font-size:20px}
+  /* planshet va kompyuter: kattaroq boshqaruv */
+  @media (min-width:700px) and (min-height:500px){
+    .chip{font-size:17px;padding:8px 13px}.x{width:44px;height:44px;font-size:19px}
+    #mm{width:190px!important;height:190px!important}
+    #h-dist{width:190px;top:calc(256px + var(--st));font-size:13px}
+    .chatb,.radiob{top:calc(62px + var(--st))}.radiob{left:62px}
+    .btn{width:96px;height:96px;font-size:14px}.btn span{font-size:30px}.btn.a{width:112px;height:112px}
+    .btn.e{width:84px;height:84px}.btn.hb{width:68px;height:68px;bottom:calc(150px + var(--sb))}
+    #joy{width:160px;height:160px}#joy i{width:66px;height:66px;margin:-33px}
+    #nitro{width:180px;height:12px;bottom:calc(180px + var(--sb))}
+    #mission{font-size:17px;top:calc(64px + var(--st))}#toast{font-size:34px}
+    .sh{max-width:560px;margin:0 auto;border-radius:22px 22px 0 0}
+  }
 </style>
 </head>
 <body>
@@ -193,6 +207,12 @@
 // ═════════════ ASOS ═════════════
 const tg = window.Telegram && window.Telegram.WebApp;
 try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); tg.setHeaderColor && tg.setHeaderColor('#0b0d12'); } catch (e) {}
+// To'liq ekran: iPad, kompyuter va telefonda Mini App butun ekranni egallaydi (Telegram 8.0+)
+function goFull() {
+  try { if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) {}
+}
+goFull();
+try { tg.onEvent('fullscreenChanged', () => setTimeout(() => dispatchEvent(new Event('resize')), 50)); tg.onEvent('viewportChanged', () => dispatchEvent(new Event('resize'))); } catch (e) {}
 const INIT = (tg && tg.initData) || '';
 const GUEST = !INIT;
 const $ = id => document.getElementById(id);
@@ -331,6 +351,7 @@ function toast(t, s) {
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1700);
 }
 async function startGame() {
+  goFull();
   if (!City3D.ok) return alertMsg('Qurilmangiz 3D grafikani qo\'llab-quvvatlamaydi. Menyuda «Grafika: tezkor» ni tanlab qayta urinib ko\'ring.');
   try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume && AC.resume(); } catch (e) {}
   sid = null;
@@ -339,6 +360,7 @@ async function startGame() {
   input.a = input.b = input.e = false; input.jx = input.jy = input.dragX = input.dragY = 0;
   $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
   $('h-chat').classList.toggle('hide', GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide');
+  $('mission').classList.remove('hide');
   $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide'); $('count').classList.add('hide'); $('raceinv').classList.add('hide');
   City3D.start();
   setTimeout(() => $('h-hint').classList.add('hide'), 7000);
