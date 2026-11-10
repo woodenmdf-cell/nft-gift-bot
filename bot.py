@@ -27,6 +27,10 @@ from config import (DATA_DIR, DB_PATH, ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CAR
                     WEBAPP_URL)
 
 logging.basicConfig(level=logging.INFO)
+if not re.fullmatch(r"\d{5,}:[A-Za-z0-9_-]{30,}", BOT_TOKEN or ""):
+    logging.error("BOT_TOKEN topilmadi yoki noto'g'ri (uzunligi: %s). Railway → Variables → BOT_TOKEN ga "
+                  "@BotFather bergan tokenni qo'ying (masalan 1234567890:AAH...).", len(BOT_TOKEN or ""))
+    raise SystemExit(1)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 WEB = Path(__file__).parent / "webapp"
