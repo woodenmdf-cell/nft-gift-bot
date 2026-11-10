@@ -157,6 +157,7 @@ V.dash = async () => {
   const card = (k,v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
   return head('📊 Boshqaruv')+'</h2><div class="stats">'+
     card('💰 Aylanma (xarid+ijara)', som(s.revenue)) + card('💳 Jami to\'ldirilgan', som(s.topped)) + card('👛 Foydalanuvchi balanslari', som(s.balances))+
+    card('🎮 O\'yinchilar', s.players||0) + card('👑 Faol VIP', s.vip_active||0) + card('👑 VIP daromadi', som(s.game_revenue||0))+
     card('👥 Foydalanuvchilar', s.users) + card('🎁 Bozorda', s.active) + card('✅ Sotilgan', s.sold) + card('🔑 Ijarada', s.rented)+
     card('🔎 Chek tekshiruvi', s.topups_checking) + card('🔗 Ulash kerak', s.to_link) + card('📦 Yuborish kerak', s.to_deliver) + card('📥 Sotish arizalari', s.pending_gifts)+
     '</div>';

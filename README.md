@@ -23,6 +23,22 @@ Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
 - Ijara tugashiga 24 soat qolganda eslatma
 - Muddatdan 12 soat o'tsa — «Muddati o'tgan», adminga xabar
 
+## 🎮 Shahar Arena — o'yin (`/game`, botda `/oyin`)
+Mini App ichidagi bepul o'yin, ikki rejim:
+- 🏙 **Shahar** — mashinada katta shaharni kezish: yetkazib berish, taksi va poyga topshiriqlari,
+  yo'lda tanga yig'ish, avariya qilsangiz politsiya quvadi (⭐ qidiruv darajasi), qo'lga tushsangiz jarima.
+- ⚽ **Futbol** — 4×4 tezkor o'yin (2 daqiqa), sun'iy intellektga qarshi. Joystik + ZARBA / PAS tugmalari.
+
+Tangalarga garajda mashinalar (Taksi, Yo'ltanlamas, Sport kupe) va yaxshilashlar
+(dvigatel, nitro, boshqaruv, futbolchilar tezligi, zarba, darvozabon) sotib olinadi. Kunlik bonus, XP/daraja, reyting bor.
+
+**👑 VIP obuna — ixtiyoriy** (`GAME_VIP_PRICE` so'm / `GAME_VIP_DAYS` kun, bot balansidan to'lanadi):
+×2 tanga, +15% kuch (mashina va futbol jamoasi), oltin superkar, oltin forma, tezroq nitro, kunlik bonus 300 tanga.
+VIP sotib olinganda adminga xabar keladi; admin panelda o'yinchilar soni, faol VIP va VIP daromadi ko'rinadi.
+
+Mukofot vaqti serverda o'lchanadi (`/api/game/start` → `/api/game/reward`), shuning uchun soxta natija bilan
+cheksiz tanga yig'ib bo'lmaydi. Telegram'dan tashqarida ochilsa — mehmon rejimi (natija saqlanmaydi).
+
 ## Balans
 Foydalanuvchi Mini App → Profil → «Balansni to'ldirish» → summa → bot karta raqamini yuboradi →
 chek rasmini botga jo'natadi → admin tasdiqlaydi → balans + cashback (`CASHBACK`, standart 2%).

@@ -19,10 +19,12 @@ from aiogram.types import (BotCommand, CallbackQuery, FSInputFile, InlineKeyboar
                            MenuButtonWebApp, Message, WebAppInfo)
 
 import db
+import game
 import pricing
 import services as S
 from config import (DATA_DIR, DB_PATH, ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CARD_NUMBER, CARD_OWNER, CASHBACK,
-                    COMMISSION, HOST, MIN_TOPUP, PORT, SHOP_ACCOUNT, WEBAPP_URL)
+                    COMMISSION, GAME_VIP_DAYS, GAME_VIP_PRICE, HOST, MIN_TOPUP, PORT, SHOP_ACCOUNT,
+                    WEBAPP_URL)
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -38,8 +40,16 @@ def is_admin(uid):
 def webapp_kb():
     if not WEBAPP_URL.startswith("https://"):
         return None
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 Bozorni ochish", web_app=WebAppInfo(url=WEBAPP_URL))],
+        [InlineKeyboardButton(text="🎮 Shahar Arena o'yini", web_app=WebAppInfo(url=WEBAPP_URL + "/game"))]])
+
+
+def game_kb():
+    if not WEBAPP_URL.startswith("https://"):
+        return None
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="🎁 Bozorni ochish", web_app=WebAppInfo(url=WEBAPP_URL))]])
+        InlineKeyboardButton(text="🎮 O'ynash", web_app=WebAppInfo(url=WEBAPP_URL + "/game"))]])
 
 
 # ═══════════════════════ BOT ═══════════════════════
@@ -63,6 +73,20 @@ async def start(m: Message):
 @dp.message(Command("qollanma", "guide"))
 async def guide_cmd(m: Message):
     await S.send_guide(m.bot, m.chat.id)
+
+
+@dp.message(Command("oyin", "game"))
+async def game_cmd(m: Message):
+    db.upsert_user(m.from_user.id, m.from_user.username, m.from_user.full_name)
+    await m.answer(
+        "🎮 <b>Shahar Arena</b>\n\n"
+        "🏙 <b>Shahar</b> — mashinada katta shaharni kezing, topshiriqlar bajaring, "
+        "politsiyadan qoching, tanga yig'ing\n"
+        "⚽ <b>Futbol</b> — 4×4 tezkor o'yin, gol urib g'alaba qozoning\n"
+        "🛠 Tangalarga mashina va yaxshilashlar sotib oling\n\n"
+        "O'yin <b>bepul</b>. 👑 <b>VIP</b> obuna (ixtiyoriy, "
+        f"{som(GAME_VIP_PRICE)} / {GAME_VIP_DAYS} kun): ×2 tanga, +15% kuch, oltin superkar, "
+        "oltin forma va katta kunlik bonus.", reply_markup=game_kb())
 
 
 @dp.message(Command("balans", "balance"))
@@ -303,6 +327,18 @@ async def api_top(request):
 
 async def index(request):
     return web.FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+async def game_page(request):
+    return web.FileResponse(WEB / "game.html", headers={"Cache-Control": "no-cache"})
+
+
+async def on_vip(user, until):
+    await S.notify_admins(bot, f"👑 <b>Yangi VIP obuna</b> (Shahar Arena)\n"
+                               f"👤 @{user.get('username') or '-'} <code>{user['id']}</code>\n"
+                               f"💰 {som(GAME_VIP_PRICE)} · {time.strftime('%d.%m.%Y', time.localtime(until))} gacha")
+    await S.send(bot, user["id"], f"👑 VIP faollashtirildi! {time.strftime('%d.%m.%Y', time.localtime(until))} gacha "
+                                  f"×2 tanga, +15% kuch va oltin superkar sizniki. Omad! 🎮")
 
 
 # ═══════════════════════ ADMIN SAYT ═══════════════════════
@@ -646,6 +682,8 @@ def make_app():
     r = app.router
     r.add_get("/", index)
     r.add_get("/health", health)
+    r.add_get("/game", game_page)
+    game.setup(r, auth, ok, err, on_vip)
     r.add_get("/api/config", api_config)
     r.add_get("/api/gifts", api_gifts)
     r.add_get("/api/top", api_top)
@@ -694,6 +732,7 @@ async def main():
             menu_button=MenuButtonWebApp(text="🎁 Bozor", web_app=WebAppInfo(url=WEBAPP_URL)))
     try:
         await bot.set_my_commands([BotCommand(command="start", description="Bozorni ochish"),
+                                   BotCommand(command="oyin", description="🎮 Shahar Arena o'yini"),
                                    BotCommand(command="balans", description="Balansim"),
                                    BotCommand(command="qollanma", description="Ijara bo'yicha video qo'llanma")])
     except Exception as e:

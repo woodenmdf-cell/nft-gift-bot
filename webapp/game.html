@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Shahar Arena</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{--bg:#0b0d12;--bg2:#161a22;--bg3:#202633;--line:#2a3140;--text:#f4f5f7;--hint:#8d95a5;
+        --acc:#ff4d2e;--gold:#f5c542;--ok:#34c759;--blue:#3b82f6}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,Roboto,sans-serif;font-size:15px;touch-action:none}
+  button{font:inherit;cursor:pointer;border:0;color:inherit}
+  canvas{position:fixed;inset:0;display:block}
+  .hide{display:none!important}
+  /* MENU */
+  #menu{position:fixed;inset:0;overflow:auto;padding:14px 16px calc(20px + env(safe-area-inset-bottom));
+        background:linear-gradient(180deg,#0b0d12ee 0%,#0b0d12aa 45%,#0b0d12f2 100%);z-index:5;touch-action:pan-y}
+  .top{display:flex;align-items:center;gap:10px}
+  .lvl{width:46px;height:46px;border-radius:14px;background:var(--bg3);display:grid;place-items:center;font-weight:800;font-size:18px;border:2px solid var(--line);position:relative}
+  .lvl.vip{border-color:var(--gold);color:var(--gold)}
+  .who{flex:1;min-width:0}.who b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .xpbar{height:6px;background:var(--bg3);border-radius:4px;margin-top:5px;overflow:hidden}.xpbar i{display:block;height:100%;background:var(--blue);border-radius:4px}
+  .who small{color:var(--hint);font-size:11px}
+  .coins{background:var(--bg2);border:1px solid var(--line);border-radius:20px;padding:7px 12px;font-weight:800;display:flex;gap:5px;align-items:center}
+  .logo{text-align:center;margin:26px 0 6px;font-size:34px;font-weight:900;letter-spacing:-1px;line-height:1}
+  .logo span{color:var(--acc)}
+  .sub{text-align:center;color:var(--hint);font-size:13px;margin-bottom:18px}
+  .modes{display:grid;gap:12px}
+  .mode{border-radius:20px;padding:18px;text-align:left;position:relative;overflow:hidden;min-height:118px;display:flex;flex-direction:column;justify-content:flex-end}
+  .mode b{font-size:22px;font-weight:900;position:relative}.mode p{font-size:13px;opacity:.85;margin-top:3px;position:relative;max-width:75%}
+  .mode .ico{position:absolute;right:12px;top:8px;font-size:64px;opacity:.9}
+  .m-city{background:linear-gradient(135deg,#ff5a36,#c2185b)}
+  .m-fb{background:linear-gradient(135deg,#1f9d55,#0d5c63)}
+  .mode:active{transform:scale(.98)}
+  .row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .tile{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600}
+  .tile span{font-size:24px}
+  .tile.vipt{border-color:#f5c54266;background:linear-gradient(180deg,#2b2412,#161a22)}
+  .daily{margin-top:12px;width:100%;border-radius:16px;padding:13px;font-weight:800;background:var(--bg2);border:1px dashed var(--gold);color:var(--gold)}
+  .daily:disabled{opacity:.55;border-color:var(--line);color:var(--hint)}
+  .warn{background:#2a1e10;border:1px solid #4a3416;color:#f5b041;border-radius:12px;padding:10px 12px;font-size:12px;margin-top:12px;text-align:center}
+  .vipbar{margin-top:12px;border-radius:16px;padding:12px 14px;background:linear-gradient(90deg,#3a2a06,#1f1a0c);border:1px solid #f5c54255;display:flex;align-items:center;gap:10px;font-size:13px}
+  .vipbar b{color:var(--gold)}
+  /* HUD */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:3}
+  .hbar{position:absolute;top:calc(8px + env(safe-area-inset-top));left:8px;right:8px;display:flex;gap:6px;align-items:flex-start}
+  .chip{background:#000a;border-radius:12px;padding:6px 10px;font-weight:800;font-size:14px;backdrop-filter:blur(6px)}
+  .x{pointer-events:auto;width:36px;height:36px;border-radius:12px;background:#000a;font-size:16px;flex:none}
+  #stars{color:#555;letter-spacing:1px}#stars b{color:var(--gold)}
+  #mission{position:absolute;top:calc(52px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:8px 14px;font-weight:700;font-size:14px;text-align:center;white-space:nowrap}
+  #mission small{display:block;color:var(--gold);font-size:12px}
+  #score{position:absolute;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:6px 12px;font-weight:900;font-size:16px;display:flex;gap:8px;align-items:center;white-space:nowrap}
+  #score small{color:var(--hint);font-size:12px;font-weight:700}
+  #toast{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%);font-weight:900;font-size:26px;text-align:center;text-shadow:0 3px 12px #000;opacity:0;transition:opacity .25s;white-space:nowrap}
+  #toast.on{opacity:1}#toast small{display:block;font-size:14px;font-weight:700}
+  .btns{position:absolute;right:14px;bottom:calc(22px + env(safe-area-inset-bottom));display:flex;gap:14px;align-items:flex-end;pointer-events:auto}
+  .btn{width:76px;height:76px;border-radius:50%;font-weight:900;font-size:12px;display:grid;place-items:center;background:#ffffff22;border:2px solid #ffffff55;backdrop-filter:blur(4px);touch-action:none}
+  .btn span{font-size:24px;display:block;line-height:1}
+  .btn.a{width:88px;height:88px;background:#ff4d2e88;border-color:#ff8a70}
+  .btn.on{transform:scale(.92);filter:brightness(1.4)}
+  #joy{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid #ffffff44;background:#ffffff11;transform:translate(-50%,-50%);display:none}
+  #joy i{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:#ffffff66}
+  .hint{position:absolute;left:16px;bottom:calc(120px + env(safe-area-inset-bottom));max-width:52%;color:#fffa;font-size:12px;font-weight:600;text-shadow:0 1px 4px #000}
+  /* SHEET */
+  #sheet{position:fixed;inset:0;background:#000a;z-index:10;display:flex;align-items:flex-end}
+  .sh{background:var(--bg2);width:100%;max-height:86%;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));touch-action:pan-y}
+  .sh h3{font-size:20px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .sh h3 button{background:var(--bg3);width:32px;height:32px;border-radius:50%;font-size:14px}
+  .tabs{display:flex;background:var(--bg);border-radius:12px;padding:3px;margin-bottom:12px}
+  .tabs button{flex:1;padding:9px;border-radius:9px;background:none;color:var(--hint);font-weight:700}
+  .tabs button.on{background:var(--text);color:#000}
+  .it{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:11px 12px;margin-bottom:8px}
+  .it .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:24px;background:var(--bg3);flex:none}
+  .it .tx{flex:1;min-width:0}.it .tx b{display:block}.it .tx small{color:var(--hint);font-size:12px}
+  .dots{display:flex;gap:3px;margin-top:5px}.dots i{width:16px;height:5px;border-radius:3px;background:var(--bg3)}.dots i.f{background:var(--blue)}
+  .buy{background:var(--acc);border-radius:11px;padding:8px 12px;font-weight:800;font-size:13px;white-space:nowrap}
+  .buy.g{background:var(--bg3);color:var(--hint)}.buy.ok{background:var(--ok)}.buy.gold{background:var(--gold);color:#000}
+  .big{width:100%;border-radius:15px;padding:15px;font-weight:900;font-size:16px;background:var(--gold);color:#000;margin-top:10px}
+  .big.s{background:var(--bg3);color:var(--text);font-weight:700}
+  .perk{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}.perk span{font-size:22px;width:30px;text-align:center}
+  .price{text-align:center;margin:14px 0 2px;font-size:30px;font-weight:900}.price small{font-size:14px;color:var(--hint);font-weight:600}
+  .lb{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+  .lb .n{width:26px;text-align:center;font-weight:800;color:var(--hint)}.lb .nm{flex:1;font-weight:600}.lb .v{font-weight:800}
+  /* RESULT */
+  #result{position:fixed;inset:0;z-index:8;background:#000c;display:grid;place-items:center;padding:20px}
+  .res{background:var(--bg2);border-radius:24px;padding:22px 18px;width:100%;max-width:380px;text-align:center}
+  .res h2{font-size:28px;font-weight:900}.res .st{color:var(--hint);margin:6px 0 14px}
+  .gain{display:flex;justify-content:center;gap:12px;margin:10px 0}
+  .gain div{background:var(--bg);border-radius:14px;padding:10px 14px;min-width:96px}.gain b{display:block;font-size:22px}.gain small{color:var(--hint);font-size:12px}
+  .ups{background:linear-gradient(90deg,#3a2a06,#1f1a0c);border:1px solid #f5c54255;border-radius:14px;padding:10px;font-size:13px;margin-top:8px}
+  .ups b{color:var(--gold)}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;z-index:20;background:var(--bg);font-weight:800;font-size:20px}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="menu">
+  <div class="top">
+    <div class="lvl" id="m-lvl">1</div>
+    <div class="who"><b id="m-name">O'yinchi</b><div class="xpbar"><i id="m-xp" style="width:0"></i></div><small id="m-xpt"></small></div>
+    <div class="coins">🪙 <span id="m-coins">0</span></div>
+  </div>
+  <div class="logo">SHAHAR <span>ARENA</span></div>
+  <div class="sub">Shaharni kez · Gol ur · Reytingda birinchi bo'l</div>
+  <div class="modes">
+    <button class="mode m-city" onclick="startGame('city')"><div class="ico">🏙</div><b>SHAHAR</b><p>Mashinada katta shahar, topshiriqlar, poyga va politsiyadan qochish</p></button>
+    <button class="mode m-fb" onclick="startGame('football')"><div class="ico">⚽</div><b>FUTBOL</b><p>4×4 tezkor o'yin, 2 daqiqa. Gol ur — g'alaba qozon!</p></button>
+  </div>
+  <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
+  <div class="row">
+    <button class="tile" onclick="openGarage()"><span>🛠</span>Garaj</button>
+    <button class="tile vipt" onclick="openVip()"><span>👑</span>VIP</button>
+    <button class="tile" onclick="openTop()"><span>🏆</span>Reyting</button>
+  </div>
+  <div class="vipbar" id="m-vipbar" onclick="openVip()"></div>
+  <div class="warn hide" id="m-guest">Mehmon rejimi: natijalar saqlanmaydi. Tanga yig'ish uchun o'yinni Telegram botdan oching.</div>
+  <div class="row" style="grid-template-columns:1fr 1fr">
+    <button class="tile" id="m-sound" onclick="toggleSound()"><span>🔊</span>Ovoz</button>
+    <button class="tile" onclick="location.href='/'"><span>🎁</span>NFT Bozor</button>
+  </div>
+</div>
+
+<div id="hud" class="hide">
+  <div class="hbar">
+    <button class="x" onclick="askExit()">✕</button>
+    <div class="chip">🪙 <span id="h-coins">0</span></div>
+    <div class="chip" id="stars"></div>
+    <div style="flex:1"></div>
+    <div class="chip" id="h-speed"></div>
+  </div>
+  <div id="mission" class="hide"></div>
+  <div id="score" class="hide"></div>
+  <div id="toast"></div>
+  <div id="joy"><i></i></div>
+  <div class="hint" id="h-hint">Chap tomonni bosib suring</div>
+  <div class="btns">
+    <button class="btn" id="bB"><div><span>🛑</span><em id="lB">TORMOZ</em></div></button>
+    <button class="btn a" id="bA"><div><span>🔥</span><em id="lA">NITRO</em></div></button>
+  </div>
+</div>
+
+<div id="result" class="hide"><div class="res" id="res"></div></div>
+<div id="sheet" class="hide" onclick="if(event.target===this)closeSheet()"><div class="sh" id="sh"></div></div>
+<div id="loading">Yuklanmoqda…</div>
+
+<script>
+'use strict';
+// ═════════════ ASOS ═════════════
+const tg = window.Telegram && window.Telegram.WebApp;
+try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); tg.setHeaderColor && tg.setHeaderColor('#0b0d12'); } catch (e) {}
+const INIT = (tg && tg.initData) || '';
+const GUEST = !INIT;
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function haptic(t) { try { tg.HapticFeedback.impactOccurred(t || 'light'); } catch (e) {} }
+
+async function api(path, body) {
+  try {
+    const r = await fetch('/api/game/' + path, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({}, body || {}, {initData: INIT}))});
+    return await r.json();
+  } catch (e) { return {ok: false, error: 'Aloqa xatosi'}; }
+}
+function alertMsg(t) { try { tg.showAlert(t); } catch (e) { alert(t); } }
+function confirmMsg(t) { return new Promise(res => { try { tg.showConfirm(t, res); } catch (e) { res(confirm(t)); } }); }
+
+let P = {coins: 0, xp: 0, level: 1, next_xp: 100, games: 0, wins: 0, vip: false, vip_until: 0, daily_in: 0,
+         up: {}, cars: ['sedan'], car: 'sedan', balance: 0};
+let SHOP = null;
+
+// ovoz
+let AC = null, SOUND = true;
+try { SOUND = localStorage.getItem('sa_sound') !== '0'; } catch (e) {}
+function sfx(f, d, type, vol) {
+  if (!SOUND) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || 'square'; o.frequency.value = f; g.gain.value = vol || 0.04;
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + (d || 0.08));
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + (d || 0.08));
+  } catch (e) {}
+}
+function toggleSound() { SOUND = !SOUND; try { localStorage.setItem('sa_sound', SOUND ? '1' : '0'); } catch (e) {} renderMenu(); }
+
+// canvas
+const cv = $('cv'), ctx = cv.getContext('2d');
+if (!ctx.roundRect) ctx.roundRect = function (x, y, w, h, r) {
+  this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+  this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath();
+};
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+}
+addEventListener('resize', resize); resize();
+
+// ═════════════ BOSHQARUV ═════════════
+const input = {jx: 0, jy: 0, a: false, b: false, aHit: false, bHit: false};
+const keys = {};
+let joyId = null, jx0 = 0, jy0 = 0;
+const JR = 55;
+function joyShow(x, y) { const j = $('joy'); j.style.display = 'block'; j.style.left = x + 'px'; j.style.top = y + 'px'; $('h-hint').classList.add('hide'); }
+function joyKnob(dx, dy) { $('joy').firstElementChild.style.transform = `translate(${dx}px,${dy}px)`; }
+cv.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) if (joyId === null && t.clientX < W * 0.62) {
+    joyId = t.identifier; jx0 = t.clientX; jy0 = t.clientY; joyShow(jx0, jy0); joyKnob(0, 0);
+  }
+  e.preventDefault();
+}, {passive: false});
+cv.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) if (t.identifier === joyId) {
+    let dx = t.clientX - jx0, dy = t.clientY - jy0; const l = Math.hypot(dx, dy);
+    if (l > JR) { dx *= JR / l; dy *= JR / l; }
+    input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy);
+  }
+  e.preventDefault();
+}, {passive: false});
+const joyEnd = e => { for (const t of e.changedTouches) if (t.identifier === joyId) { joyId = null; input.jx = input.jy = 0; $('joy').style.display = 'none'; } };
+cv.addEventListener('touchend', joyEnd); cv.addEventListener('touchcancel', joyEnd);
+// sichqoncha (kompyuter)
+let mouseDown = false;
+cv.addEventListener('mousedown', e => { mouseDown = true; jx0 = e.clientX; jy0 = e.clientY; joyShow(jx0, jy0); });
+addEventListener('mousemove', e => { if (!mouseDown) return; let dx = e.clientX - jx0, dy = e.clientY - jy0; const l = Math.hypot(dx, dy); if (l > JR) { dx *= JR / l; dy *= JR / l; } input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy); });
+addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; input.jx = input.jy = 0; $('joy').style.display = 'none'; } });
+
+function bindBtn(el, k) {
+  const on = e => { e.preventDefault(); if (!input[k]) input[k + 'Hit'] = true; input[k] = true; el.classList.add('on'); };
+  const off = e => { e.preventDefault(); input[k] = false; el.classList.remove('on'); };
+  el.addEventListener('touchstart', on, {passive: false}); el.addEventListener('touchend', off); el.addEventListener('touchcancel', off);
+  el.addEventListener('mousedown', on); el.addEventListener('mouseup', off); el.addEventListener('mouseleave', off);
+}
+bindBtn($('bA'), 'a'); bindBtn($('bB'), 'b');
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' || e.code === 'KeyJ') { if (!input.a) input.aHit = true; input.a = true; }
+  if (e.code === 'ShiftLeft' || e.code === 'KeyK') { if (!input.b) input.bHit = true; input.b = true; }
+  if (e.code === 'Escape' && mode !== 'menu') askExit();
+});
+addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Space' || e.code === 'KeyJ') input.a = false;
+  if (e.code === 'ShiftLeft' || e.code === 'KeyK') input.b = false;
+});
+function getMove() {
+  let x = input.jx, y = input.jy;
+  const kx = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
+  const ky = (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW ? 1 : 0);
+  if (kx || ky) { const l = Math.hypot(kx, ky); x = kx / l; y = ky / l; }
+  const mag = Math.min(1, Math.hypot(x, y));
+  return {x, y, mag};
+}
+
+// ═════════════ SHAHAR (dunyo) ═════════════
+const B = 360, R = 120, N = 9, CELL = B + R, WORLD = N * CELL + R;
+const roadC = i => i * CELL + R / 2;
+let seed = 20261110;
+const srnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const ROOFS = ['#5b6b8c', '#8c6b5b', '#6b8c7a', '#9a8f7d', '#7d6f9a', '#a4746b', '#5f7f99', '#8a8f99', '#b08d57', '#6e7b8b'];
+const blocks = [];
+for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+  const x = i * CELL + R, y = j * CELL + R, r = srnd();
+  const b = {x, y, type: r < 0.14 ? 'park' : r < 0.2 ? 'plaza' : 'build', solids: [], trees: []};
+  if (b.type === 'build') {
+    const m = 18, g = 16, S = B - 2 * m, split = Math.floor(srnd() * 4);
+    const rects = split === 0 ? [[0, 0, S, S]] : split === 1 ? [[0, 0, S, (S - g) / 2], [0, (S + g) / 2, S, (S - g) / 2]]
+      : split === 2 ? [[0, 0, (S - g) / 2, S], [(S + g) / 2, 0, (S - g) / 2, S]]
+      : [[0, 0, (S - g) / 2, (S - g) / 2], [(S + g) / 2, 0, (S - g) / 2, (S - g) / 2], [0, (S + g) / 2, (S - g) / 2, (S - g) / 2], [(S + g) / 2, (S + g) / 2, (S - g) / 2, (S - g) / 2]];
+    for (const q of rects) b.solids.push({x: x + m + q[0], y: y + m + q[1], w: q[2], h: q[3], c: ROOFS[Math.floor(srnd() * ROOFS.length)], hgt: 8 + srnd() * 14});
+  } else if (b.type === 'park') {
+    for (let k = 0; k < 7; k++) b.trees.push({x: x + 50 + srnd() * (B - 100), y: y + 50 + srnd() * (B - 100), r: 14 + srnd() * 10});
+  } else {
+    b.trees.push({x: x + B / 2, y: y + B / 2, r: 46, fountain: true});
+  }
+  blocks.push(b);
+}
+function blockIdx(x, y) { return [Math.floor((x - R) / CELL), Math.floor((y - R) / CELL)]; }
+function blockAt(x, y) {
+  const [i, j] = blockIdx(x, y);
+  if (i < 0 || j < 0 || i >= N || j >= N) return null;
+  const b = blocks[j * N + i];
+  return (x >= b.x && x <= b.x + B && y >= b.y && y <= b.y + B) ? b : null;
+}
+function onGrass(x, y) { const b = blockAt(x, y); return b && b.type === 'park'; }
+function collideWorld(e, r) {
+  let hit = null;
+  const [bi, bj] = blockIdx(e.x, e.y);
+  for (let j = bj - 1; j <= bj + 1; j++) for (let i = bi - 1; i <= bi + 1; i++) {
+    if (i < 0 || j < 0 || i >= N || j >= N) continue;
+    const b = blocks[j * N + i];
+    for (const s of b.solids) {
+      const cx = clamp(e.x, s.x, s.x + s.w), cy = clamp(e.y, s.y, s.y + s.h);
+      let dx = e.x - cx, dy = e.y - cy; const d2 = dx * dx + dy * dy;
+      if (d2 < r * r) {
+        if (d2 < 1e-6) { // markaz ichida — eng yaqin tomonga chiqarish
+          const opts = [[e.x - s.x, -1, 0], [s.x + s.w - e.x, 1, 0], [e.y - s.y, 0, -1], [s.y + s.h - e.y, 0, 1]].sort((p, q) => p[0] - q[0])[0];
+          e.x += opts[1] * (opts[0] + r); e.y += opts[2] * (opts[0] + r); hit = {nx: opts[1], ny: opts[2]};
+        } else {
+          const d = Math.sqrt(d2); dx /= d; dy /= d; e.x += dx * (r - d); e.y += dy * (r - d); hit = {nx: dx, ny: dy};
+        }
+      }
+    }
+    for (const t of b.trees) {
+      let dx = e.x - t.x, dy = e.y - t.y; const d = Math.hypot(dx, dy) || 1, rr = r + t.r * (t.fountain ? 1 : 0.55);
+      if (d < rr) { dx /= d; dy /= d; e.x = t.x + dx * rr; e.y = t.y + dy * rr; hit = {nx: dx, ny: dy}; }
+    }
+  }
+  if (e.x < r) { e.x = r; hit = {nx: 1, ny: 0}; } if (e.x > WORLD - r) { e.x = WORLD - r; hit = {nx: -1, ny: 0}; }
+  if (e.y < r) { e.y = r; hit = {nx: 0, ny: 1}; } if (e.y > WORLD - r) { e.y = WORLD - r; hit = {nx: 0, ny: -1}; }
+  return hit;
+}
+function roadPoint() {
+  const k = Math.floor(Math.random() * (N + 1)), along = rnd(80, WORLD - 80), off = rnd(-R / 3, R / 3);
+  return Math.random() < 0.5 ? {x: along, y: roadC(k) + off} : {x: roadC(k) + off, y: along};
+}
+function farPoint(from, mn, mx) {
+  let best = null;
+  for (let i = 0; i < 60; i++) { const p = roadPoint(), d = dist(p, from); if (d >= mn && d <= mx) return p; if (!best || Math.abs(d - mn) < Math.abs(dist(best, from) - mn)) best = p; }
+  return best;
+}
+
+// transport oqimi
+const TCOL = ['#e6e6e6', '#2b2b2b', '#c0392b', '#2471a3', '#7f8c8d', '#16a085', '#8e44ad', '#d35400', '#f1c40f', '#5d6d7e'];
+const traffic = [];
+function trafficPos(c) {
+  if (c.axis === 'h') { c.x = c.along; c.y = roadC(c.k) + c.dir * R / 4; c.ang = c.dir > 0 ? 0 : Math.PI; }
+  else { c.y = c.along; c.x = roadC(c.k) - c.dir * R / 4; c.ang = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
+}
+for (let i = 0; i < 46; i++) {
+  const c = {axis: Math.random() < 0.5 ? 'h' : 'v', k: Math.floor(Math.random() * (N + 1)), dir: Math.random() < 0.5 ? 1 : -1,
+    along: rnd(50, WORLD - 50), sp: rnd(95, 150), v: 0, color: TCOL[i % TCOL.length], stun: 0, lastNode: -1};
+  trafficPos(c); traffic.push(c);
+}
+function updateTraffic(dt, player) {
+  for (const c of traffic) {
+    if (c.stun > 0) { c.stun -= dt; c.v *= 0.9; }
+    let want = c.stun > 0 ? 0 : c.sp;
+    const hx = Math.cos(c.ang), hy = Math.sin(c.ang);
+    const ahead = o => { const dx = o.x - c.x, dy = o.y - c.y, f = dx * hx + dy * hy, l = Math.abs(-dx * hy + dy * hx); return f > 0 && f < 75 && l < 24; };
+    if (player && ahead(player)) want = 0;
+    else for (const o of traffic) if (o !== c && ahead(o)) { want = Math.min(want, o.v * 0.8); break; }
+    c.v += clamp(want - c.v, -300 * dt, 160 * dt);
+    const prev = c.along; c.along += c.dir * c.v * dt;
+    // chorrahada burilish
+    const lo = Math.min(prev, c.along), hi = Math.max(prev, c.along);
+    const m = Math.round((c.along - R / 2) / CELL), node = roadC(m);
+    if (m >= 0 && m <= N && node >= lo && node <= hi && m !== c.lastNode) {
+      c.lastNode = m;
+      if (Math.random() < 0.3) {
+        const cross = c.axis === 'h' ? c.y : c.x;
+        c.axis = c.axis === 'h' ? 'v' : 'h'; c.k = m; c.along = cross; c.dir = Math.random() < 0.5 ? 1 : -1;
+        c.lastNode = Math.round((c.along - R / 2) / CELL);
+      }
+    }
+    if (c.along < 30 || c.along > WORLD - 30) { c.dir *= -1; c.along = clamp(c.along, 30, WORLD - 30); }
+    trafficPos(c);
+  }
+}
+
+// ═════════════ RENDER (shahar) ═════════════
+const mini = document.createElement('canvas'); mini.width = mini.height = 240;
+(() => {
+  const m = mini.getContext('2d'), s = 240 / WORLD;
+  m.fillStyle = '#1b2230'; m.fillRect(0, 0, 240, 240);
+  for (const b of blocks) { m.fillStyle = b.type === 'park' ? '#2f6b3a' : b.type === 'plaza' ? '#5c5444' : '#2c3445'; m.fillRect(b.x * s, b.y * s, B * s, B * s); }
+})();
+function drawCar(x, y, ang, color, w, h, opt) {
+  opt = opt || {};
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.roundRect(-w / 2 + 3, -h / 2 + 4, w, h, 6); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 6); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(-w / 2 + 3, -h / 2 + 2, w - 6, 3);
+  ctx.fillStyle = '#1d2733'; ctx.beginPath(); ctx.roundRect(w * 0.05, -h / 2 + 3, w * 0.22, h - 6, 3); ctx.fill();
+  ctx.fillStyle = '#26323f'; ctx.beginPath(); ctx.roundRect(-w * 0.38, -h / 2 + 3, w * 0.16, h - 6, 3); ctx.fill();
+  ctx.fillStyle = opt.light || '#fff6c2'; ctx.fillRect(w / 2 - 3, -h / 2 + 2, 3, 4); ctx.fillRect(w / 2 - 3, h / 2 - 6, 3, 4);
+  ctx.fillStyle = '#ff3b30'; ctx.fillRect(-w / 2, -h / 2 + 2, 2, 4); ctx.fillRect(-w / 2, h / 2 - 6, 2, 4);
+  if (opt.taxi) { ctx.fillStyle = '#222'; ctx.fillRect(-4, -4, 8, 8); ctx.fillStyle = '#fff'; ctx.font = 'bold 7px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('T', 0, 3); }
+  if (opt.police) { const t = performance.now() / 120 | 0; ctx.fillStyle = t % 2 ? '#ff2d2d' : '#2d6bff'; ctx.fillRect(-5, -h / 2 + 2, 5, h - 4); ctx.fillStyle = t % 2 ? '#2d6bff' : '#ff2d2d'; ctx.fillRect(0, -h / 2 + 2, 5, h - 4); }
+  if (opt.stripe) { ctx.fillStyle = opt.stripe; ctx.fillRect(-w / 2, -2, w, 4); }
+  ctx.restore();
+}
+function drawCity(cx, cy, z) {
+  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cx * z), DPR * (H / 2 - cy * z));
+  const vw = W / z / 2 + 60, vh = H / z / 2 + 60, x0 = cx - vw, x1 = cx + vw, y0 = cy - vh, y1 = cy + vh;
+  ctx.fillStyle = '#3a3f49'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.fillStyle = '#20262f'; // dunyo tashqarisi
+  if (x0 < 0) ctx.fillRect(x0, y0, -x0, y1 - y0); if (x1 > WORLD) ctx.fillRect(WORLD, y0, x1 - WORLD, y1 - y0);
+  if (y0 < 0) ctx.fillRect(x0, y0, x1 - x0, -y0); if (y1 > WORLD) ctx.fillRect(x0, WORLD, x1 - x0, y1 - WORLD);
+  // yo'l chiziqlari
+  ctx.strokeStyle = '#e8c547'; ctx.lineWidth = 3; ctx.setLineDash([28, 24]); ctx.beginPath();
+  for (let k = 0; k <= N; k++) {
+    const c = roadC(k);
+    if (c > y0 && c < y1) { ctx.moveTo(Math.max(0, x0), c); ctx.lineTo(Math.min(WORLD, x1), c); }
+    if (c > x0 && c < x1) { ctx.moveTo(c, Math.max(0, y0)); ctx.lineTo(c, Math.min(WORLD, y1)); }
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+  const shadows = [], roofs = [];
+  for (const b of blocks) {
+    if (b.x > x1 || b.x + B < x0 || b.y > y1 || b.y + B < y0) continue;
+    ctx.fillStyle = '#9a9ca3'; ctx.beginPath(); ctx.roundRect(b.x - 4, b.y - 4, B + 8, B + 8, 14); ctx.fill();
+    if (b.type === 'park') {
+      ctx.fillStyle = '#3f8f4a'; ctx.beginPath(); ctx.roundRect(b.x + 8, b.y + 8, B - 16, B - 16, 10); ctx.fill();
+      ctx.strokeStyle = '#c9b38a'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(b.x + 8, b.y + B / 2); ctx.quadraticCurveTo(b.x + B / 2, b.y + B * 0.2, b.x + B - 8, b.y + B / 2); ctx.stroke();
+    } else if (b.type === 'plaza') {
+      ctx.fillStyle = '#c8b892'; ctx.fillRect(b.x + 8, b.y + 8, B - 16, B - 16);
+      ctx.strokeStyle = '#b3a27b'; ctx.lineWidth = 2; for (let q = 40; q < B; q += 40) { ctx.beginPath(); ctx.moveTo(b.x + q, b.y + 8); ctx.lineTo(b.x + q, b.y + B - 8); ctx.moveTo(b.x + 8, b.y + q); ctx.lineTo(b.x + B - 8, b.y + q); ctx.stroke(); }
+    } else {
+      ctx.fillStyle = '#6d717a'; ctx.fillRect(b.x + 10, b.y + 10, B - 20, B - 20);
+    }
+    for (const s of b.solids) { shadows.push(s); roofs.push(s); }
+    for (const t of b.trees) roofs.push(t);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  for (const s of shadows) ctx.fillRect(s.x + s.hgt, s.y + s.hgt, s.w, s.h);
+  return roofs;
+}
+function drawRoofs(roofs) {
+  const t = performance.now() / 1000;
+  for (const s of roofs) {
+    if (s.r) {
+      if (s.fountain) {
+        ctx.fillStyle = '#8f8a7c'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+        ctx.fillStyle = '#4fb3e8'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 7, 0, 7); ctx.fill();
+        ctx.fillStyle = '#d6f1ff'; ctx.beginPath(); ctx.arc(s.x, s.y, 8 + Math.sin(t * 4) * 2, 0, 7); ctx.fill();
+      } else {
+        ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(s.x + 6, s.y + 7, s.r, 0, 7); ctx.fill();
+        ctx.fillStyle = '#2e6b34'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+        ctx.fillStyle = '#3f8a45'; ctx.beginPath(); ctx.arc(s.x - s.r * 0.25, s.y - s.r * 0.25, s.r * 0.6, 0, 7); ctx.fill();
+      }
+      continue;
+    }
+    ctx.fillStyle = s.c; ctx.fillRect(s.x, s.y, s.w, s.h);
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(s.x, s.y, s.w, 5); ctx.fillRect(s.x, s.y, 5, s.h);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(s.x + s.w - 5, s.y, 5, s.h); ctx.fillRect(s.x, s.y + s.h - 5, s.w, 5);
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(s.x + s.w * 0.15, s.y + s.h * 0.2, Math.min(28, s.w * 0.2), Math.min(22, s.h * 0.2));
+  }
+}
+
+// ═════════════ SHAHAR (o'yin) ═════════════
+const CAR_STATS = {
+  sedan: {max: 250, acc: 230, turn: 2.7, color: '#4a90e2', w: 36, h: 19, ico: '🚗'},
+  taxi:  {max: 272, acc: 260, turn: 2.9, color: '#f5c518', w: 36, h: 19, ico: '🚕', taxi: true},
+  suv:   {max: 265, acc: 245, turn: 2.5, color: '#2e7d4f', w: 41, h: 23, ico: '🚙', heavy: true},
+  sport: {max: 325, acc: 335, turn: 3.1, color: '#e53935', w: 38, h: 18, ico: '🏎', stripe: '#fff'},
+  super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', w: 40, h: 19, ico: '👑', stripe: '#1a1a1a'},
+};
+function carStats() {
+  const s = Object.assign({}, CAR_STATS[P.car] || CAR_STATS.sedan), u = P.up || {}, vb = P.vip ? 1.15 : 1;
+  s.max *= (1 + 0.06 * (u.engine || 0)) * vb; s.acc *= (1 + 0.06 * (u.engine || 0)) * vb;
+  s.turn *= 1 + 0.05 * (u.handling || 0);
+  s.nitroCap = 2.5 * (1 + 0.2 * (u.nitro || 0)); s.nitroRe = (P.vip ? 0.36 : 0.22) * (1 + 0.1 * (u.nitro || 0));
+  return s;
+}
+const MISSION_COINS = 60, PICKUP_COINS = 3;
+let cs = null;
+const parts = [];
+function burst(x, y, color, n, sp, life) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * 7, v = rnd(sp * 0.3, sp); parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life || 0.6, max: life || 0.6, color, s: rnd(2, 5)}); }
+}
+function cityStart() {
+  const st = carStats(), p = {x: roadC(4) + R / 4, y: roadC(4) + 200};
+  cs = {st, car: {x: p.x, y: p.y, ang: -Math.PI / 2, v: 0}, nitro: st.nitroCap, missions: 0, pickups: 0, wanted: 0, police: [],
+        mission: null, givers: [], coins: [], bust: 0, calm: 0, crashCd: 0, shake: 0, t: 0};
+  for (let i = 0; i < 70; i++) cs.coins.push(Object.assign(roadPoint(), {ph: Math.random() * 6}));
+  for (let i = 0; i < 3; i++) cs.givers.push(newGiver());
+  parts.length = 0;
+}
+function newGiver() {
+  const types = ['deliver', 'taxi', 'race'];
+  return Object.assign(farPoint(cs ? cs.car : {x: WORLD / 2, y: WORLD / 2}, 350, 1500), {type: types[Math.floor(Math.random() * 3)]});
+}
+const MNAME = {deliver: '📦 Yetkazib berish', taxi: '🚕 Taksi', race: '🏁 Poyga'};
+function startMission(g) {
+  const c = cs.car; let pts = [], total = 0, from = c, speed = 175;
+  if (g.type === 'deliver') { pts = [farPoint(c, 1200, 2400)]; }
+  else if (g.type === 'taxi') { const a = farPoint(c, 500, 1000); pts = [a, farPoint(a, 1100, 2200)]; }
+  else { speed = 215; for (let i = 0; i < 4; i++) { const p = farPoint(from, 600, 1050); pts.push(p); from = p; } }
+  from = c; for (const p of pts) { total += dist(from, p); from = p; }
+  cs.mission = {type: g.type, pts, idx: 0, time: total / speed + 12};
+  toast(MNAME[g.type], 'Vaqt: ' + Math.round(cs.mission.time) + ' soniya'); sfx(660, 0.12); sfx(880, 0.15);
+}
+function missionLabel(m) {
+  if (m.type === 'deliver') return '📦 Posilkani manzilga yetkazing';
+  if (m.type === 'taxi') return m.idx === 0 ? '🚕 Yo\'lovchini oling' : '🚕 Yo\'lovchini manzilga olib boring';
+  return `🏁 Nazorat nuqtasi ${m.idx + 1}/${m.pts.length}`;
+}
+function sessionCoins() { return (cs.missions * MISSION_COINS + cs.pickups * PICKUP_COINS) * (P.vip ? 2 : 1); }
+
+function driveCar(c, dt, tx, ty, max, acc, turn, throttle) {
+  // AI uchun: (tx,ty) nuqtaga qarab haydash
+  const target = Math.atan2(ty - c.y, tx - c.x), d = angDiff(target, c.ang);
+  c.ang += clamp(d, -turn * dt, turn * dt);
+  const want = max * throttle * (Math.abs(d) > 0.9 ? 0.45 : 1);
+  c.v += clamp(want - c.v, -acc * 2 * dt, acc * dt);
+  if (c.stuck > 0) { c.stuck -= dt; c.v = -120; }
+  c.x += Math.cos(c.ang) * c.v * dt; c.y += Math.sin(c.ang) * c.v * dt;
+  const hit = collideWorld(c, 15);
+  if (hit) { c.v *= 0.6; c.slow = (c.slow || 0) + dt; if (c.slow > 1.2) { c.stuck = 0.6; c.slow = 0; c.ang += rnd(-1, 1); } } else c.slow = 0;
+}
+function bump(a, b, r) {
+  const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
+  if (d >= r || d === 0) return false;
+  const k = (r - d) / 2; a.x += dx / d * k; a.y += dy / d * k; b.x -= dx / d * k; b.y -= dy / d * k; return true;
+}
+function cityUpdate(dt) {
+  const c = cs.car, st = cs.st, m = getMove();
+  cs.t += dt; cs.crashCd -= dt; cs.shake = Math.max(0, cs.shake - dt * 30);
+  // haydash
+  let max = st.max, acc = st.acc;
+  const boost = input.a && cs.nitro > 0.05 && c.v > 20;
+  if (boost) { max *= 1.45; acc *= 1.8; cs.nitro = Math.max(0, cs.nitro - dt);
+    const bx = c.x - Math.cos(c.ang) * 20, by = c.y - Math.sin(c.ang) * 20;
+    parts.push({x: bx, y: by, vx: -Math.cos(c.ang) * 120 + rnd(-30, 30), vy: -Math.sin(c.ang) * 120 + rnd(-30, 30), life: 0.3, max: 0.3, color: Math.random() < 0.5 ? '#ffb02e' : '#4fc3ff', s: rnd(3, 6)});
+  } else if (!input.a) cs.nitro = Math.min(st.nitroCap, cs.nitro + st.nitroRe * dt);
+  if (onGrass(c.x, c.y)) max *= 0.6;
+  if (input.b) {
+    if (c.v > 10) c.v -= acc * 2.4 * dt; else c.v = Math.max(-120, c.v - acc * 0.6 * dt);
+    if (m.mag > 0.15) c.ang += clamp(angDiff(Math.atan2(m.y, m.x), c.ang), -st.turn * dt, st.turn * dt) * (c.v < 0 ? -0.6 : 1);
+  } else if (m.mag > 0.15) {
+    const d = angDiff(Math.atan2(m.y, m.x), c.ang), tr = st.turn * Math.min(1, 0.35 + Math.abs(c.v) / 150);
+    c.ang += clamp(d, -tr * dt, tr * dt);
+    const want = max * m.mag * (0.35 + 0.65 * Math.max(0, Math.cos(d)));
+    if (c.v < want) c.v = Math.min(want, c.v + acc * dt); else c.v -= (c.v - want) * 1.6 * dt;
+  } else { c.v -= c.v * 1.4 * dt; if (Math.abs(c.v) < 4) c.v = 0; }
+  if (boost && c.v < max) c.v = Math.min(max, c.v + acc * dt);
+  c.x += Math.cos(c.ang) * c.v * dt; c.y += Math.sin(c.ang) * c.v * dt;
+  const hit = collideWorld(c, 16);
+  if (hit) {
+    const vx = Math.cos(c.ang) * c.v, vy = Math.sin(c.ang) * c.v, vn = vx * hit.nx + vy * hit.ny;
+    if (vn < 0) {
+      const nvx = vx - hit.nx * vn * 1.25, nvy = vy - hit.ny * vn * 1.25;
+      c.v = (nvx * Math.cos(c.ang) + nvy * Math.sin(c.ang)) * 0.85;
+      if (-vn > 170) { cs.shake = Math.min(14, -vn / 25); burst(c.x - hit.nx * 16, c.y - hit.ny * 16, '#ffd27a', 10, 160); sfx(90, 0.15, 'sawtooth', 0.06); haptic('medium'); }
+    }
+  }
+  // transport
+  updateTraffic(dt, c);
+  for (const t of traffic) {
+    if (Math.abs(t.x - c.x) > 40 || Math.abs(t.y - c.y) > 40) continue;
+    const rel = Math.abs(c.v);
+    if (bump(c, t, st.heavy ? 34 : 31)) {
+      c.v *= st.heavy ? 0.75 : 0.5; t.stun = 1.2;
+      if (rel > 150 && cs.crashCd <= 0) {
+        cs.crashCd = 1.2; burst((c.x + t.x) / 2, (c.y + t.y) / 2, '#ffd27a', 14, 200); sfx(80, 0.2, 'sawtooth', 0.07); haptic('heavy');
+        if (cs.wanted < 5) { cs.wanted++; cs.calm = 0; toast('⭐'.repeat(cs.wanted), 'Politsiya sizni qidirmoqda!'); }
+      }
+    }
+  }
+  // politsiya
+  while (cs.police.length < cs.wanted) {
+    const p = farPoint(c, 650, 1000);
+    cs.police.push({x: p.x, y: p.y, ang: Math.atan2(c.y - p.y, c.x - p.x), v: 0, node: null});
+  }
+  let near = false;
+  const pmax = st.max * (0.9 + 0.04 * cs.wanted);
+  for (const p of cs.police) {
+    const d = dist(p, c);
+    if (d < 520) near = true;
+    let tx = c.x, ty = c.y;
+    if (d > 260) {
+      if (!p.node || Math.hypot(roadC(p.node.i) - p.x, roadC(p.node.j) - p.y) < 55) {
+        const ci = clamp(Math.round((p.x - R / 2) / CELL), 0, N), cj = clamp(Math.round((p.y - R / 2) / CELL), 0, N);
+        let best = null, bd = 1e9;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni > N || nj > N) continue;
+          const dd = Math.hypot(roadC(ni) - c.x, roadC(nj) - c.y); if (dd < bd) { bd = dd; best = {i: ni, j: nj}; }
+        }
+        const here = Math.hypot(roadC(ci) - p.x, roadC(cj) - p.y);
+        p.node = here > 55 ? {i: ci, j: cj} : best;
+      }
+      tx = roadC(p.node.i); ty = roadC(p.node.j);
+    } else p.node = null;
+    driveCar(p, dt, tx, ty, pmax, st.acc, 3, 1);
+    if (bump(c, p, 32)) { c.v *= 0.85; }
+    for (const t of traffic) if (Math.abs(t.x - p.x) < 34 && Math.abs(t.y - p.y) < 34) bump(p, t, 30);
+  }
+  for (let i = 0; i < cs.police.length; i++) for (let j = i + 1; j < cs.police.length; j++) bump(cs.police[i], cs.police[j], 30);
+  if (cs.wanted > 0) {
+    const close = cs.police.some(p => dist(p, c) < 48);
+    if (close && Math.abs(c.v) < 90) cs.bust += dt; else cs.bust = Math.max(0, cs.bust - dt * 0.5);
+    if (cs.bust > 2.2) {
+      const lost = Math.floor(cs.pickups * 0.3);
+      cs.pickups -= lost; cs.wanted = 0; cs.police = []; cs.bust = 0; c.v = 0;
+      toast('🚓 Qo\'lga tushdingiz!', lost ? `−${lost * PICKUP_COINS * (P.vip ? 2 : 1)} tanga jarima` : 'Bu safar ogohlantirish'); sfx(200, 0.4, 'triangle', 0.08); haptic('heavy');
+    }
+    if (!near) { cs.calm += dt; if (cs.calm > 9) { cs.calm = 0; cs.wanted--; cs.police.pop(); if (!cs.wanted) toast('😎 Qochib qutuldingiz!', ''); } } else cs.calm = 0;
+  }
+  // tangalar
+  for (const k of cs.coins) {
+    if (Math.abs(k.x - c.x) < 34 && Math.abs(k.y - c.y) < 34) {
+      cs.pickups++; burst(k.x, k.y, '#f5c542', 8, 120, 0.4); sfx(1200, 0.06, 'square', 0.03); Object.assign(k, roadPoint());
+    }
+  }
+  // topshiriqlar
+  const ms = cs.mission;
+  if (!ms) {
+    for (let i = 0; i < cs.givers.length; i++) if (dist(cs.givers[i], c) < 60) { startMission(cs.givers[i]); cs.givers[i] = newGiver(); break; }
+  } else {
+    ms.time -= dt;
+    if (dist(ms.pts[ms.idx], c) < 62) {
+      ms.idx++; sfx(990, 0.1); haptic('light');
+      if (ms.idx >= ms.pts.length) {
+        cs.missions++; cs.mission = null; burst(c.x, c.y, '#34c759', 26, 260, 0.8); sfx(1320, 0.25, 'triangle', 0.06); haptic('heavy');
+        toast('✅ Bajarildi!', `+${MISSION_COINS * (P.vip ? 2 : 1)} tanga`);
+      } else if (ms.type === 'race') ms.time += 4;
+    } else if (ms.time <= 0) { cs.mission = null; toast('⌛ Vaqt tugadi', 'Topshiriq bajarilmadi'); sfx(160, 0.3, 'triangle', 0.06); }
+  }
+  // zarrachalar
+  for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.life -= dt; if (q.life <= 0) { parts.splice(i, 1); continue; } q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.92; q.vy *= 0.92; }
+  // HUD
+  $('h-coins').textContent = fmt(sessionCoins());
+  $('stars').innerHTML = '<b>' + '★'.repeat(cs.wanted) + '</b>' + '★'.repeat(5 - cs.wanted);
+  $('h-speed').textContent = Math.round(Math.abs(c.v) * 0.42) + ' km/soat';
+  const mEl = $('mission');
+  if (cs.mission) { mEl.classList.remove('hide'); mEl.innerHTML = esc(missionLabel(cs.mission)) + `<small>⏱ ${Math.ceil(cs.mission.time)} s · ${Math.round(dist(cs.car, cs.mission.pts[cs.mission.idx]) / 10)} m</small>`; }
+  else { mEl.classList.remove('hide'); mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>'; }
+}
+let menuCam = {t: 0};
+function cityRender(menuMode) {
+  let cx, cy, z = clamp(Math.min(W, H) / 470, 0.75, 1.6);
+  if (menuMode) {
+    menuCam.t += 1 / 60;
+    cx = WORLD / 2 + Math.cos(menuCam.t * 0.05) * 1400; cy = WORLD / 2 + Math.sin(menuCam.t * 0.07) * 1400; z *= 0.8;
+  } else {
+    const c = cs.car; z *= 1 - Math.min(0.22, Math.abs(c.v) / 1600);
+    cx = c.x + Math.cos(c.ang) * c.v * 0.35; cy = c.y + Math.sin(c.ang) * c.v * 0.35;
+    if (cs.shake) { cx += rnd(-cs.shake, cs.shake); cy += rnd(-cs.shake, cs.shake); }
+  }
+  const roofs = drawCity(cx, cy, z);
+  const t = performance.now() / 1000;
+  if (!menuMode) {
+    for (const k of cs.coins) {
+      if (Math.abs(k.x - cx) > W / z || Math.abs(k.y - cy) > H / z) continue;
+      const s = Math.abs(Math.cos(t * 3 + k.ph));
+      ctx.fillStyle = '#b8860b'; ctx.beginPath(); ctx.ellipse(k.x, k.y, 10 * s + 1, 10, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#f5c542'; ctx.beginPath(); ctx.ellipse(k.x, k.y, 7 * s + 1, 7, 0, 0, 7); ctx.fill();
+    }
+    if (!cs.mission) for (const g of cs.givers) {
+      const r = 34 + Math.sin(t * 4) * 5;
+      ctx.strokeStyle = '#f5c542'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, 7); ctx.stroke();
+      ctx.fillStyle = '#f5c54233'; ctx.fill();
+      ctx.fillStyle = '#f5c542'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', g.x, g.y);
+    }
+    if (cs.mission) {
+      const p = cs.mission.pts[cs.mission.idx], r = 46 + Math.sin(t * 5) * 6;
+      ctx.fillStyle = '#34c75944'; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#34c759'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(cs.mission.type === 'race' ? '🏁' : cs.mission.type === 'taxi' ? (cs.mission.idx ? '📍' : '🙋') : '📦', p.x, p.y);
+    }
+  }
+  for (const c of traffic) if (Math.abs(c.x - cx) < W / z && Math.abs(c.y - cy) < H / z) drawCar(c.x, c.y, c.ang, c.color, 34, 18);
+  if (!menuMode) {
+    for (const p of cs.police) drawCar(p.x, p.y, p.ang, '#f2f4f7', 37, 19, {police: true});
+    const c = cs.car, S = cs.st;
+    drawCar(c.x, c.y, c.ang, S.color, S.w, S.h, {taxi: S.taxi, stripe: S.stripe});
+    for (const q of parts) { ctx.globalAlpha = q.life / q.max; ctx.fillStyle = q.color; ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); }
+    ctx.globalAlpha = 1;
+  }
+  drawRoofs(roofs);
+  if (menuMode) return;
+  // yo'nalish strelkasi
+  const c = cs.car, tgt = cs.mission ? cs.mission.pts[cs.mission.idx] : cs.givers.reduce((a, b) => dist(a, c) < dist(b, c) ? a : b);
+  const a = Math.atan2(tgt.y - c.y, tgt.x - c.x);
+  if (dist(tgt, c) > 140) {
+    ctx.save(); ctx.translate(c.x + Math.cos(a) * 62, c.y + Math.sin(a) * 62); ctx.rotate(a);
+    ctx.fillStyle = cs.mission ? '#34c759' : '#f5c542'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-3, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  // ekran HUD: nitro va minikarta
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const ms = Math.min(118, W * 0.3), mx = W - ms - 10, my = 54;
+  ctx.globalAlpha = 0.9; ctx.drawImage(mini, mx, my, ms, ms); ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 1.5; ctx.strokeRect(mx, my, ms, ms);
+  const sc = ms / WORLD, dot = (x, y, col, r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx + x * sc, my + y * sc, r, 0, 7); ctx.fill(); };
+  if (cs.mission) dot(tgt.x, tgt.y, '#34c759', 4); else for (const g of cs.givers) dot(g.x, g.y, '#f5c542', 3.5);
+  for (const p of cs.police) dot(p.x, p.y, '#ff3b30', 3);
+  dot(c.x, c.y, '#fff', 3.5);
+  // nitro
+  const nw = 120, nx = 16, ny = H - 30;
+  ctx.fillStyle = '#0008'; ctx.beginPath(); ctx.roundRect(nx, ny - 150, nw, 10, 5); ctx.fill();
+  ctx.fillStyle = '#4fc3ff'; ctx.beginPath(); ctx.roundRect(nx, ny - 150, nw * cs.nitro / cs.st.nitroCap, 10, 5); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText('NITRO', nx, ny - 153);
+  if (cs.bust > 0.2) { ctx.fillStyle = '#ff3b30'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🚓 To\'xtamang! Qoching!', W / 2, H * 0.25); }
+}
+
+// ═════════════ FUTBOL ═════════════
+const F = {W: 680, H: 1050, GW: 190};
+let fb = null;
+function fbStart() {
+  const u = P.up || {}, vb = P.vip ? 1.15 : 1, lv = Math.min(P.level || 1, 15);
+  fb = {camX: null, t: 0, time: 120, gf: 0, ga: 0, pl: [], ball: {x: F.W / 2, y: F.H / 2, vx: 0, vy: 0, owner: null, roll: 1, beat: null},
+        pause: 0, next: null, ctrl: null, camY: F.H / 2,
+        T: [{speed: 178 * (1 + 0.06 * (u.f_speed || 0)) * vb, shot: 650 * (1 + 0.07 * (u.f_shot || 0)) * vb, keep: (1 + 0.12 * (u.f_keeper || 0)) * vb, tackle: 2.4 * vb, aim: 70 - 8 * (u.f_shot || 0),
+             c1: P.vip ? '#d4af37' : '#2f7cf6', c2: P.vip ? '#1a1a1a' : '#ffffff', gk: '#22c55e'},
+            {speed: 172 * (1 + lv * 0.012), shot: 620 * (1 + lv * 0.01), keep: 1 + lv * 0.035, tackle: 2.0 + lv * 0.05, aim: 80,
+             c1: '#e53935', c2: '#ffffff', gk: '#a855f7'}]};
+  const form = [['GK', 0.5, 0.965, 1], ['DF', 0.5, 0.78, 4], ['FW', 0.27, 0.6, 7], ['FW', 0.73, 0.6, 10]];
+  for (const team of [0, 1]) for (const f of form) {
+    const hx = team ? F.W - f[1] * F.W : f[1] * F.W, hy = team ? (1 - f[2]) * F.H : f[2] * F.H;
+    fb.pl.push({team, role: f[0], num: f[3], hx, hy, x: hx, y: hy, vx: 0, vy: 0, fx: 0, fy: team ? 1 : -1, cd: 0, sprint: 0, think: 0, hold: 0});
+  }
+  kickoff(0);
+}
+function kickoff(team) {
+  const b = fb.ball;
+  for (const p of fb.pl) { p.x = p.hx; p.y = p.hy + (p.team ? -40 : 40); p.vx = p.vy = 0; p.cd = 0; p.hold = 0; p.fx = 0; p.fy = p.team ? 1 : -1; }
+  b.x = F.W / 2; b.y = F.H / 2; b.vx = b.vy = 0; b.beat = null;
+  const k = fb.pl.find(p => p.team === team && p.role === 'FW');
+  k.x = F.W / 2; k.y = F.H / 2 + (team ? -16 : 16); b.owner = k; fb.ctrl = team === 0 ? k : fb.ctrl;
+}
+function kick(p, tx, ty, power, spread) {
+  const b = fb.ball; let dx = tx - p.x, dy = ty - p.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+  const a = Math.atan2(dy, dx) + (spread ? rnd(-spread, spread) : 0);
+  b.owner = null; b.vx = Math.cos(a) * power; b.vy = Math.sin(a) * power; b.x = p.x + Math.cos(a) * 20; b.y = p.y + Math.sin(a) * 20;
+  b.roll = Math.random(); b.beat = null; p.cd = 0.35; p.hold = 0;
+  sfx(power > 500 ? 180 : 260, 0.07, 'triangle', 0.08);
+}
+function shoot(p) {
+  const T = fb.T[p.team], gy = p.team ? F.H + 10 : -10, dGoal = Math.abs(p.y - gy);
+  let tx = F.W / 2 + clamp(p.fx * 220, -F.GW * 0.42, F.GW * 0.42), ty = gy;
+  if (p.team === 0 && dGoal > 520 && p.fy > -0.2) { tx = p.x + p.fx * 300; ty = p.y + p.fy * 300; }
+  if (p.team === 1) tx = F.W / 2 + rnd(-F.GW * 0.42, F.GW * 0.42);
+  kick(p, tx + rnd(-T.aim, T.aim) * Math.min(1, dGoal / 600), ty, T.shot, 0.04);
+}
+function pass(p) {
+  let best = null, bs = -1e9;
+  for (const q of fb.pl) {
+    if (q.team !== p.team || q === p) continue;
+    const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
+    let s = (dx * p.fx + dy * p.fy) / d * 1.2 - d / 700 + (p.team ? dy : -dy) / 900;
+    if (q.role === 'GK') s -= 1.5;
+    const opp = fb.pl.filter(o => o.team !== p.team);
+    for (const o of opp) { const t = clamp(((o.x - p.x) * dx + (o.y - p.y) * dy) / (d * d), 0, 1); if (Math.hypot(p.x + dx * t - o.x, p.y + dy * t - o.y) < 26) s -= 0.6; }
+    if (s > bs) { bs = s; best = q; }
+  }
+  if (!best) return;
+  const d = dist(p, best), lead = 0.35;
+  kick(p, best.x + best.vx * lead, best.y + best.vy * lead, clamp(d * 1.45 + 170, 280, 760), 0.02);
+}
+function steer(p, tx, ty, sp, dt) {
+  let dx = tx - p.x, dy = ty - p.y; const l = Math.hypot(dx, dy);
+  const s = l < 8 ? 0 : Math.min(sp, l * 4);
+  const vx = l ? dx / l * s : 0, vy = l ? dy / l * s : 0, k = Math.min(1, dt * 8);
+  p.vx += (vx - p.vx) * k; p.vy += (vy - p.vy) * k;
+}
+function goal(us) {
+  if (us) { fb.gf++; toast('⚽ GOOOL!', `${fb.gf} : ${fb.ga}`); sfx(523, 0.15, 'triangle', 0.08); setTimeout(() => sfx(784, 0.3, 'triangle', 0.08), 140); haptic('heavy'); }
+  else { fb.ga++; toast('😬 Gol o\'tkazildi', `${fb.gf} : ${fb.ga}`); sfx(150, 0.35, 'sawtooth', 0.05); haptic('medium'); }
+  fb.pause = 1.8; fb.next = us ? 1 : 0; fb.ball.owner = null; fb.ball.vx *= 0.2; fb.ball.vy *= 0.2;
+}
+function fbUpdate(dt) {
+  const b = fb.ball;
+  if (fb.pause > 0) {
+    fb.pause -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
+    if (fb.pause <= 0 && fb.next !== null) { kickoff(fb.next); fb.next = null; }
+    fbHud(); return;
+  }
+  fb.t += dt;
+  if (fb.t >= fb.time) { endGame(); return; }
+  // boshqariladigan o'yinchi
+  const mine = fb.pl.filter(p => p.team === 0 && p.role !== 'GK');
+  const closest = mine.reduce((a, q) => dist(q, b) < dist(a, b) ? q : a);
+  if (b.owner && b.owner.team === 0) fb.ctrl = b.owner;
+  else if (!fb.ctrl || fb.ctrl.role === 'GK' || input.bHit || dist(closest, b) < dist(fb.ctrl, b) - 90) {
+    if (fb.ctrl !== closest && input.bHit) haptic('light');
+    fb.ctrl = closest;
+  }
+  const chaser = [null, null];
+  for (const team of [0, 1]) if (!(b.owner && b.owner.team === team)) {
+    let bd = 1e9; for (const p of fb.pl) if (p.team === team && p.role !== 'GK' && p !== fb.ctrl) { const d = dist(p, b); if (d < bd) { bd = d; chaser[team] = p; } }
+    if (team === 0 && bd > 90) chaser[0] = null;
+  }
+  for (const p of fb.pl) {
+    const T = fb.T[p.team], sgn = p.team ? 1 : -1;
+    p.cd -= dt; p.sprint -= dt;
+    let sp = T.speed * (p.sprint > 0 ? 1.45 : 1);
+    if (p === b.owner) sp *= 0.9;
+    if (p === fb.ctrl) {
+      const m = getMove(); const k = Math.min(1, dt * 10);
+      p.vx += (m.x * sp - p.vx) * k; p.vy += (m.y * sp - p.vy) * k;
+      if (b.owner === p) { if (input.aHit) shoot(p); else if (input.bHit) pass(p); }
+      else if (input.aHit && p.sprint < -0.6) { p.sprint = 0.5; }
+    } else if (p.role === 'GK') {
+      const gy = p.team ? 22 : F.H - 22;
+      if (b.owner === p) {
+        p.hold += dt; steer(p, p.x, gy + sgn * 40, sp * 0.5, dt);
+        if (p.hold > 0.8) { if (p.team === 0) { fb.ctrl = mine[0]; } pass(p); }
+      } else {
+        const danger = Math.abs(b.y - gy) < 170 && Math.abs(b.x - F.W / 2) < 200 && !(b.owner && b.owner.team === p.team);
+        const tx = danger ? b.x : clamp(b.x, F.W / 2 - F.GW / 2 + 12, F.W / 2 + F.GW / 2 - 12);
+        const ty = danger ? b.y : gy;
+        steer(p, tx, ty, sp * 0.9 * T.keep, dt);
+      }
+    } else if (b.owner === p) {
+      // raqib (yoki hamjamoa) to'p bilan — AI
+      p.hold += dt; p.think -= dt;
+      const gx = F.W / 2, gy = p.team ? F.H : 0;
+      let tx = gx, ty = gy;
+      const foe = fb.pl.filter(o => o.team !== p.team).reduce((a, o) => dist(o, p) < dist(a, p) ? o : a);
+      const fd = dist(foe, p);
+      if (fd < 80 && (foe.y - p.y) * sgn > 0) tx = p.x + (p.x < foe.x ? -120 : 120);
+      steer(p, clamp(tx, 30, F.W - 30), ty, sp, dt);
+      if (p.think <= 0) {
+        p.think = 0.25;
+        const dG = Math.abs(gy - p.y);
+        if (dG < 330 && Math.random() < 0.55) shoot(p);
+        else if ((fd < 46 && Math.random() < 0.45) || p.hold > 2.6) pass(p);
+      }
+    } else {
+      let tx, ty, f = 0.8;
+      if (p === chaser[p.team]) {
+        tx = b.x; ty = b.y + (b.owner ? -sgn * 10 : 0); f = 1;
+        if (b.owner && b.owner.team !== p.team && p.team === 1) ty = b.y - sgn * 6;
+      } else {
+        const has = b.owner && b.owner.team === p.team;
+        tx = p.hx + (b.x - F.W / 2) * 0.35;
+        ty = p.hy + (b.y - F.H / 2) * 0.55 + (has ? sgn * (p.role === 'FW' ? 170 : 80) : 0);
+        if (p.role === 'DF') ty = p.team ? Math.min(ty, F.H * 0.55) : Math.max(ty, F.H * 0.45);
+      }
+      steer(p, clamp(tx, 20, F.W - 20), clamp(ty, 20, F.H - 20), sp * f, dt);
+    }
+    p.x = clamp(p.x + p.vx * dt, 12, F.W - 12); p.y = clamp(p.y + p.vy * dt, 12, F.H - 12);
+    const s = Math.hypot(p.vx, p.vy); if (s > 20) { p.fx = p.vx / s; p.fy = p.vy / s; }
+  }
+  // o'yinchilar to'qnashuvi
+  for (let i = 0; i < fb.pl.length; i++) for (let j = i + 1; j < fb.pl.length; j++) bump(fb.pl[i], fb.pl[j], 30);
+  // to'p
+  if (b.owner) {
+    const o = b.owner;
+    b.x = o.x + o.fx * 19; b.y = o.y + o.fy * 19; b.vx = o.vx; b.vy = o.vy;
+    for (const p of fb.pl) {
+      if (p.team === o.team || p.cd > 0 || dist(p, o) > 28) continue;
+      const T = fb.T[p.team];
+      if (Math.random() < T.tackle * dt * (p.sprint > 0 ? 1.8 : 1) * (o.role === 'GK' ? 0.2 : 1)) {
+        b.owner = p; o.cd = 0.7; p.hold = 0; sfx(300, 0.05, 'square', 0.04);
+        if (p.team === 0) haptic('light');
+        break;
+      }
+    }
+  } else {
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const k = Math.pow(0.42, dt); b.vx *= k; b.vy *= k;
+    const spd = Math.hypot(b.vx, b.vy);
+    for (const p of fb.pl) {
+      if (p.cd > 0 || p === b.beat) continue;
+      const d = dist(p, b);
+      if (p.role === 'GK') {
+        const reach = 30 * fb.T[p.team].keep;
+        if (d < reach) {
+          const chance = clamp(0.62 * fb.T[p.team].keep - (spd - 450) / 1400, 0.12, 0.96);
+          if (spd < 260 || b.roll < chance) { b.owner = p; p.hold = 0; if (spd > 400) { toast('🧤 Qaytardi!', ''); sfx(400, 0.08); } break; }
+          else b.beat = p;
+        }
+      } else if (d < 21) {
+        if (spd < 470 || Math.random() < 0.25) { b.owner = p; p.hold = 0; p.think = 0.3; break; }
+        b.vx *= 0.6; b.vy *= 0.6;
+      }
+    }
+  }
+  // chegaralar va gol
+  const inGoal = Math.abs(b.x - F.W / 2) < F.GW / 2 - 6;
+  if (b.y < 6) { if (inGoal) return goal(true); b.y = 6; b.vy = Math.abs(b.vy) * 0.6; if (b.owner) b.owner.y = 30; }
+  if (b.y > F.H - 6) { if (inGoal) return goal(false); b.y = F.H - 6; b.vy = -Math.abs(b.vy) * 0.6; if (b.owner) b.owner.y = F.H - 30; }
+  if (b.x < 6) { b.x = 6; b.vx = Math.abs(b.vx) * 0.6; } if (b.x > F.W - 6) { b.x = F.W - 6; b.vx = -Math.abs(b.vx) * 0.6; }
+  fbHud();
+}
+function fbHud() {
+  const min = Math.min(90, Math.floor(fb.t / fb.time * 90));
+  $('score').innerHTML = `<span style="color:${fb.T[0].c1}">●</span> SIZ ${fb.gf} : ${fb.ga} RAQIB <span style="color:${fb.T[1].c1}">●</span><small>${min}'</small>`;
+}
+function fbRender() {
+  const s = Math.max(W / (F.W + 70), Math.min(W / 440, H / 700)), viewW = W / s, viewH = H / s;
+  const camX = viewW >= F.W + 60 ? F.W / 2 : clamp(fb.ball.x, viewW / 2 - 30, F.W - viewW / 2 + 30);
+  fb.camX = fb.camX == null ? camX : fb.camX + (camX - fb.camX) * 0.12;
+  fb.camY += (clamp(fb.ball.y, viewH / 2 - 60, F.H - viewH / 2 + 60) - fb.camY) * 0.12;
+  if (viewH > F.H + 120) fb.camY = F.H / 2;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = '#1f5f2e'; ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(DPR * s, 0, 0, DPR * s, DPR * (W / 2 - fb.camX * s), DPR * (H / 2 - fb.camY * s));
+  for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? '#2f8f45' : '#2a8340'; ctx.fillRect(0, i * F.H / 14, F.W, F.H / 14 + 1); }
+  ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 3;
+  ctx.strokeRect(0, 0, F.W, F.H);
+  ctx.beginPath(); ctx.moveTo(0, F.H / 2); ctx.lineTo(F.W, F.H / 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(F.W / 2, F.H / 2, 85, 0, 7); ctx.stroke();
+  for (const top of [true, false]) {
+    const y = top ? 0 : F.H, d = top ? 1 : -1;
+    ctx.strokeRect(F.W / 2 - 200, top ? 0 : F.H - 165, 400, 165);
+    ctx.strokeRect(F.W / 2 - 105, top ? 0 : F.H - 60, 210, 60);
+    ctx.beginPath(); ctx.arc(F.W / 2, y + d * 115, 3, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.fillStyle = '#ffffff22'; ctx.fillRect(F.W / 2 - F.GW / 2, top ? -34 : F.H, F.GW, 34);
+    ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 1;
+    for (let x = F.W / 2 - F.GW / 2; x <= F.W / 2 + F.GW / 2; x += 12) { ctx.beginPath(); ctx.moveTo(x, top ? -34 : F.H); ctx.lineTo(x, top ? 0 : F.H + 34); ctx.stroke(); }
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.beginPath();
+    ctx.moveTo(F.W / 2 - F.GW / 2, y); ctx.lineTo(F.W / 2 - F.GW / 2, y - d * 34); ctx.lineTo(F.W / 2 + F.GW / 2, y - d * 34); ctx.lineTo(F.W / 2 + F.GW / 2, y); ctx.stroke();
+    ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 3;
+  }
+  const b = fb.ball;
+  const ps = fb.pl.slice().sort((a, q) => a.y - q.y);
+  for (const p of ps) {
+    const T = fb.T[p.team], gk = p.role === 'GK';
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(p.x + 4, p.y + 6, 16, 11, 0, 0, 7); ctx.fill();
+    if (p === fb.ctrl) { ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y, 23, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = gk ? T.gk : T.c1; ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, 7); ctx.fill();
+    ctx.fillStyle = T.c2; ctx.beginPath(); ctx.arc(p.x + p.fx * 8, p.y + p.fy * 8, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#0008'; ctx.lineWidth = 3; ctx.strokeText(p.num, p.x - p.fx * 3, p.y - p.fy * 3); ctx.fillText(p.num, p.x - p.fx * 3, p.y - p.fy * 3);
+    if (p === fb.ctrl) { ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.moveTo(p.x, p.y - 27); ctx.lineTo(p.x - 7, p.y - 38); ctx.lineTo(p.x + 7, p.y - 38); ctx.fill(); }
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + 4, 8, 6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, 7); ctx.fill();
+  ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(b.x + 2, b.y - 1, 3, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, 7); ctx.stroke();
+}
+
+// ═════════════ O'YIN OQIMI ═════════════
+let mode = 'menu', sid = null, paused = false;
+let toastT = null;
+function toast(t, s) {
+  const el = $('toast'); el.innerHTML = esc(t) + (s ? `<small>${esc(s)}</small>` : ''); el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1700);
+}
+async function startGame(m) {
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume && AC.resume(); } catch (e) {}
+  sid = null;
+  if (!GUEST) { const r = await api('start', {mode: m}); if (r.ok) sid = r.sid; }
+  mode = m; paused = false;
+  input.a = input.b = false; input.jx = input.jy = 0;
+  $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
+  const city = m === 'city';
+  $('stars').classList.toggle('hide', !city); $('h-speed').classList.toggle('hide', !city);
+  $('h-coins').parentElement.classList.toggle('hide', !city);
+  $('mission').classList.toggle('hide', !city); $('score').classList.toggle('hide', city);
+  $('bA').querySelector('span').textContent = city ? '🔥' : '⚽'; $('lA').textContent = city ? 'NITRO' : 'ZARBA';
+  $('bB').querySelector('span').textContent = city ? '🛑' : '👟'; $('lB').textContent = city ? 'TORMOZ' : 'PAS';
+  $('h-hint').textContent = city ? 'Chap tomonni bosib suring — mashina shu tomonga yuradi' : 'Chap tomon — yugurish · ZARBA — darvozaga · PAS — sherikka';
+  if (city) cityStart(); else fbStart();
+  try { tg.BackButton.show(); } catch (e) {}
+}
+async function askExit() {
+  if (mode === 'menu') return;
+  paused = true;
+  const msg = mode === 'city' ? `O'yinni tugatib ${fmt(sessionCoins())} tangani olasizmi?` : 'O\'yinni tugatasizmi? Natija hozirgi hisob bo\'yicha yoziladi.';
+  if (await confirmMsg(msg)) endGame(); else paused = false;
+}
+async function endGame() {
+  const m = mode; mode = 'result';
+  $('hud').classList.add('hide'); $('joy').style.display = 'none';
+  try { tg.BackButton.hide(); } catch (e) {}
+  const body = m === 'city' ? {missions: cs.missions, pickups: cs.pickups} : {gf: fb.gf, ga: fb.ga};
+  let title, sub, coins = 0, xp = 0, lvlUp = false;
+  if (m === 'city') { title = '🏙 Sayohat tugadi'; sub = `Topshiriqlar: ${cs.missions} · Tangalar: ${cs.pickups}`; }
+  else { title = fb.gf > fb.ga ? '🏆 G\'ALABA!' : fb.gf === fb.ga ? '🤝 Durang' : '😔 Mag\'lubiyat'; sub = `Hisob: ${fb.gf} : ${fb.ga}`; }
+  $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div><div class="st">Saqlanmoqda…</div>`;
+  $('result').classList.remove('hide');
+  if (!GUEST && sid) {
+    const r = await api('reward', Object.assign({sid}, body));
+    if (r.ok) { coins = r.coins; xp = r.xp; lvlUp = r.level_up; P = r.profile; }
+  }
+  const lost = !P.vip && coins > 0 ? coins : 0;
+  $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div>
+    <div class="gain"><div><b>🪙 +${fmt(coins)}</b><small>tanga</small></div><div><b>⭐ +${fmt(xp)}</b><small>tajriba</small></div></div>
+    ${lvlUp ? `<div class="ups" style="background:#123a1c;border-color:#34c75955">🎉 Yangi daraja: <b style="color:#34c759">${P.level}</b></div>` : ''}
+    ${GUEST ? '<div class="warn">Mehmon rejimi — natija saqlanmadi. O\'yinni botdan oching.</div>' : ''}
+    ${lost ? `<div class="ups" onclick="openVip()">👑 VIP bilan yana <b>+${fmt(lost)}</b> tanga olardingiz</div>` : ''}
+    <button class="big" onclick="startGame('${m}')">🔄 Yana o'ynash</button>
+    <button class="big s" onclick="toMenu()">Menyu</button>`;
+  if (fb && m === 'football' && fb.gf > fb.ga) haptic('heavy');
+}
+function toMenu() {
+  mode = 'menu'; $('result').classList.add('hide'); $('hud').classList.add('hide'); $('menu').classList.remove('hide');
+  try { tg.BackButton.hide(); } catch (e) {}
+  renderMenu();
+}
+try { tg.BackButton.onClick(() => { if (mode === 'city' || mode === 'football') askExit(); }); } catch (e) {}
+document.addEventListener('visibilitychange', () => { if (document.hidden && (mode === 'city' || mode === 'football')) { paused = true; askExit(); } });
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (mode === 'city') { if (!paused) cityUpdate(dt); if (mode === 'city') cityRender(false); }
+  else if (mode === 'football') { if (!paused) fbUpdate(dt); if (mode === 'football') fbRender(); }
+  else { updateTraffic(dt, null); cityRender(true); }
+  input.aHit = input.bHit = false;
+  requestAnimationFrame(frame);
+}
+
+// ═════════════ MENYU / DO'KON ═════════════
+function renderMenu() {
+  const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  $('m-name').textContent = (u && (u.first_name || u.username)) || 'Mehmon';
+  $('m-lvl').textContent = P.level; $('m-lvl').classList.toggle('vip', !!P.vip);
+  const prev = (P.level - 1) ** 2 * 100;
+  $('m-xp').style.width = clamp((P.xp - prev) / Math.max(1, P.next_xp - prev) * 100, 0, 100) + '%';
+  $('m-xpt').textContent = `${P.level}-daraja · ${fmt(P.xp)}/${fmt(P.next_xp)} XP · G'alabalar: ${P.wins}`;
+  $('m-coins').textContent = fmt(P.coins);
+  const d = $('m-daily');
+  if (P.daily_in > 0) { d.disabled = true; d.textContent = `🎁 Keyingi bonus ${Math.ceil(P.daily_in / 3600)} soatdan keyin`; }
+  else { d.disabled = GUEST; d.textContent = `🎁 Kunlik bonusni olish: +${SHOP ? (P.vip ? SHOP.daily_vip : SHOP.daily) : 100} tanga`; }
+  const vb = $('m-vipbar');
+  if (P.vip) vb.innerHTML = `👑 <div><b>VIP faol</b> — ${new Date(P.vip_until * 1000).toLocaleDateString('ru-RU')} gacha. ×2 tanga, +15% kuch</div>`;
+  else vb.innerHTML = `👑 <div><b>VIP</b> — ×2 tanga, +15% kuch, oltin superkar. ${SHOP ? fmt(SHOP.vip_price) + ' so\'m/oy' : ''}</div><span style="margin-left:auto">›</span>`;
+  $('m-guest').classList.toggle('hide', !GUEST);
+  $('m-sound').innerHTML = `<span>${SOUND ? '🔊' : '🔇'}</span>Ovoz ${SOUND ? 'yoqiq' : 'o\'chiq'}`;
+}
+async function claimDaily() {
+  const r = await api('daily');
+  if (r.ok) { P = r.profile; sfx(880, 0.1); sfx(1320, 0.2, 'triangle'); haptic('heavy'); alertMsg(`🎁 +${r.coins} tanga!`); renderMenu(); }
+  else alertMsg(r.error);
+}
+function sheet(html) { $('sh').innerHTML = html; $('sheet').classList.remove('hide'); }
+function closeSheet() { $('sheet').classList.add('hide'); renderMenu(); }
+let gTab = 'cars';
+function openGarage(tab) {
+  if (tab) gTab = tab;
+  if (!SHOP) return alertMsg('Yuklanmoqda…');
+  let h = `<h3>🛠 Garaj <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px;margin:-4px 0 10px">Sizda: <b style="color:var(--gold)">🪙 ${fmt(P.coins)}</b></div>
+    <div class="tabs"><button class="${gTab === 'cars' ? 'on' : ''}" onclick="openGarage('cars')">🚗 Mashinalar</button><button class="${gTab === 'up' ? 'on' : ''}" onclick="openGarage('up')">⚡️ Yaxshilash</button></div>`;
+  if (gTab === 'cars') {
+    for (const [k, c] of Object.entries(SHOP.cars)) {
+      const S = CAR_STATS[k], own = P.cars.includes(k), sel = P.car === k;
+      const btn = sel ? '<span class="buy ok">✓ Tanlangan</span>'
+        : c.vip && !P.vip ? `<button class="buy gold" onclick="openVip()">👑 VIP</button>`
+        : own ? `<button class="buy g" style="color:var(--text)" onclick="pickCar('${k}')">Tanlash</button>`
+        : `<button class="buy" onclick="pickCar('${k}')">🪙 ${fmt(c.price)}</button>`;
+      h += `<div class="it"><div class="ic" style="background:${S.color}33">${S.ico}</div><div class="tx"><b>${esc(c.name)}</b>
+        <small>Tezlik ${Math.round(S.max * 0.42)} · Tezlanish ${S.acc} · Burilish ${S.turn}${S.heavy ? ' · og\'ir' : ''}</small></div>${btn}</div>`;
+    }
+  } else {
+    const IC = {engine: '⚙️', nitro: '🔥', handling: '🎯', f_speed: '👟', f_shot: '🦵', f_keeper: '🧤'};
+    const DESC = {engine: 'Mashina tezligi +6%', nitro: 'Nitro hajmi +20%', handling: 'Burilish +5%', f_speed: 'Futbolchilar +6% tez', f_shot: 'Zarba +7% kuchli, aniqroq', f_keeper: 'Darvozabon +12% yaxshi'};
+    for (const [k, u] of Object.entries(SHOP.upgrades)) {
+      const lv = P.up[k] || 0, max = lv >= u.max;
+      h += `<div class="it"><div class="ic">${IC[k] || '⚡️'}</div><div class="tx"><b>${esc(u.name)}</b><small>${DESC[k] || ''}</small>
+        <div class="dots">${Array.from({length: u.max}, (_, i) => `<i class="${i < lv ? 'f' : ''}"></i>`).join('')}</div></div>
+        ${max ? '<span class="buy ok">MAX</span>' : `<button class="buy" onclick="buyUp('${k}')">🪙 ${fmt(u.costs[lv])}</button>`}</div>`;
+    }
+  }
+  if (GUEST) h += '<div class="warn">Xarid qilish uchun o\'yinni Telegram botdan oching.</div>';
+  sheet(h);
+}
+async function pickCar(k) { const r = await api('car', {key: k}); if (r.ok) { P = r.profile; sfx(700, 0.1); openGarage(); } else alertMsg(r.error); }
+async function buyUp(k) { const r = await api('upgrade', {key: k}); if (r.ok) { P = r.profile; sfx(990, 0.12, 'triangle'); haptic('medium'); openGarage(); } else alertMsg(r.error); }
+function openVip() {
+  if (!SHOP) return;
+  const perks = [['🪙', `<b>×${SHOP.vip_mult} tanga</b> har bir o'yinda`], ['⚡️', '<b>+15% kuch</b>: mashina tezligi, futbolchilar tezligi, zarba va darvozabon'],
+    ['👑', '<b>Oltin superkar</b> — eng tez mashina'], ['🔥', 'Nitro tezroq to\'ladi'], ['🟡', 'Oltin futbol formasi'],
+    ['🎁', `Kunlik bonus <b>${SHOP.daily_vip}</b> tanga (oddiy: ${SHOP.daily})`], ['🏆', 'Reytingda 👑 belgisi']];
+  let h = `<h3>👑 VIP obuna <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px">O'yin hamma uchun bepul. VIP — ixtiyoriy, kuchliroq o'ynash va tezroq rivojlanish uchun.</div>
+    ${perks.map(p => `<div class="perk"><span>${p[0]}</span><div>${p[1]}</div></div>`).join('')}
+    <div class="price">${fmt(SHOP.vip_price)} so'm <small>/ ${SHOP.vip_days} kun</small></div>`;
+  if (P.vip) h += `<div style="text-align:center;color:var(--ok);font-weight:700;margin-top:6px">✅ VIP faol: ${new Date(P.vip_until * 1000).toLocaleDateString('ru-RU')} gacha</div>`;
+  if (GUEST) h += '<div class="warn">VIP sotib olish uchun o\'yinni Telegram botdan oching.</div>';
+  else {
+    h += `<div style="text-align:center;color:var(--hint);font-size:13px;margin-top:6px">Bot balansingiz: <b style="color:var(--text)">${fmt(P.balance)} so'm</b></div>
+      <button class="big" onclick="buyVip()">${P.vip ? '➕ Yana 1 oyga uzaytirish' : '👑 VIP olish'}</button>`;
+    if (P.balance < SHOP.vip_price) h += `<button class="big s" onclick="location.href='/'">💳 Balansni to'ldirish</button>`;
+  }
+  sheet(h);
+}
+async function buyVip() {
+  if (P.balance < SHOP.vip_price) return alertMsg('Balans yetarli emas. Avval NFT Bozor → Profil → «Balansni to\'ldirish» orqali balansni to\'ldiring.');
+  if (!await confirmMsg(`VIP obuna: ${fmt(SHOP.vip_price)} so'm balansdan yechiladi. Tasdiqlaysizmi?`)) return;
+  const r = await api('vip');
+  if (r.ok) { P = r.profile; haptic('heavy'); sfx(660, 0.1); setTimeout(() => sfx(990, 0.25, 'triangle'), 120); openVip(); alertMsg('👑 VIP faollashtirildi! Omad!'); }
+  else alertMsg(r.error);
+}
+async function openTop() {
+  sheet('<h3>🏆 Reyting <button onclick="closeSheet()">✕</button></h3><div style="color:var(--hint)">Yuklanmoqda…</div>');
+  let rows = [];
+  try { rows = await (await fetch('/api/game/top')).json(); } catch (e) {}
+  sheet(`<h3>🏆 Reyting <button onclick="closeSheet()">✕</button></h3>` + (rows.length ? rows.map((x, i) =>
+    `<div class="lb"><div class="n">${i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</div><div class="nm">${x.vip ? '👑 ' : ''}${esc(x.name)}</div>
+     <div style="color:var(--hint);font-size:12px">🏆 ${x.wins}</div><div class="v">${x.level}-dr.</div></div>`).join('')
+    : '<div style="color:var(--hint);padding:20px 0;text-align:center">Hali hech kim yo\'q — birinchi bo\'ling!</div>'));
+}
+
+(async function boot() {
+  try { SHOP = await (await fetch('/api/game/shop')).json(); } catch (e) {}
+  if (!GUEST) { const r = await api('me'); if (r.ok) { P = r.profile; SHOP = r.shop; } }
+  renderMenu(); $('loading').classList.add('hide');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
