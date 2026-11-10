@@ -31,6 +31,11 @@ Mini App ichidagi bepul o'yin, ikki rejim:
   yetkazib berish / taksi / poyga topshiriqlari, tangalar, ⭐ qidiruv darajasi va politsiya ta'qibi.
   Boshqaruv: chap tomonda joystik, o'ng tomonni surib kamerani aylantirish; menyuda «Grafika: yuqori/tezkor»
   (kuchsiz telefonlar uchun soyalar o'chadi).
+- 🧍 **Personaj** — teri, soch turmagi va rangi, kiyim (futbolka/kurtka/xudi), ranglar, aksessuarlar.
+  Bir qismi bepul, bir qismi tangaga (bir marta sotib olinadi), oltin pidjak, toj, oltin zanjir va oltin rang — faqat VIP.
+- 👥 **Onlayn shahar** — `/ws/city` WebSocket: bir xonada 25 tagacha o'yinchi bir-birini real vaqtda ko'radi
+  (yurish, mashinada haydash, ism yorlig'i, 👑 VIP belgisi), tayyor iboralar bilan chat. Transport, piyodalar va
+  politsiya har o'yinchida o'ziniki. Xonalar server xotirasida — bitta server jarayoni bilan ishlaydi.
 - ⚽ **Futbol** — 4×4 tezkor o'yin (2 daqiqa), sun'iy intellektga qarshi. Joystik + ZARBA / PAS tugmalari.
 
 Tangalarga garajda mashinalar (Taksi, Yo'ltanlamas, Sport kupe) va yaxshilashlar

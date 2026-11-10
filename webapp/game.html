@@ -19,6 +19,20 @@
   #nitro i{display:block;height:100%;background:linear-gradient(90deg,#4fc3ff,#b388ff);border-radius:6px}
   #nitro span{position:absolute;top:-15px;left:0;font-size:10px;font-weight:800}
   #bust{position:absolute;top:28%;left:50%;transform:translateX(-50%);color:#ff3b30;font-weight:900;font-size:18px;text-shadow:0 2px 8px #000;white-space:nowrap}
+  .chatb{position:absolute;left:8px;top:calc(52px + env(safe-area-inset-top))}
+  #chatpick{position:absolute;left:8px;top:calc(94px + env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px;pointer-events:auto;z-index:4}
+  #chatpick button{background:#000c;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;text-align:left}
+  #chatfeed{position:absolute;left:8px;bottom:calc(175px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;max-width:60%}
+  #chatfeed div{background:#000a;border-radius:10px;padding:5px 9px;font-size:12px;font-weight:600}
+  .lk h4{color:var(--hint);font-size:12px;font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:.5px}
+  .opts{display:flex;flex-wrap:wrap;gap:6px}
+  .opt{background:var(--bg);border:2px solid var(--line);border-radius:11px;padding:7px 10px;font-size:13px;font-weight:700;position:relative}
+  .opt.on{border-color:var(--acc)}
+  .opt small{display:block;font-size:10px;color:var(--gold);font-weight:800}
+  .sw{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);position:relative}
+  .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--acc)}
+  .sw i{position:absolute;top:-6px;right:-8px;font-size:12px;font-style:normal}
+  #pvc{position:static;width:100%;height:220px;display:block;border-radius:16px;background:radial-gradient(circle at 50% 40%,#2b3446,#141820)}
   .btn.e{width:68px;height:68px;background:#34c75988;border-color:#7ee49a;align-self:center}
   .hide{display:none!important}
   /* MENU */
@@ -119,7 +133,8 @@
     <button class="mode m-fb" onclick="startGame('football')"><div class="ico">⚽</div><b>FUTBOL</b><p>4×4 tezkor o'yin, 2 daqiqa. Gol ur — g'alaba qozon!</p></button>
   </div>
   <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
-  <div class="row">
+  <div class="row" style="grid-template-columns:repeat(4,1fr)">
+    <button class="tile" onclick="openLook()"><span>🧍</span>Personaj</button>
     <button class="tile" onclick="openGarage()"><span>🛠</span>Garaj</button>
     <button class="tile vipt" onclick="openVip()"><span>👑</span>VIP</button>
     <button class="tile" onclick="openTop()"><span>🏆</span>Reyting</button>
@@ -139,6 +154,7 @@
     <div class="chip">🪙 <span id="h-coins">0</span></div>
     <div class="chip" id="stars"></div>
     <div style="flex:1"></div>
+    <div class="chip hide" id="h-online"></div>
     <div class="chip" id="h-clock"></div>
     <div class="chip" id="h-speed"></div>
   </div>
@@ -146,6 +162,9 @@
   <div id="nitro" class="hide"><i></i><span>NITRO</span></div>
   <div id="bust" class="hide">🚓 Politsiya yaqin — qoching!</div>
   <div id="mission" class="hide"></div>
+  <button class="x chatb hide" id="h-chat" onclick="toggleChat()">💬</button>
+  <div id="chatpick" class="hide"></div>
+  <div id="chatfeed"></div>
   <div id="score" class="hide"></div>
   <div id="toast"></div>
   <div id="joy"><i></i></div>
@@ -553,7 +572,7 @@ async function startGame(m) {
   $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
   const city = m === 'city';
   $('stars').classList.toggle('hide', !city); $('h-speed').classList.toggle('hide', !city); $('h-clock').classList.toggle('hide', !city);
-  $('mm').classList.toggle('hide', !city); $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide');
+  $('mm').classList.toggle('hide', !city); $('h-chat').classList.toggle('hide', !city || GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide'); $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide');
   cv.style.display = city ? 'none' : 'block'; $('gl').style.display = city ? 'block' : 'none';
   $('h-coins').parentElement.classList.toggle('hide', !city);
   $('mission').classList.toggle('hide', !city); $('score').classList.toggle('hide', city);
@@ -611,6 +630,62 @@ function frame(now) {
   else if (!document.hidden) City3D.render(true, dt);
   input.aHit = input.bHit = input.eHit = false;
   requestAnimationFrame(frame);
+}
+
+// ═════════════ CHAT ═════════════
+function toggleChat() {
+  const el = $('chatpick');
+  if (!el.classList.contains('hide')) return el.classList.add('hide');
+  el.innerHTML = City3D.phrases.map((t, i) => `<button onclick="City3D.chat(${i});$('chatpick').classList.add('hide')">${esc(t)}</button>`).join('');
+  el.classList.remove('hide');
+}
+
+// ═════════════ PERSONAJ (garderob) ═════════════
+const LOOK_UI = [
+  ['skin', 'Teri rangi', null], ['hair', 'Soch turmagi', ['Qisqa', 'Uzun', 'Kepka', 'Kal', 'Irokez', 'Jingalak']], ['hc', 'Soch rangi', null],
+  ['top', 'Kiyim', ['Futbolka', 'Kurtka', 'Xudi', 'Oltin pidjak']], ['tc', 'Kiyim rangi', null], ['pc', 'Shim rangi', null],
+  ['acc', 'Aksessuar', ['Yo\'q', 'Ko\'zoynak', 'Qora ko\'zoynak', 'Toj', 'Oltin zanjir']],
+];
+let draft = null;
+function lookCost() {
+  let c = 0;
+  for (const [k] of LOOK_UI) { const pr = SHOP.look[k][draft[k]]; if (typeof pr === 'number' && pr > 0 && !(P.owned || []).includes(k + ':' + draft[k])) c += pr; }
+  return c;
+}
+function openLook() {
+  if (!SHOP || !SHOP.look) return alertMsg('Yuklanmoqda…');
+  draft = Object.assign({skin: 1, hair: 0, hc: 0, top: 0, tc: 1, pc: 0, acc: 0}, P.look || {});
+  sheet(`<h3>🧍 Personaj <button onclick="closeSheet()">✕</button></h3><canvas id="pvc"></canvas><div id="lkbody">${lookBody()}</div>`);
+  if (City3D.ok) City3D.preview($('pvc'), draft); else $('pvc').classList.add('hide');
+}
+function lookBody() {
+  const C = City3D.colors || {};
+  const tag = (k, i) => { const pr = SHOP.look[k][i]; if (pr === 'vip') return '👑'; if (pr > 0 && !(P.owned || []).includes(k + ':' + i)) return '🪙' + fmt(pr); return ''; };
+  let h = `<div class="lk">`;
+  for (const [k, title, names] of LOOK_UI) {
+    h += `<h4>${title}</h4><div class="opts">`;
+    SHOP.look[k].forEach((_, i) => {
+      const on = draft[k] === i ? ' on' : '', t = tag(k, i);
+      if (names) h += `<button class="opt${on}" onclick="setLook('${k}',${i})">${esc(names[i] || i)}${t ? `<small>${t}</small>` : ''}</button>`;
+      else { const col = '#' + (C[k] ? C[k][i] : 0).toString(16).padStart(6, '0'); h += `<button class="sw${on}" style="background:${col}" onclick="setLook('${k}',${i})">${t ? `<i>${t === '👑' ? '👑' : '🪙'}</i>` : ''}</button>`; }
+    });
+    h += '</div>';
+  }
+  const cost = lookCost(), needVip = LOOK_UI.some(([k]) => SHOP.look[k][draft[k]] === 'vip') && !P.vip;
+  h += '</div>';
+  if (GUEST) h += '<div class="warn">Saqlash uchun o\'yinni Telegram botdan oching.</div>';
+  else if (needVip) h += `<button class="big" onclick="openVip()">👑 Bu buyumlar uchun VIP kerak</button>`;
+  else h += `<button class="big" onclick="saveLook()">${cost ? `💾 Saqlash — 🪙 ${fmt(cost)}` : '💾 Saqlash'}</button>`;
+  return h;
+}
+function setLook(k, i) { draft[k] = i; sfx(800, 0.04, 'triangle', 0.03); $('lkbody').innerHTML = lookBody(); if (City3D.ok) City3D.preview($('pvc'), draft); }
+async function saveLook() {
+  const cost = lookCost();
+  if (cost > P.coins) return alertMsg(`Tanga yetarli emas: kerak ${fmt(cost)}, sizda ${fmt(P.coins)}. O'ynab tanga yig'ing!`);
+  if (cost && !await confirmMsg(`Yangi buyumlar uchun ${fmt(cost)} tanga yechiladi. Tasdiqlaysizmi?`)) return;
+  const r = await api('look', {look: draft});
+  if (r.ok) { P = r.profile; haptic('medium'); sfx(990, 0.12, 'triangle'); closeSheet(); alertMsg('✅ Personaj saqlandi! Shaharga kirganingizda yangi ko\'rinishda bo\'lasiz.'); }
+  else alertMsg(r.error);
 }
 
 // ═════════════ MENYU / DO'KON ═════════════

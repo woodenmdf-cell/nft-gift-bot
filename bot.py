@@ -690,7 +690,7 @@ def make_app():
     r.add_get("/health", health)
     r.add_get("/game", game_page)
     r.add_get("/{name:three\\.min\\.js|city3d\\.js}", game_asset)
-    game.setup(r, auth, ok, err, on_vip)
+    game.setup(r, auth, ok, err, on_vip, verify=check_init_data)
     r.add_get("/api/config", api_config)
     r.add_get("/api/gifts", api_gifts)
     r.add_get("/api/top", api_top)

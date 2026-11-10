@@ -400,21 +400,66 @@ function spawnPeds() {
     peds.push({mesh, b, s, dir: Math.random() < 0.5 ? 1 : -1, sp: rr(1.1, 1.7), x, z, ox: 0, oz: 0, down: 0, flee: 0, yaw: 0, ph: Math.random() * 6});
   }
 }
-function makePlayer() {
-  const g = new T.Group(), M = c => new T.MeshLambertMaterial({color: c});
-  const shirtM = M(0x2f6fe0), pantsM = M(0x22262e), skinM = M(0xe0ac69), hairM = M(0x1d1d1d), shoeM = M(0xf0f0f0);
-  const part = (w, h, d, m, x, y, z, parent) => { const s = new T.Mesh(new T.BoxGeometry(w, h, d), m); s.position.set(x, y, z); s.castShadow = true; (parent || g).add(s); return s; };
+// Personaj ranglari (server game.py dagi LOOK bilan bir xil tartibda)
+const SKIN_C = [0xffdbac, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a1e];
+const HAIR_C = [0x1a1a1a, 0x3b2a1a, 0x7a4a24, 0xc8a165, 0x9e9e9e, 0xb5482a, 0x2f7cf6, 0xe14d9b];
+const TOP_C = [0xc0392b, 0x2f6fe0, 0x27ae60, 0x8e44ad, 0xf39c12, 0x34495e, 0xecf0f1, 0x16a085, 0x1b1b1b, 0xe91e63, 0xd4af37];
+const PANT_C = [0x22262e, 0x2c3e50, 0x4a3b2a, 0x5d6d7e, 0x1f3a5f, 0x7a7a7a];
+const LOOK0 = {skin: 1, hair: 0, hc: 0, top: 0, tc: 1, pc: 0, acc: 0};
+const matCache = {};
+const LM = c => matCache[c] || (matCache[c] = new T.MeshLambertMaterial({color: c}));
+function makeCharacter(look) {
+  look = Object.assign({}, LOOK0, look || {});
+  const g = new T.Group();
+  const gold = look.top === 3;
+  const topC = gold ? 0xd4af37 : TOP_C[look.tc] || TOP_C[1], skin = SKIN_C[look.skin] || SKIN_C[1], hair = HAIR_C[look.hc] || HAIR_C[0];
+  const darker = shade(topC, 0.72);
+  const part = (w, h, d, c, x, y, z, parent) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), LM(c)); m.position.set(x, y, z); m.castShadow = true; (parent || g).add(m); return m; };
   const pivot = (x, y) => { const p = new T.Group(); p.position.set(x, y, 0); g.add(p); return p; };
   const legL = pivot(-0.12, 0.9), legR = pivot(0.12, 0.9), armL = pivot(-0.35, 1.48), armR = pivot(0.35, 1.48);
-  part(0.2, 0.84, 0.24, pantsM, 0, -0.42, 0, legL); part(0.2, 0.84, 0.24, pantsM, 0, -0.42, 0, legR);
-  part(0.22, 0.1, 0.32, shoeM, 0, -0.86, 0.04, legL); part(0.22, 0.1, 0.32, shoeM, 0, -0.86, 0.04, legR);
-  part(0.15, 0.6, 0.17, shirtM, 0, -0.3, 0, armL); part(0.15, 0.6, 0.17, shirtM, 0, -0.3, 0, armR);
-  part(0.13, 0.12, 0.14, skinM, 0, -0.66, 0, armL); part(0.13, 0.12, 0.14, skinM, 0, -0.66, 0, armR);
-  part(0.54, 0.64, 0.3, shirtM, 0, 1.2, 0); part(0.3, 0.3, 0.3, skinM, 0, 1.69, 0); part(0.32, 0.1, 0.33, hairM, 0, 1.87, -0.01);
-  part(0.32, 0.18, 0.06, hairM, 0, 1.78, -0.15);
-  part(0.06, 0.05, 0.02, M(0x111111), -0.07, 1.71, 0.155); part(0.06, 0.05, 0.02, M(0x111111), 0.07, 1.71, 0.155);
-  scene.add(g);
-  return {g, legL, legR, armL, armR, shirtM, x: 0, z: 0, y: 0, vy: 0, yaw: 0, ph: 0, sp: 0};
+  const pants = PANT_C[look.pc] || PANT_C[0];
+  for (const L of [legL, legR]) { part(0.2, 0.84, 0.24, pants, 0, -0.42, 0, L); part(0.22, 0.1, 0.32, 0xf0f0f0, 0, -0.86, 0.04, L); }
+  for (const A of [armL, armR]) {
+    if (look.top === 0) { part(0.16, 0.26, 0.18, topC, 0, -0.13, 0, A); part(0.13, 0.36, 0.15, skin, 0, -0.44, 0, A); }
+    else { part(0.16, 0.62, 0.18, look.top === 1 ? darker : topC, 0, -0.31, 0, A); part(0.13, 0.12, 0.14, skin, 0, -0.67, 0, A); }
+  }
+  part(0.54, 0.64, 0.3, topC, 0, 1.2, 0);
+  if (look.top === 1) { part(0.14, 0.62, 0.02, 0xeeeeee, 0, 1.2, 0.155); part(0.56, 0.08, 0.32, darker, 0, 1.5, 0); }
+  if (look.top === 2) { part(0.4, 0.3, 0.12, darker, 0, 1.52, -0.2); part(0.3, 0.14, 0.02, darker, 0, 1.06, 0.155); }
+  if (gold) { part(0.12, 0.6, 0.02, 0x111111, 0, 1.2, 0.155); part(0.04, 0.4, 0.025, 0xb03030, 0, 1.25, 0.16); }
+  part(0.3, 0.3, 0.3, skin, 0, 1.69, 0);
+  part(0.06, 0.05, 0.02, 0x111111, -0.07, 1.71, 0.155); part(0.06, 0.05, 0.02, 0x111111, 0.07, 1.71, 0.155);
+  const hs = look.hair;
+  if (hs === 0) { part(0.32, 0.1, 0.33, hair, 0, 1.87, -0.01); part(0.32, 0.18, 0.06, hair, 0, 1.78, -0.15); }
+  else if (hs === 1) { part(0.33, 0.1, 0.34, hair, 0, 1.87, -0.01); part(0.34, 0.5, 0.08, hair, 0, 1.62, -0.16); part(0.06, 0.32, 0.3, hair, -0.17, 1.72, -0.02); part(0.06, 0.32, 0.3, hair, 0.17, 1.72, -0.02); }
+  else if (hs === 2) { part(0.34, 0.14, 0.34, 0xc0392b, 0, 1.89, 0); part(0.3, 0.04, 0.18, 0xc0392b, 0, 1.83, 0.24); }
+  else if (hs === 4) { part(0.08, 0.2, 0.34, hair, 0, 1.94, -0.01); }
+  else if (hs === 5) { part(0.38, 0.18, 0.38, hair, 0, 1.9, -0.02); part(0.38, 0.22, 0.1, hair, 0, 1.76, -0.16); }
+  if (look.acc === 1 || look.acc === 2) {
+    const c = look.acc === 2 ? 0x0a0a0a : 0x333333;
+    part(0.11, 0.07, 0.02, c, -0.07, 1.71, 0.165); part(0.11, 0.07, 0.02, c, 0.07, 1.71, 0.165); part(0.32, 0.02, 0.02, c, 0, 1.73, 0.165);
+  }
+  if (look.acc === 3) { part(0.3, 0.08, 0.3, 0xffcc33, 0, 1.97 + (hs === 4 || hs === 5 ? 0.06 : 0), 0); for (const x of [-0.11, 0, 0.11]) part(0.05, 0.1, 0.05, 0xffcc33, x, 2.05 + (hs === 4 || hs === 5 ? 0.06 : 0), 0.13); }
+  if (look.acc === 4) { part(0.36, 0.04, 0.04, 0xffcc33, 0, 1.5, 0.16); part(0.08, 0.08, 0.03, 0xffcc33, 0, 1.42, 0.17); }
+  return {g, legL, legR, armL, armR};
+}
+function animChar(c, sp, ph, air) {
+  const sw = Math.sin(ph) * Math.min(1, sp / 3) * 0.75;
+  c.legL.rotation.x = sw; c.legR.rotation.x = -sw; c.armL.rotation.x = -sw * 0.9; c.armR.rotation.x = sw * 0.9;
+  if (air) c.armL.rotation.x = c.armR.rotation.x = -2.6;
+}
+function makePlayer(look) {
+  const ch = makeCharacter(look); scene.add(ch.g);
+  return Object.assign(ch, {x: 0, z: 0, y: 0, vy: 0, yaw: 0, ph: 0, sp: 0});
+}
+function labelSprite(text, vip, bubble) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96; const g = c.getContext('2d');
+  g.font = 'bold 44px sans-serif'; const w = Math.min(500, g.measureText(text).width + 40);
+  g.fillStyle = bubble ? 'rgba(255,255,255,.95)' : 'rgba(0,0,0,.55)';
+  g.beginPath(); g.roundRect ? g.roundRect(256 - w / 2, 10, w, 72, 22) : g.rect(256 - w / 2, 10, w, 72); g.fill();
+  g.fillStyle = bubble ? '#111' : vip ? '#ffd54a' : '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 48, 480);
+  const s = new T.Sprite(new T.SpriteMaterial({map: canvasTex(c), transparent: true, depthWrite: false}));
+  s.scale.set(3.2, 0.6, 1); s.renderOrder = 12; return s;
 }
 
 // ── markerlar, tangalar, strelka ──
@@ -473,7 +518,7 @@ function setup() {
   vehMat = new T.MeshLambertMaterial({vertexColors: true});
   buildGround(); buildBuildings(); buildProps(); buildMarkers(); buildCoins();
   spawnTraffic(); spawnParked(); spawnPeds();
-  player = makePlayer(); player.g.visible = false;
+  player = makePlayer(LOOK0); player.g.visible = false;
   headL = new T.SpotLight(0xfff2cc, 0, 70, 0.6, 0.5, 1); scene.add(headL, headL.target);
   addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 }
@@ -554,7 +599,8 @@ function start() {
   // o'yinchi va uning mashinasi
   const sx = roadC(4) + RD / 2 + 1.0, sz = roadC(4) + 24;
   Object.assign(player, {x: sx, z: sz, y: 0, vy: 0, yaw: Math.PI, sp: 0});
-  player.shirtM.color.setHex(P.vip ? 0xd4af37 : 0x2f6fe0);
+  const st = {x: sx, z: sz, y: 0, vy: 0, yaw: Math.PI, sp: 0};
+  scene.remove(player.g); player = Object.assign(makePlayer(P.look), st);
   player.g.visible = true; cur = null;
   for (const v of vehicles.filter(v => v.own)) removeVehicle(v);
   for (const v of police.slice()) removeVehicle(v);
@@ -567,10 +613,10 @@ function start() {
   coinMesh.visible = true; arrow.visible = true;
   camYaw = Math.PI; camPitch = 0.3; dayT = 0.06;
   toast('🏙 Xush kelibsiz!', 'Mashinangiz yoningizda — yaqinlashib O\'TIRISH ni bosing');
-  engineStart();
+  engineStart(); netStart();
 }
 function stop() {
-  engineStop();
+  engineStop(); netStop();
   if (G) { for (const m of giverMk) m.visible = false; targetMk.visible = false; }
   coinMesh.visible = false; arrow.visible = false; player.g.visible = false;
   if (cur) { cur.ai = 'parked'; cur = null; }
@@ -692,9 +738,7 @@ function updatePlayerFoot(dt) {
   for (const p of peds) if (!p.down && Math.abs(p.x - player.x) < 1 && Math.abs(p.z - player.z) < 1) { const e = {x: player.x, z: player.z}; circleOut(e, p.x, p.z, 0.35, 0.38); player.x = e.x; player.z = e.z; }
   player.sp = Math.hypot(player.vx, player.vz);
   player.ph += player.sp * dt * 2.3;
-  const sw = Math.sin(player.ph) * Math.min(1, player.sp / 3) * 0.75;
-  player.legL.rotation.x = sw; player.legR.rotation.x = -sw; player.armL.rotation.x = -sw * 0.9; player.armR.rotation.x = sw * 0.9;
-  if (player.y > 0) { player.armL.rotation.x = player.armR.rotation.x = -2.6; }
+  animChar(player, player.sp, player.ph, player.y > 0);
   player.g.position.set(player.x, player.y, player.z); player.g.rotation.y = player.yaw;
 }
 function nearestCar() {
@@ -736,6 +780,11 @@ function updateCar(dt) {
         if ((o.ai === 'traffic' || o.ai === 'police') && Math.abs(v.vF || 0) > 7) addWanted(1, o.ai === 'police' ? 'Politsiyaga urildingiz!' : 'Avariya! Politsiya kelyapti');
       }
     }
+  }
+  for (const r of remotes.values()) {
+    if (!r.carT || Math.abs(r.x - v.x) > 7 || Math.abs(r.z - v.z) > 7) continue;
+    const rel = vehPush(v, {x: r.x, z: r.z, L: 4.4, W: 1.9, ai: 'traffic', vx: 0, vz: 0});
+    if (rel > 6 && G.crashCd <= 0) { G.crashCd = 1; G.shake = 0.4; sfx(80, 0.2, 'sawtooth', 0.07); haptic('heavy'); }
   }
   v.mesh.position.set(v.x, 0, v.z); v.mesh.rotation.set(0, v.yaw, 0);
   // kuzov qiyshayishi
@@ -941,6 +990,133 @@ function hud(tgt) {
   drawMinimap(tgt);
 }
 
+// ═════════════ ONLAYN ═════════════
+const PHRASES = ['👋 Salom!', '🏁 Poyga qilamizmi?', '🚗 Ortimdan yur!', '🔥 Zo\'r!', '😂😂😂', '🚓 Politsiya!', '👍 Ha', '👋 Xayr!'];
+const remotes = new Map();
+let net = null, netRetry = 0;
+function netStart() {
+  if (typeof GUEST !== 'undefined' && GUEST) return;
+  netStop();
+  try {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/city');
+    net = {ws, id: null, sendT: 0};
+    ws.onopen = () => ws.send(JSON.stringify({t: 'hello', initData: INIT}));
+    ws.onmessage = e => { try { onNet(JSON.parse(e.data)); } catch (x) {} };
+    ws.onclose = () => {
+      if (!net || net.ws !== ws) return;
+      net = null; clearRemotes();
+      if (G && player.g.visible !== undefined && API.active) netRetry = setTimeout(netStart, 4000);
+    };
+  } catch (e) { net = null; }
+}
+function netStop() {
+  clearTimeout(netRetry);
+  if (net) { const ws = net.ws; net = null; try { ws.close(); } catch (e) {} }
+  clearRemotes();
+}
+function clearRemotes() { for (const id of [...remotes.keys()]) removeRemote(id); }
+function addRemote(p) {
+  if (remotes.has(p.id)) removeRemote(p.id);
+  const ch = makeCharacter(p.look); scene.add(ch.g); ch.g.visible = false;
+  const label = labelSprite((p.vip ? '👑 ' : '') + p.name, p.vip); scene.add(label); label.visible = false;
+  remotes.set(p.id, Object.assign(ch, {id: p.id, name: p.name, vip: p.vip, label, tgt: null, x: 0, z: 0, y: 0, yaw: 0, ph: 0, sp: 0, car: null, carT: '', carC: 0, cyaw: 0, bubble: null, bubbleT: 0}));
+}
+function removeRemote(id) {
+  const r = remotes.get(id); if (!r) return;
+  scene.remove(r.g); scene.remove(r.label); if (r.car) scene.remove(r.car); if (r.bubble) scene.remove(r.bubble);
+  remotes.delete(id);
+}
+function showBubble(r, text) {
+  if (r.bubble) scene.remove(r.bubble);
+  r.bubble = labelSprite(text, false, true); r.bubbleT = 4; scene.add(r.bubble);
+}
+function onNet(m) {
+  if (m.t === 'welcome') { net.id = m.id; for (const p of m.players) addRemote(p); }
+  else if (m.t === 'j') { addRemote(m); toast('👋 ' + m.name, 'shaharga keldi'); }
+  else if (m.t === 'l') { removeRemote(m.id); }
+  else if (m.t === 'w') {
+    for (const row of m.p) {
+      if (row[0] === net.id) continue;
+      const r = remotes.get(row[0]); if (!r) continue;
+      const first = !r.tgt; r.tgt = row;
+      if (first) { r.x = row[1]; r.z = row[2]; r.yaw = row[4]; r.cyaw = row[8]; }
+    }
+  } else if (m.t === 'c') {
+    const text = PHRASES[m.m] || '';
+    if (m.id === net.id) showBubble(meBubble, text);
+    else { const r = remotes.get(m.id); if (r) { showBubble(r, text); chatFeed(r.name + ': ' + text); } }
+  }
+}
+const meBubble = {bubble: null, bubbleT: 0};
+function chatFeed(t) {
+  const el = $('chatfeed'); if (!el) return;
+  const d = document.createElement('div'); d.textContent = t; el.appendChild(d);
+  while (el.children.length > 3) el.removeChild(el.firstChild);
+  setTimeout(() => d.remove(), 6000);
+}
+function updateNet(dt) {
+  if (net && net.id !== null && net.ws.readyState === 1) {
+    net.sendT -= dt;
+    if (net.sendT <= 0) {
+      net.sendT = 0.1;
+      const p = cur ? [cur.x, cur.z, 0, cur.yaw, Math.abs(cur.vF || 0), cur.type, cur.color, cur.yaw] : [player.x, player.z, player.y, player.yaw, player.sp, '', 0, 0];
+      net.ws.send(JSON.stringify({t: 's', p: p.map(v => typeof v === 'number' ? Math.round(v * 100) / 100 : v)}));
+    }
+  }
+  const k = 1 - Math.exp(-10 * dt), me = pos();
+  for (const r of remotes.values()) {
+    if (!r.tgt) continue;
+    const [, x, z, y, yaw, sp, ct, cc, cy] = r.tgt;
+    r.x += (x - r.x) * k; r.z += (z - r.z) * k; r.y += (y - r.y) * k; r.yaw += ad(yaw, r.yaw) * k; r.cyaw += ad(cy, r.cyaw) * k; r.sp = sp;
+    if (ct !== r.carT || cc !== r.carC) {
+      if (r.car) { scene.remove(r.car); r.car = null; }
+      r.carT = ct; r.carC = cc;
+      if (ct && VT[ct]) { r.car = new T.Mesh(carGeometry(ct, cc), vehMat); r.car.castShadow = QUALITY > 0; scene.add(r.car); }
+    }
+    const far = Math.hypot(r.x - me.x, r.z - me.z) > 160;
+    if (r.car) { r.car.visible = !far; r.car.position.set(r.x, 0, r.z); r.car.rotation.y = r.cyaw; r.g.visible = false; }
+    else { r.g.visible = !far; r.g.position.set(r.x, r.y, r.z); r.g.rotation.y = r.yaw; r.ph += sp * dt * 2.3; animChar(r, sp, r.ph, r.y > 0.05); }
+    const ly = r.car ? 2.9 : 2.45 + r.y;
+    r.label.visible = Math.hypot(r.x - me.x, r.z - me.z) < 70; r.label.position.set(r.x, ly, r.z);
+    if (r.bubble) { r.bubbleT -= dt; r.bubble.position.set(r.x, ly + 0.75, r.z); if (r.bubbleT <= 0) { scene.remove(r.bubble); r.bubble = null; } }
+  }
+  if (meBubble.bubble) {
+    meBubble.bubbleT -= dt; meBubble.bubble.position.set(me.x, (cur ? 3.6 : 3.1 + player.y), me.z);
+    if (meBubble.bubbleT <= 0) { scene.remove(meBubble.bubble); meBubble.bubble = null; }
+  }
+  const on = $('h-online');
+  if (on) { on.classList.toggle('hide', !net); on.textContent = '👥 ' + (remotes.size + 1); }
+}
+
+// ── personaj ko'rinishi (garderob oynasi uchun) ──
+let pv = null;
+function preview(canvas, look) {
+  if (!pv) {
+    const r = new T.WebGLRenderer({canvas, antialias: true, alpha: true});
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const sc = new T.Scene(), cam = new T.PerspectiveCamera(32, 1, 0.1, 50);
+    cam.position.set(0, 1.4, 5.2); cam.lookAt(0, 1.05, 0);
+    sc.add(new T.HemisphereLight(0xffffff, 0x445566, 0.9));
+    const dl = new T.DirectionalLight(0xffffff, 0.8); dl.position.set(2, 4, 3); sc.add(dl);
+    const base = new T.Mesh(new T.CylinderGeometry(0.9, 0.9, 0.06, 32), new T.MeshLambertMaterial({color: 0x2a3140})); base.position.y = -0.03; sc.add(base);
+    pv = {r, sc, cam, ch: null, raf: 0, ang: 0.4, canvas};
+  }
+  if (pv.canvas !== canvas) { pv.r.forceContextLoss(); pv.r.dispose(); pv = null; return preview(canvas, look); }
+  const w = canvas.clientWidth || 200, h = canvas.clientHeight || 200;
+  pv.r.setSize(w, h, false); pv.cam.aspect = w / h; pv.cam.updateProjectionMatrix();
+  if (pv.ch) pv.sc.remove(pv.ch.g);
+  pv.ch = makeCharacter(look); pv.sc.add(pv.ch.g);
+  cancelAnimationFrame(pv.raf);
+  let ph = 0;
+  const loop = () => {
+    if (!document.body.contains(canvas)) { pv.raf = 0; return; }
+    pv.ang += 0.012; ph += 0.09; pv.ch.g.rotation.y = pv.ang;
+    animChar(pv.ch, 1.2, ph, false);
+    pv.r.render(pv.sc, pv.cam); pv.raf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+
 // ═════════════ API ═════════════
 const API = {
   ok: false, mapImg: null,
@@ -948,8 +1124,10 @@ const API = {
     try { setup(); API.ok = true; } catch (e) { console.error('3D init', e); API.ok = false; }
     return API.ok;
   },
-  start() { lastCtx = ''; start(); },
-  stop,
+  start() { lastCtx = ''; API.active = true; start(); },
+  phrases: PHRASES, preview, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
+  chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
+  stop() { API.active = false; stop(); },
   stats() { return {missions: G ? G.missions : 0, pickups: G ? G.pickups : 0}; },
   coins: sessionCoins,
   quality() { return QUALITY; },
@@ -965,6 +1143,7 @@ const API = {
     const tgt = updateWorldObjs(dt);
     const me = pos(); updateDay(dt, me.x, me.z);
     updateCamera(dt, false);
+    updateNet(dt);
     hud(tgt);
   },
   render(menu, dt) {
