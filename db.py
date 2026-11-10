@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS topups(
   status TEXT DEFAULT 'waiting',    -- waiting | checking | ok | rejected
   receipt_file TEXT, created INTEGER
 );
+CREATE TABLE IF NOT EXISTS game_profiles(
+  user_id INTEGER PRIMARY KEY, coins INTEGER DEFAULT 0, xp INTEGER DEFAULT 0,
+  data TEXT DEFAULT '{}',            -- JSON: upgrades, cars, car
+  vip_until INTEGER DEFAULT 0, last_daily INTEGER DEFAULT 0,
+  games INTEGER DEFAULT 0, wins INTEGER DEFAULT 0, created INTEGER
+);
+CREATE TABLE IF NOT EXISTS game_payments(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount INTEGER, days INTEGER, created INTEGER
+);
 """
 
 # Eski bazaga yangi ustunlar qo'shish
@@ -259,4 +268,53 @@ def stats():
         "balances": one("SELECT COALESCE(SUM(balance),0) v FROM users"),
         "topped": one("SELECT COALESCE(SUM(amount),0) v FROM topups WHERE status='ok'"),
         "revenue": one("SELECT COALESCE(SUM(price),0) v FROM orders WHERE status NOT IN ('cancelled')"),
+        "players": one("SELECT COUNT(*) v FROM game_profiles"),
+        "vip_active": one(f"SELECT COUNT(*) v FROM game_profiles WHERE vip_until>{int(time.time())}"),
+        "game_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments"),
     }
+
+
+# ── o'yin (Shahar Arena) ──
+def game_profile(uid):
+    _exec("INSERT OR IGNORE INTO game_profiles(user_id,created) VALUES(?,?)", (uid, int(time.time())))
+    return _one("SELECT * FROM game_profiles WHERE user_id=?", (uid,))
+
+
+def game_save(uid, **f):
+    _exec(f"UPDATE game_profiles SET {', '.join(k + '=?' for k in f)} WHERE user_id=?", (*f.values(), uid))
+
+
+def game_add(uid, coins=0, xp=0, games=0, wins=0):
+    _exec("UPDATE game_profiles SET coins=coins+?, xp=xp+?, games=games+?, wins=wins+? WHERE user_id=?",
+          (coins, xp, games, wins, uid))
+
+
+def game_spend(uid, coins, data_json):
+    """Tangani yechib, data ni saqlaydi. Yetmasa False."""
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        cur = c.execute("UPDATE game_profiles SET coins=coins-?, data=? WHERE user_id=? AND coins>=?",
+                        (coins, data_json, uid, coins))
+        return cur.rowcount == 1
+
+
+def game_buy_vip(uid, price, days):
+    """Bot balansidan VIP obuna. (yangi vip_until, xato) qaytaradi."""
+    now = int(time.time())
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        c.execute("INSERT OR IGNORE INTO game_profiles(user_id,created) VALUES(?,?)", (uid, now))
+        bal = c.execute("SELECT balance FROM users WHERE id=?", (uid,)).fetchone()
+        if not bal or bal["balance"] < price:
+            return None, "Balans yetarli emas"
+        c.execute("UPDATE users SET balance=balance-? WHERE id=?", (price, uid))
+        cur = c.execute("SELECT vip_until FROM game_profiles WHERE user_id=?", (uid,)).fetchone()["vip_until"]
+        until = max(now, cur or 0) + days * 86400
+        c.execute("UPDATE game_profiles SET vip_until=? WHERE user_id=?", (until, uid))
+        c.execute("INSERT INTO game_payments(user_id,amount,days,created) VALUES(?,?,?,?)", (uid, price, days, now))
+        return until, None
+
+
+def game_top(limit=30):
+    return _all("SELECT g.xp, g.wins, g.games, g.vip_until, u.username, u.full_name FROM game_profiles g "
+                "LEFT JOIN users u ON u.id=g.user_id ORDER BY g.xp DESC LIMIT ?", (limit,))

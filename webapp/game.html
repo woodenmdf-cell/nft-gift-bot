@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Shahar Arena</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{--bg:#0b0d12;--bg2:#161a22;--bg3:#202633;--line:#2a3140;--text:#f4f5f7;--hint:#8d95a5;
+        --acc:#ff4d2e;--gold:#f5c542;--ok:#34c759;--blue:#3b82f6}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,Roboto,sans-serif;font-size:15px;touch-action:none}
+  button{font:inherit;cursor:pointer;border:0;color:inherit}
+  canvas{position:fixed;inset:0;display:block}
+  #gl{display:none}
+  #touch{position:fixed;inset:0;z-index:2;touch-action:none}
+  #mm{position:absolute;inset:auto;right:10px;top:calc(56px + env(safe-area-inset-top));width:120px;height:120px}
+  #h-dist{position:absolute;right:10px;top:calc(180px + env(safe-area-inset-top));width:120px;text-align:center;font-size:11px;font-weight:800;text-shadow:0 1px 4px #000}
+  #nitro{position:absolute;left:16px;bottom:calc(150px + env(safe-area-inset-bottom));width:130px;height:10px;background:#0008;border-radius:6px}
+  #nitro i{display:block;height:100%;background:linear-gradient(90deg,#4fc3ff,#b388ff);border-radius:6px}
+  #nitro span{position:absolute;top:-15px;left:0;font-size:10px;font-weight:800}
+  #bust{position:absolute;top:28%;left:50%;transform:translateX(-50%);color:#ff3b30;font-weight:900;font-size:18px;text-shadow:0 2px 8px #000;white-space:nowrap}
+  .chatb{position:absolute;left:8px;top:calc(52px + env(safe-area-inset-top))}
+  .radiob{position:absolute;left:52px;top:calc(52px + env(safe-area-inset-top))}
+  .btn.hb{position:absolute;right:24px;bottom:calc(122px + env(safe-area-inset-bottom));width:56px;height:56px;pointer-events:auto}
+  #chatpick{position:absolute;left:8px;top:calc(94px + env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px;pointer-events:auto;z-index:4}
+  #chatpick button{background:#000c;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;text-align:left}
+  #count{position:absolute;top:19%;left:50%;transform:translate(-50%,-50%);font-size:96px;font-weight:900;color:#fff;text-shadow:0 4px 20px #000,0 0 30px #b388ff}
+  #raceinv{position:absolute;top:calc(100px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#1b1530ee;border:1px solid #b388ff88;border-radius:16px;padding:12px;width:min(320px,90%);pointer-events:auto;text-align:center;font-weight:700}
+  #raceinv .r{display:flex;gap:8px;margin-top:10px}#raceinv button{flex:1;border-radius:11px;padding:10px;font-weight:800;background:#34c759}#raceinv button.n{background:#3a3f4b}
+  #chatpick .rb{background:#5b3fb8cc}
+  #chatfeed{position:absolute;left:8px;bottom:calc(175px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;max-width:60%}
+  #chatfeed div{background:#000a;border-radius:10px;padding:5px 9px;font-size:12px;font-weight:600}
+  .lk h4{color:var(--hint);font-size:12px;font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:.5px}
+  .opts{display:flex;flex-wrap:wrap;gap:6px}
+  .opt{background:var(--bg);border:2px solid var(--line);border-radius:11px;padding:7px 10px;font-size:13px;font-weight:700;position:relative}
+  .opt.on{border-color:var(--acc)}
+  .opt small{display:block;font-size:10px;color:var(--gold);font-weight:800}
+  .sw{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);position:relative}
+  .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--acc)}
+  .sw i{position:absolute;top:-6px;right:-8px;font-size:12px;font-style:normal}
+  #pvc{position:static;width:100%;height:220px;display:block;border-radius:16px;background:radial-gradient(circle at 50% 40%,#2b3446,#141820)}
+  .btn.e{width:68px;height:68px;background:#34c75988;border-color:#7ee49a;align-self:center}
+  .hide{display:none!important}
+  /* MENU */
+  #menu{position:fixed;inset:0;overflow:auto;padding:14px 16px calc(20px + env(safe-area-inset-bottom));
+        background:linear-gradient(180deg,#0b0d12ee 0%,#0b0d12aa 45%,#0b0d12f2 100%);z-index:5;touch-action:pan-y}
+  .top{display:flex;align-items:center;gap:10px}
+  .lvl{width:46px;height:46px;border-radius:14px;background:var(--bg3);display:grid;place-items:center;font-weight:800;font-size:18px;border:2px solid var(--line);position:relative}
+  .lvl.vip{border-color:var(--gold);color:var(--gold)}
+  .who{flex:1;min-width:0}.who b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .xpbar{height:6px;background:var(--bg3);border-radius:4px;margin-top:5px;overflow:hidden}.xpbar i{display:block;height:100%;background:var(--blue);border-radius:4px}
+  .who small{color:var(--hint);font-size:11px}
+  .coins{background:var(--bg2);border:1px solid var(--line);border-radius:20px;padding:7px 12px;font-weight:800;display:flex;gap:5px;align-items:center}
+  .logo{text-align:center;margin:26px 0 6px;font-size:34px;font-weight:900;letter-spacing:-1px;line-height:1}
+  .logo span{color:var(--acc)}
+  .sub{text-align:center;color:var(--hint);font-size:13px;margin-bottom:18px}
+  .modes{display:grid;gap:12px}
+  .mode{border-radius:20px;padding:18px;text-align:left;position:relative;overflow:hidden;min-height:170px;display:flex;flex-direction:column;justify-content:flex-end}
+  .mode b{font-size:22px;font-weight:900;position:relative}.mode p{font-size:13px;opacity:.85;margin-top:3px;position:relative;max-width:75%}
+  .mode .ico{position:absolute;right:12px;top:8px;font-size:64px;opacity:.9}
+  .m-city{background:linear-gradient(135deg,#ff5a36,#c2185b)}
+  .mode:active{transform:scale(.98)}
+  .row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .tile{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600}
+  .tile span{font-size:24px}
+  .tile.vipt{border-color:#f5c54266;background:linear-gradient(180deg,#2b2412,#161a22)}
+  .daily{margin-top:12px;width:100%;border-radius:16px;padding:13px;font-weight:800;background:var(--bg2);border:1px dashed var(--gold);color:var(--gold)}
+  .daily:disabled{opacity:.55;border-color:var(--line);color:var(--hint)}
+  .warn{background:#2a1e10;border:1px solid #4a3416;color:#f5b041;border-radius:12px;padding:10px 12px;font-size:12px;margin-top:12px;text-align:center}
+  .vipbar{margin-top:12px;border-radius:16px;padding:12px 14px;background:linear-gradient(90deg,#3a2a06,#1f1a0c);border:1px solid #f5c54255;display:flex;align-items:center;gap:10px;font-size:13px}
+  .vipbar b{color:var(--gold)}
+  /* HUD */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:3}
+  .hbar{position:absolute;top:calc(8px + env(safe-area-inset-top));left:8px;right:8px;display:flex;gap:6px;align-items:flex-start}
+  .chip{background:#000a;border-radius:12px;padding:6px 10px;font-weight:800;font-size:14px;backdrop-filter:blur(6px)}
+  .x{pointer-events:auto;width:36px;height:36px;border-radius:12px;background:#000a;font-size:16px;flex:none}
+  #stars{color:#555;letter-spacing:1px}#stars b{color:var(--gold)}
+  #mission{position:absolute;top:calc(52px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:8px 14px;font-weight:700;font-size:14px;text-align:center;white-space:nowrap}
+  #mission small{display:block;color:var(--gold);font-size:12px}
+  #toast{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%);font-weight:900;font-size:26px;text-align:center;text-shadow:0 3px 12px #000;opacity:0;transition:opacity .25s;white-space:nowrap}
+  #toast.on{opacity:1}#toast small{display:block;font-size:14px;font-weight:700}
+  .btns{position:absolute;right:14px;bottom:calc(22px + env(safe-area-inset-bottom));display:flex;gap:14px;align-items:flex-end;pointer-events:auto}
+  .btn{width:76px;height:76px;border-radius:50%;font-weight:900;font-size:12px;display:grid;place-items:center;background:#ffffff22;border:2px solid #ffffff55;backdrop-filter:blur(4px);touch-action:none}
+  .btn span{font-size:24px;display:block;line-height:1}
+  .btn.a{width:88px;height:88px;background:#ff4d2e88;border-color:#ff8a70}
+  .btn.on{transform:scale(.92);filter:brightness(1.4)}
+  #joy{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid #ffffff44;background:#ffffff11;transform:translate(-50%,-50%);display:none}
+  #joy i{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:#ffffff66}
+  .hint{position:absolute;left:16px;bottom:calc(120px + env(safe-area-inset-bottom));max-width:52%;color:#fffa;font-size:12px;font-weight:600;text-shadow:0 1px 4px #000}
+  /* SHEET */
+  #sheet{position:fixed;inset:0;background:#000a;z-index:10;display:flex;align-items:flex-end}
+  .sh{background:var(--bg2);width:100%;max-height:86%;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));touch-action:pan-y}
+  .sh h3{font-size:20px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .sh h3 button{background:var(--bg3);width:32px;height:32px;border-radius:50%;font-size:14px}
+  .tabs{display:flex;background:var(--bg);border-radius:12px;padding:3px;margin-bottom:12px}
+  .tabs button{flex:1;padding:9px;border-radius:9px;background:none;color:var(--hint);font-weight:700}
+  .tabs button.on{background:var(--text);color:#000}
+  .it{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:11px 12px;margin-bottom:8px}
+  .it .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:24px;background:var(--bg3);flex:none}
+  .it .tx{flex:1;min-width:0}.it .tx b{display:block}.it .tx small{color:var(--hint);font-size:12px}
+  .dots{display:flex;gap:3px;margin-top:5px}.dots i{width:16px;height:5px;border-radius:3px;background:var(--bg3)}.dots i.f{background:var(--blue)}
+  .buy{background:var(--acc);border-radius:11px;padding:8px 12px;font-weight:800;font-size:13px;white-space:nowrap}
+  .buy.g{background:var(--bg3);color:var(--hint)}.buy.ok{background:var(--ok)}.buy.gold{background:var(--gold);color:#000}
+  .big{width:100%;border-radius:15px;padding:15px;font-weight:900;font-size:16px;background:var(--gold);color:#000;margin-top:10px}
+  .big.s{background:var(--bg3);color:var(--text);font-weight:700}
+  .perk{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}.perk span{font-size:22px;width:30px;text-align:center}
+  .price{text-align:center;margin:14px 0 2px;font-size:30px;font-weight:900}.price small{font-size:14px;color:var(--hint);font-weight:600}
+  .lb{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+  .lb .n{width:26px;text-align:center;font-weight:800;color:var(--hint)}.lb .nm{flex:1;font-weight:600}.lb .v{font-weight:800}
+  /* RESULT */
+  #result{position:fixed;inset:0;z-index:8;background:#000c;display:grid;place-items:center;padding:20px}
+  .res{background:var(--bg2);border-radius:24px;padding:22px 18px;width:100%;max-width:380px;text-align:center}
+  .res h2{font-size:28px;font-weight:900}.res .st{color:var(--hint);margin:6px 0 14px}
+  .gain{display:flex;justify-content:center;gap:12px;margin:10px 0}
+  .gain div{background:var(--bg);border-radius:14px;padding:10px 14px;min-width:96px}.gain b{display:block;font-size:22px}.gain small{color:var(--hint);font-size:12px}
+  .ups{background:linear-gradient(90deg,#3a2a06,#1f1a0c);border:1px solid #f5c54255;border-radius:14px;padding:10px;font-size:13px;margin-top:8px}
+  .ups b{color:var(--gold)}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;z-index:20;background:var(--bg);font-weight:800;font-size:20px}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="touch"></div>
+
+<div id="menu">
+  <div class="top">
+    <div class="lvl" id="m-lvl">1</div>
+    <div class="who"><b id="m-name">O'yinchi</b><div class="xpbar"><i id="m-xp" style="width:0"></i></div><small id="m-xpt"></small></div>
+    <div class="coins">🪙 <span id="m-coins">0</span></div>
+  </div>
+  <div class="logo">SHAHAR <span>ARENA</span></div>
+  <div class="sub">3D shahar · Mashinalar · Politsiya · Onlayn</div>
+  <div class="modes">
+    <button class="mode m-city" onclick="startGame()"><div class="ico">🏙</div><b>▶ O'YNASH</b><p>3D ochiq shahar: piyoda yur, istalgan mashinaga o'tir, topshiriqlar bajar, politsiyadan qoch, do'stlar bilan birga o'yna</p></button>
+  </div>
+  <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
+  <div class="row" style="grid-template-columns:repeat(4,1fr)">
+    <button class="tile" onclick="openLook()"><span>🧍</span>Personaj</button>
+    <button class="tile" onclick="openGarage()"><span>🛠</span>Garaj</button>
+    <button class="tile vipt" onclick="openVip()"><span>👑</span>VIP</button>
+    <button class="tile" onclick="openTop()"><span>🏆</span>Reyting</button>
+  </div>
+  <div class="vipbar" id="m-vipbar" onclick="openVip()"></div>
+  <div class="warn hide" id="m-guest">Mehmon rejimi: natijalar saqlanmaydi. Tanga yig'ish uchun o'yinni Telegram botdan oching.</div>
+  <div class="row">
+    <button class="tile" id="m-sound" onclick="toggleSound()"><span>🔊</span>Ovoz</button>
+    <button class="tile" id="m-q" onclick="City3D.setQuality(City3D.quality() > 0 ? 0 : 1)"><span>✨</span>Grafika</button>
+    <button class="tile" onclick="location.href='/'"><span>🎁</span>NFT Bozor</button>
+  </div>
+</div>
+
+<div id="hud" class="hide">
+  <div class="hbar">
+    <button class="x" onclick="askExit()">✕</button>
+    <div class="chip">🪙 <span id="h-coins">0</span></div>
+    <div class="chip" id="stars"></div>
+    <div style="flex:1"></div>
+    <div class="chip hide" id="h-online"></div>
+    <div class="chip" id="h-clock"></div>
+    <div class="chip" id="h-speed"></div>
+  </div>
+  <canvas id="mm" width="240" height="240"></canvas>
+  <div id="h-dist"></div>
+  <div id="nitro" class="hide"><i></i><span>NITRO</span></div>
+  <div id="bust" class="hide">🚓 Politsiya yaqin — qoching!</div>
+  <div id="mission" class="hide"></div>
+  <button class="x chatb hide" id="h-chat" onclick="toggleChat()">💬</button>
+  <button class="x radiob hide" id="h-radio" onclick="City3D.radioNext()">📻</button>
+  <button class="btn hb hide" id="bH"><div><span>📯</span></div></button>
+  <div id="chatpick" class="hide"></div>
+  <div id="chatfeed"></div>
+  <div id="count" class="hide"></div>
+  <div id="raceinv" class="hide"></div>
+  <div id="toast"></div>
+  <div id="joy"><i></i></div>
+  <div class="hint" id="h-hint">Chap tomon — yurish/haydash · O'ng tomonni suring — kamerani aylantirish</div>
+  <div class="btns">
+    <button class="btn e hide" id="bE"><div><span>🚗</span><em id="lE">O'TIRISH</em></div></button>
+    <button class="btn" id="bB"><div><span>🛑</span><em id="lB">TORMOZ</em></div></button>
+    <button class="btn a" id="bA"><div><span>🔥</span><em id="lA">NITRO</em></div></button>
+  </div>
+</div>
+
+<div id="result" class="hide"><div class="res" id="res"></div></div>
+<div id="sheet" class="hide" onclick="if(event.target===this)closeSheet()"><div class="sh" id="sh"></div></div>
+<div id="loading">Yuklanmoqda…</div>
+
+<script src="/three.min.js"></script>
+<script src="/city3d.js"></script>
+<script>
+'use strict';
+// ═════════════ ASOS ═════════════
+const tg = window.Telegram && window.Telegram.WebApp;
+try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); tg.setHeaderColor && tg.setHeaderColor('#0b0d12'); } catch (e) {}
+const INIT = (tg && tg.initData) || '';
+const GUEST = !INIT;
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function haptic(t) { try { tg.HapticFeedback.impactOccurred(t || 'light'); } catch (e) {} }
+
+async function api(path, body) {
+  try {
+    const r = await fetch('/api/game/' + path, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({}, body || {}, {initData: INIT}))});
+    return await r.json();
+  } catch (e) { return {ok: false, error: 'Aloqa xatosi'}; }
+}
+function alertMsg(t) { try { tg.showAlert(t); } catch (e) { alert(t); } }
+function confirmMsg(t) { return new Promise(res => { try { tg.showConfirm(t, res); } catch (e) { res(confirm(t)); } }); }
+
+let P = {coins: 0, xp: 0, level: 1, next_xp: 100, games: 0, wins: 0, vip: false, vip_until: 0, daily_in: 0,
+         up: {}, cars: ['sedan'], car: 'sedan', balance: 0};
+let SHOP = null;
+
+// ovoz
+let AC = null, SOUND = true;
+try { SOUND = localStorage.getItem('sa_sound') !== '0'; } catch (e) {}
+function sfx(f, d, type, vol) {
+  if (!SOUND) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || 'square'; o.frequency.value = f; g.gain.value = vol || 0.04;
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + (d || 0.08));
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + (d || 0.08));
+  } catch (e) {}
+}
+function toggleSound() { SOUND = !SOUND; try { localStorage.setItem('sa_sound', SOUND ? '1' : '0'); } catch (e) {} renderMenu(); }
+
+// ekran o'lchami
+let W = 0, H = 0;
+function resize() { W = innerWidth; H = innerHeight; }
+addEventListener('resize', resize); resize();
+
+// ═════════════ BOSHQARUV ═════════════
+const input = {jx: 0, jy: 0, a: false, b: false, e: false, h: false, aHit: false, bHit: false, eHit: false, hHit: false, dragX: 0, dragY: 0};
+const keys = {};
+let joyId = null, jx0 = 0, jy0 = 0;
+const JR = 55;
+function joyShow(x, y) { const j = $('joy'); j.style.display = 'block'; j.style.left = x + 'px'; j.style.top = y + 'px'; $('h-hint').classList.add('hide'); }
+function joyKnob(dx, dy) { $('joy').firstElementChild.style.transform = `translate(${dx}px,${dy}px)`; }
+// Sensor qatlami: chap tomonda joystik, o'ng tomonda kamerani aylantirish
+const touch = $('touch');
+let camId = null, cx0 = 0, cy0 = 0;
+touch.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) {
+    if (joyId === null && t.clientX < W * 0.45) { joyId = t.identifier; jx0 = t.clientX; jy0 = t.clientY; joyShow(jx0, jy0); joyKnob(0, 0); }
+    else if (camId === null && mode === 'city') { camId = t.identifier; cx0 = t.clientX; cy0 = t.clientY; }
+  }
+  e.preventDefault();
+}, {passive: false});
+touch.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) {
+      let dx = t.clientX - jx0, dy = t.clientY - jy0; const l = Math.hypot(dx, dy);
+      if (l > JR) { dx *= JR / l; dy *= JR / l; }
+      input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy);
+    } else if (t.identifier === camId) {
+      input.dragX += t.clientX - cx0; input.dragY += t.clientY - cy0; cx0 = t.clientX; cy0 = t.clientY;
+    }
+  }
+  e.preventDefault();
+}, {passive: false});
+const joyEnd = e => { for (const t of e.changedTouches) { if (t.identifier === joyId) { joyId = null; input.jx = input.jy = 0; $('joy').style.display = 'none'; } if (t.identifier === camId) camId = null; } };
+touch.addEventListener('touchend', joyEnd); touch.addEventListener('touchcancel', joyEnd);
+// sichqoncha (kompyuter): chapda joystik, o'ngda kamera
+let mouseDown = 0;
+touch.addEventListener('mousedown', e => {
+  if (e.clientX < W * 0.45) { mouseDown = 1; jx0 = e.clientX; jy0 = e.clientY; joyShow(jx0, jy0); }
+  else { mouseDown = 2; cx0 = e.clientX; cy0 = e.clientY; }
+});
+addEventListener('mousemove', e => {
+  if (mouseDown === 1) { let dx = e.clientX - jx0, dy = e.clientY - jy0; const l = Math.hypot(dx, dy); if (l > JR) { dx *= JR / l; dy *= JR / l; } input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy); }
+  else if (mouseDown === 2) { input.dragX += e.clientX - cx0; input.dragY += e.clientY - cy0; cx0 = e.clientX; cy0 = e.clientY; }
+});
+addEventListener('mouseup', () => { if (mouseDown === 1) { input.jx = input.jy = 0; $('joy').style.display = 'none'; } mouseDown = 0; });
+
+function bindBtn(el, k) {
+  const on = e => { e.preventDefault(); if (!input[k]) input[k + 'Hit'] = true; input[k] = true; el.classList.add('on'); };
+  const off = e => { e.preventDefault(); input[k] = false; el.classList.remove('on'); };
+  el.addEventListener('touchstart', on, {passive: false}); el.addEventListener('touchend', off); el.addEventListener('touchcancel', off);
+  el.addEventListener('mousedown', on); el.addEventListener('mouseup', off); el.addEventListener('mouseleave', off);
+}
+bindBtn($('bA'), 'a'); bindBtn($('bB'), 'b'); bindBtn($('bE'), 'e'); bindBtn($('bH'), 'h');
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' || e.code === 'KeyJ') { if (!input.a) input.aHit = true; input.a = true; }
+  if (e.code === 'ShiftLeft' || e.code === 'KeyK') { if (!input.b) input.bHit = true; input.b = true; }
+  if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') { if (!input.e) input.eHit = true; input.e = true; }
+  if (e.code === 'KeyH') { if (!input.h) input.hHit = true; input.h = true; }
+  if (e.code === 'KeyR' && mode === 'city') City3D.radioNext();
+  if (e.code === 'Escape' && mode !== 'menu') askExit();
+});
+addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Space' || e.code === 'KeyJ') input.a = false;
+  if (e.code === 'ShiftLeft' || e.code === 'KeyK') input.b = false;
+  if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') input.e = false;
+  if (e.code === 'KeyH') input.h = false;
+});
+function getMove() {
+  let x = input.jx, y = input.jy;
+  const kx = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
+  const ky = (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW ? 1 : 0);
+  if (kx || ky) { const l = Math.hypot(kx, ky); x = kx / l; y = ky / l; }
+  const mag = Math.min(1, Math.hypot(x, y));
+  return {x, y, mag};
+}
+
+// ═════════════ SHAHAR (3D — city3d.js) ═════════════
+const CAR_STATS = {
+  sedan: {max: 250, acc: 230, turn: 2.7, color: '#4a90e2', ico: '🚗'},
+  taxi:  {max: 272, acc: 260, turn: 2.9, color: '#f5c518', ico: '🚕'},
+  suv:   {max: 265, acc: 245, turn: 2.5, color: '#2e7d4f', ico: '🚙', heavy: true},
+  sport: {max: 325, acc: 335, turn: 3.1, color: '#e53935', ico: '🏎'},
+  super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', ico: '👑'},
+};
+const MISSION_COINS = 60, PICKUP_COINS = 3;
+
+// ═════════════ O'YIN OQIMI ═════════════
+let mode = 'menu', sid = null, paused = false;
+let toastT = null;
+function toast(t, s) {
+  const el = $('toast'); el.innerHTML = esc(t) + (s ? `<small>${esc(s)}</small>` : ''); el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1700);
+}
+async function startGame() {
+  if (!City3D.ok) return alertMsg('Qurilmangiz 3D grafikani qo\'llab-quvvatlamaydi. Menyuda «Grafika: tezkor» ni tanlab qayta urinib ko\'ring.');
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume && AC.resume(); } catch (e) {}
+  sid = null;
+  if (!GUEST) { const r = await api('start', {mode: 'city'}); if (r.ok) sid = r.sid; }
+  mode = 'city'; paused = false;
+  input.a = input.b = input.e = false; input.jx = input.jy = input.dragX = input.dragY = 0;
+  $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
+  $('h-chat').classList.toggle('hide', GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide');
+  $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide'); $('count').classList.add('hide'); $('raceinv').classList.add('hide');
+  City3D.start();
+  setTimeout(() => $('h-hint').classList.add('hide'), 7000);
+  try { tg.BackButton.show(); } catch (e) {}
+}
+async function askExit() {
+  if (mode !== 'city') return;
+  paused = true;
+  const rq = City3D.racing() ? '\nPoyga davom etmoqda — chiqsangiz poyga bekor bo\'ladi.' : '';
+  if (await confirmMsg(`O'yinni tugatib ${fmt(City3D.coins())} tangani olasizmi?${rq}`)) endGame(); else paused = false;
+}
+async function endGame() {
+  mode = 'result';
+  $('hud').classList.add('hide'); $('joy').style.display = 'none';
+  try { tg.BackButton.hide(); } catch (e) {}
+  const body = City3D.stats();
+  City3D.stop();
+  const title = '🏙 Sayohat tugadi', sub = `Topshiriqlar: ${body.missions} · Tangalar: ${body.pickups}`;
+  let coins = 0, xp = 0, lvlUp = false;
+  $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div><div class="st">Saqlanmoqda…</div>`;
+  $('result').classList.remove('hide');
+  if (!GUEST && sid) {
+    const r = await api('reward', Object.assign({sid}, body));
+    if (r.ok) { coins = r.coins; xp = r.xp; lvlUp = r.level_up; P = r.profile; }
+  }
+  const lost = !P.vip && coins > 0 ? coins : 0;
+  $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div>
+    <div class="gain"><div><b>🪙 +${fmt(coins)}</b><small>tanga</small></div><div><b>⭐ +${fmt(xp)}</b><small>tajriba</small></div></div>
+    ${lvlUp ? `<div class="ups" style="background:#123a1c;border-color:#34c75955">🎉 Yangi daraja: <b style="color:#34c759">${P.level}</b></div>` : ''}
+    ${GUEST ? '<div class="warn">Mehmon rejimi — natija saqlanmadi. O\'yinni botdan oching.</div>' : ''}
+    ${lost ? `<div class="ups" onclick="openVip()">👑 VIP bilan yana <b>+${fmt(lost)}</b> tanga olardingiz</div>` : ''}
+    <button class="big" onclick="startGame()">🔄 Yana o'ynash</button>
+    <button class="big s" onclick="toMenu()">Menyu</button>`;
+}
+function toMenu() {
+  mode = 'menu'; $('result').classList.add('hide'); $('hud').classList.add('hide'); $('menu').classList.remove('hide');
+  try { tg.BackButton.hide(); } catch (e) {}
+  renderMenu();
+}
+try { tg.BackButton.onClick(() => { if (mode === 'city') askExit(); }); } catch (e) {}
+document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'city') { paused = true; askExit(); } });
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (mode === 'city') { if (!paused) City3D.update(dt); City3D.render(false, dt); }
+  else if (!document.hidden) City3D.render(true, dt);
+  input.aHit = input.bHit = input.eHit = input.hHit = false;
+  requestAnimationFrame(frame);
+}
+
+// ═════════════ BO'YASH USTAXONASI ═════════════
+let paintCar = null, paintSel = null;
+window.onPaintShop = type => {
+  if (GUEST) return toast('🎨 Bo\'yash ustaxonasi', 'Botdan oching — natija saqlanadi');
+  paused = true; paintCar = type; paintSel = (P.paint && P.paint[type] != null) ? P.paint[type] : null;
+  renderPaint();
+};
+function renderPaint() {
+  const vipSet = new Set(SHOP.paint_vip || []), price = SHOP.paint_price || 150;
+  let h = `<h3>🎨 Bo'yash ustaxonasi <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px;margin-bottom:10px">Rangni tanlang. Bo'yash: <b style="color:var(--gold)">🪙 ${price}</b>, oltin va xrom — faqat 👑 VIP (bepul). Sizda: 🪙 ${fmt(P.coins)}</div><div class="opts">`;
+  City3D.paints.forEach((c, i) => {
+    h += `<button class="sw${paintSel === i ? ' on' : ''}" style="width:44px;height:44px;background:#${c.toString(16).padStart(6, '0')}" onclick="paintSel=${i};renderPaint()">${vipSet.has(i) ? '<i>👑</i>' : ''}</button>`;
+  });
+  h += '</div>';
+  if (paintSel != null) {
+    const vip = vipSet.has(paintSel);
+    h += vip && !P.vip ? `<button class="big" onclick="openVip()">👑 Bu rang faqat VIP uchun</button>`
+      : `<button class="big" onclick="doPaint()">🎨 Bo'yash${vip ? '' : ' — 🪙 ' + price}</button>`;
+  }
+  h += `<button class="big s" onclick="closeSheet()">Chiqish</button>`;
+  sheet(h);
+}
+async function doPaint() {
+  const r = await api('paint', {car: paintCar, color: paintSel});
+  if (!r.ok) return alertMsg(r.error);
+  P = r.profile; City3D.repaint(paintCar, paintSel); haptic('heavy'); sfx(880, 0.15, 'triangle'); closeSheet();
+}
+
+// ═════════════ CHAT ═════════════
+function toggleChat() {
+  const el = $('chatpick');
+  if (!el.classList.contains('hide')) return el.classList.add('hide');
+  el.innerHTML = `<button class="rb" onclick="racePick()">🏁 Poygaga chaqirish</button>` +
+    City3D.phrases.map((t, i) => `<button onclick="City3D.chat(${i});$('chatpick').classList.add('hide')">${esc(t)}</button>`).join('');
+  el.classList.remove('hide');
+}
+function racePick() {
+  const el = $('chatpick');
+  if (!City3D.online()) { el.classList.add('hide'); return toast('Onlayn emas', 'Poyga uchun internet kerak'); }
+  if (!City3D.inCar()) { el.classList.add('hide'); return toast('Avval mashinaga o\'tiring', ''); }
+  const ps = City3D.players();
+  el.innerHTML = ps.length ? ps.slice(0, 6).map(p => `<button class="rb" onclick="City3D.raceInvite(${p.id});$('chatpick').classList.add('hide')">🏁 ${p.vip ? '👑 ' : ''}${esc(p.name)} · ${p.d} m</button>`).join('')
+    + `<button onclick="$('chatpick').classList.add('hide')">Bekor qilish</button>`
+    : `<button onclick="$('chatpick').classList.add('hide')">Shaharda hozir boshqa o'yinchi yo'q</button>`;
+}
+let invT = null;
+window.onRaceInvite = (from, name) => {
+  const el = $('raceinv');
+  el.innerHTML = `🏁 <b>${esc(name)}</b> sizni poygaga chaqiryapti!<div style="color:var(--hint);font-size:12px;margin-top:4px">G'olib: 🪙 150 (VIP — 300)</div>
+    <div class="r"><button onclick="City3D.raceAccept(${from});$('raceinv').classList.add('hide')">Qabul qilish</button><button class="n" onclick="$('raceinv').classList.add('hide')">Rad etish</button></div>`;
+  el.classList.remove('hide'); haptic('heavy'); sfx(660, 0.12); setTimeout(() => sfx(880, 0.15), 140);
+  clearTimeout(invT); invT = setTimeout(() => el.classList.add('hide'), 25000);
+};
+
+// ═════════════ PERSONAJ (garderob) ═════════════
+const LOOK_UI = [
+  ['skin', 'Teri rangi', null], ['hair', 'Soch turmagi', ['Qisqa', 'Uzun', 'Kepka', 'Kal', 'Irokez', 'Jingalak']], ['hc', 'Soch rangi', null],
+  ['top', 'Kiyim', ['Futbolka', 'Kurtka', 'Xudi', 'Oltin pidjak']], ['tc', 'Kiyim rangi', null], ['pc', 'Shim rangi', null],
+  ['acc', 'Aksessuar', ['Yo\'q', 'Ko\'zoynak', 'Qora ko\'zoynak', 'Toj', 'Oltin zanjir']],
+];
+let draft = null;
+function lookCost() {
+  let c = 0;
+  for (const [k] of LOOK_UI) { const pr = SHOP.look[k][draft[k]]; if (typeof pr === 'number' && pr > 0 && !(P.owned || []).includes(k + ':' + draft[k])) c += pr; }
+  return c;
+}
+function openLook() {
+  if (!SHOP || !SHOP.look) return alertMsg('Yuklanmoqda…');
+  draft = Object.assign({skin: 1, hair: 0, hc: 0, top: 0, tc: 1, pc: 0, acc: 0}, P.look || {});
+  sheet(`<h3>🧍 Personaj <button onclick="closeSheet()">✕</button></h3><canvas id="pvc"></canvas><div id="lkbody">${lookBody()}</div>`);
+  if (City3D.ok) City3D.preview($('pvc'), draft); else $('pvc').classList.add('hide');
+}
+function lookBody() {
+  const C = City3D.colors || {};
+  const tag = (k, i) => { const pr = SHOP.look[k][i]; if (pr === 'vip') return '👑'; if (pr > 0 && !(P.owned || []).includes(k + ':' + i)) return '🪙' + fmt(pr); return ''; };
+  let h = `<div class="lk">`;
+  for (const [k, title, names] of LOOK_UI) {
+    h += `<h4>${title}</h4><div class="opts">`;
+    SHOP.look[k].forEach((_, i) => {
+      const on = draft[k] === i ? ' on' : '', t = tag(k, i);
+      if (names) h += `<button class="opt${on}" onclick="setLook('${k}',${i})">${esc(names[i] || i)}${t ? `<small>${t}</small>` : ''}</button>`;
+      else { const col = '#' + (C[k] ? C[k][i] : 0).toString(16).padStart(6, '0'); h += `<button class="sw${on}" style="background:${col}" onclick="setLook('${k}',${i})">${t ? `<i>${t === '👑' ? '👑' : '🪙'}</i>` : ''}</button>`; }
+    });
+    h += '</div>';
+  }
+  const cost = lookCost(), needVip = LOOK_UI.some(([k]) => SHOP.look[k][draft[k]] === 'vip') && !P.vip;
+  h += '</div>';
+  if (GUEST) h += '<div class="warn">Saqlash uchun o\'yinni Telegram botdan oching.</div>';
+  else if (needVip) h += `<button class="big" onclick="openVip()">👑 Bu buyumlar uchun VIP kerak</button>`;
+  else h += `<button class="big" onclick="saveLook()">${cost ? `💾 Saqlash — 🪙 ${fmt(cost)}` : '💾 Saqlash'}</button>`;
+  return h;
+}
+function setLook(k, i) { draft[k] = i; sfx(800, 0.04, 'triangle', 0.03); $('lkbody').innerHTML = lookBody(); if (City3D.ok) City3D.preview($('pvc'), draft); }
+async function saveLook() {
+  const cost = lookCost();
+  if (cost > P.coins) return alertMsg(`Tanga yetarli emas: kerak ${fmt(cost)}, sizda ${fmt(P.coins)}. O'ynab tanga yig'ing!`);
+  if (cost && !await confirmMsg(`Yangi buyumlar uchun ${fmt(cost)} tanga yechiladi. Tasdiqlaysizmi?`)) return;
+  const r = await api('look', {look: draft});
+  if (r.ok) { P = r.profile; haptic('medium'); sfx(990, 0.12, 'triangle'); closeSheet(); alertMsg('✅ Personaj saqlandi! Shaharga kirganingizda yangi ko\'rinishda bo\'lasiz.'); }
+  else alertMsg(r.error);
+}
+
+// ═════════════ MENYU / DO'KON ═════════════
+function renderMenu() {
+  const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  $('m-name').textContent = (u && (u.first_name || u.username)) || 'Mehmon';
+  $('m-lvl').textContent = P.level; $('m-lvl').classList.toggle('vip', !!P.vip);
+  const prev = (P.level - 1) ** 2 * 100;
+  $('m-xp').style.width = clamp((P.xp - prev) / Math.max(1, P.next_xp - prev) * 100, 0, 100) + '%';
+  $('m-xpt').textContent = `${P.level}-daraja · ${fmt(P.xp)}/${fmt(P.next_xp)} XP · Topshiriqlar: ${P.wins}`;
+  $('m-coins').textContent = fmt(P.coins);
+  const d = $('m-daily');
+  if (P.daily_in > 0) { d.disabled = true; d.textContent = `🎁 Keyingi bonus ${Math.ceil(P.daily_in / 3600)} soatdan keyin`; }
+  else { d.disabled = GUEST; d.textContent = `🎁 Kunlik bonusni olish: +${SHOP ? (P.vip ? SHOP.daily_vip : SHOP.daily) : 100} tanga`; }
+  const vb = $('m-vipbar');
+  if (P.vip) vb.innerHTML = `👑 <div><b>VIP faol</b> — ${new Date(P.vip_until * 1000).toLocaleDateString('ru-RU')} gacha. ×2 tanga, +15% kuch</div>`;
+  else vb.innerHTML = `👑 <div><b>VIP</b> — ×2 tanga, +15% kuch, oltin superkar. ${SHOP ? fmt(SHOP.vip_price) + ' so\'m/oy' : ''}</div><span style="margin-left:auto">›</span>`;
+  $('m-guest').classList.toggle('hide', !GUEST);
+  $('m-sound').innerHTML = `<span>${SOUND ? '🔊' : '🔇'}</span>Ovoz ${SOUND ? 'yoqiq' : 'o\'chiq'}`;
+  $('m-q').innerHTML = `<span>${City3D.quality() > 0 ? '✨' : '⚡️'}</span>Grafika: ${City3D.quality() > 0 ? 'yuqori' : 'tezkor'}`;
+}
+async function claimDaily() {
+  const r = await api('daily');
+  if (r.ok) { P = r.profile; sfx(880, 0.1); sfx(1320, 0.2, 'triangle'); haptic('heavy'); alertMsg(`🎁 +${r.coins} tanga!`); renderMenu(); }
+  else alertMsg(r.error);
+}
+function sheet(html) { $('sh').innerHTML = html; $('sheet').classList.remove('hide'); }
+function closeSheet() { $('sheet').classList.add('hide'); if (mode === 'city') paused = false; else renderMenu(); }
+let gTab = 'cars';
+function openGarage(tab) {
+  if (tab) gTab = tab;
+  if (!SHOP) return alertMsg('Yuklanmoqda…');
+  let h = `<h3>🛠 Garaj <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px;margin:-4px 0 10px">Sizda: <b style="color:var(--gold)">🪙 ${fmt(P.coins)}</b></div>
+    <div class="tabs"><button class="${gTab === 'cars' ? 'on' : ''}" onclick="openGarage('cars')">🚗 Mashinalar</button><button class="${gTab === 'up' ? 'on' : ''}" onclick="openGarage('up')">⚡️ Yaxshilash</button></div>`;
+  if (gTab === 'cars') {
+    for (const [k, c] of Object.entries(SHOP.cars)) {
+      const S = CAR_STATS[k], own = P.cars.includes(k), sel = P.car === k;
+      const btn = sel ? '<span class="buy ok">✓ Tanlangan</span>'
+        : c.vip && !P.vip ? `<button class="buy gold" onclick="openVip()">👑 VIP</button>`
+        : own ? `<button class="buy g" style="color:var(--text)" onclick="pickCar('${k}')">Tanlash</button>`
+        : `<button class="buy" onclick="pickCar('${k}')">🪙 ${fmt(c.price)}</button>`;
+      h += `<div class="it"><div class="ic" style="background:${S.color}33">${S.ico}</div><div class="tx"><b>${esc(c.name)}</b>
+        <small>Tezlik ${Math.round(S.max * 0.42)} · Tezlanish ${S.acc} · Burilish ${S.turn}${S.heavy ? ' · og\'ir' : ''}</small></div>${btn}</div>`;
+    }
+  } else {
+    const IC = {engine: '⚙️', nitro: '🔥', handling: '🎯'};
+    const DESC = {engine: 'Mashina tezligi +6%', nitro: 'Nitro hajmi +20%', handling: 'Burilish +5%'};
+    for (const [k, u] of Object.entries(SHOP.upgrades)) {
+      const lv = P.up[k] || 0, max = lv >= u.max;
+      h += `<div class="it"><div class="ic">${IC[k] || '⚡️'}</div><div class="tx"><b>${esc(u.name)}</b><small>${DESC[k] || ''}</small>
+        <div class="dots">${Array.from({length: u.max}, (_, i) => `<i class="${i < lv ? 'f' : ''}"></i>`).join('')}</div></div>
+        ${max ? '<span class="buy ok">MAX</span>' : `<button class="buy" onclick="buyUp('${k}')">🪙 ${fmt(u.costs[lv])}</button>`}</div>`;
+    }
+  }
+  if (GUEST) h += '<div class="warn">Xarid qilish uchun o\'yinni Telegram botdan oching.</div>';
+  sheet(h);
+}
+async function pickCar(k) { const r = await api('car', {key: k}); if (r.ok) { P = r.profile; sfx(700, 0.1); openGarage(); } else alertMsg(r.error); }
+async function buyUp(k) { const r = await api('upgrade', {key: k}); if (r.ok) { P = r.profile; sfx(990, 0.12, 'triangle'); haptic('medium'); openGarage(); } else alertMsg(r.error); }
+function openVip() {
+  if (!SHOP) return;
+  const perks = [['🪙', `<b>×${SHOP.vip_mult} tanga</b> har bir o'yinda`], ['⚡️', '<b>+15% kuch</b>: mashina tezligi va tezlanishi, piyoda tezroq yugurish'],
+    ['👑', '<b>Oltin superkar</b> — eng tez mashina'], ['🔥', 'Nitro tezroq to\'ladi'], ['🧍', 'Oltin pidjak, toj, oltin zanjir — faqat VIP'],
+    ['🎁', `Kunlik bonus <b>${SHOP.daily_vip}</b> tanga (oddiy: ${SHOP.daily})`], ['🏆', 'Reytingda 👑 belgisi']];
+  let h = `<h3>👑 VIP obuna <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px">O'yin hamma uchun bepul. VIP — ixtiyoriy, kuchliroq o'ynash va tezroq rivojlanish uchun.</div>
+    ${perks.map(p => `<div class="perk"><span>${p[0]}</span><div>${p[1]}</div></div>`).join('')}
+    <div class="price">${fmt(SHOP.vip_price)} so'm <small>/ ${SHOP.vip_days} kun</small></div>`;
+  if (P.vip) h += `<div style="text-align:center;color:var(--ok);font-weight:700;margin-top:6px">✅ VIP faol: ${new Date(P.vip_until * 1000).toLocaleDateString('ru-RU')} gacha</div>`;
+  if (GUEST) h += '<div class="warn">VIP sotib olish uchun o\'yinni Telegram botdan oching.</div>';
+  else {
+    h += `<div style="text-align:center;color:var(--hint);font-size:13px;margin-top:6px">Bot balansingiz: <b style="color:var(--text)">${fmt(P.balance)} so'm</b></div>
+      <button class="big" onclick="buyVip()">${P.vip ? '➕ Yana 1 oyga uzaytirish' : '👑 VIP olish'}</button>`;
+    if (P.balance < SHOP.vip_price) h += `<button class="big s" onclick="location.href='/'">💳 Balansni to'ldirish</button>`;
+  }
+  sheet(h);
+}
+async function buyVip() {
+  if (P.balance < SHOP.vip_price) return alertMsg('Balans yetarli emas. Avval NFT Bozor → Profil → «Balansni to\'ldirish» orqali balansni to\'ldiring.');
+  if (!await confirmMsg(`VIP obuna: ${fmt(SHOP.vip_price)} so'm balansdan yechiladi. Tasdiqlaysizmi?`)) return;
+  const r = await api('vip');
+  if (r.ok) { P = r.profile; haptic('heavy'); sfx(660, 0.1); setTimeout(() => sfx(990, 0.25, 'triangle'), 120); openVip(); alertMsg('👑 VIP faollashtirildi! Omad!'); }
+  else alertMsg(r.error);
+}
+async function openTop() {
+  sheet('<h3>🏆 Reyting <button onclick="closeSheet()">✕</button></h3><div style="color:var(--hint)">Yuklanmoqda…</div>');
+  let rows = [];
+  try { rows = await (await fetch('/api/game/top')).json(); } catch (e) {}
+  sheet(`<h3>🏆 Reyting <button onclick="closeSheet()">✕</button></h3>` + (rows.length ? rows.map((x, i) =>
+    `<div class="lb"><div class="n">${i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</div><div class="nm">${x.vip ? '👑 ' : ''}${esc(x.name)}</div>
+     <div style="color:var(--hint);font-size:12px">✅ ${x.wins}</div><div class="v">${x.level}-dr.</div></div>`).join('')
+    : '<div style="color:var(--hint);padding:20px 0;text-align:center">Hali hech kim yo\'q — birinchi bo\'ling!</div>'));
+}
+
+(async function boot() {
+  try { SHOP = await (await fetch('/api/game/shop')).json(); } catch (e) {}
+  if (!GUEST) { const r = await api('me'); if (r.ok) { P = r.profile; SHOP = r.shop; } }
+  City3D.init(); $('gl').style.display = 'block';
+  renderMenu(); $('loading').classList.add('hide');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
