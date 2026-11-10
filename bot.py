@@ -333,6 +333,12 @@ async def game_page(request):
     return web.FileResponse(WEB / "game.html", headers={"Cache-Control": "no-cache"})
 
 
+async def game_asset(request):
+    name = request.match_info["name"]
+    cache = "public, max-age=2592000" if name == "three.min.js" else "no-cache"
+    return web.FileResponse(WEB / name, headers={"Cache-Control": cache})
+
+
 async def on_vip(user, until):
     await S.notify_admins(bot, f"👑 <b>Yangi VIP obuna</b> (Shahar Arena)\n"
                                f"👤 @{user.get('username') or '-'} <code>{user['id']}</code>\n"
@@ -683,6 +689,7 @@ def make_app():
     r.add_get("/", index)
     r.add_get("/health", health)
     r.add_get("/game", game_page)
+    r.add_get("/{name:three\\.min\\.js|city3d\\.js}", game_asset)
     game.setup(r, auth, ok, err, on_vip)
     r.add_get("/api/config", api_config)
     r.add_get("/api/gifts", api_gifts)

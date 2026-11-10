@@ -12,6 +12,14 @@
   html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,Roboto,sans-serif;font-size:15px;touch-action:none}
   button{font:inherit;cursor:pointer;border:0;color:inherit}
   canvas{position:fixed;inset:0;display:block}
+  #gl{display:none}
+  #touch{position:fixed;inset:0;z-index:2;touch-action:none}
+  #mm{position:absolute;inset:auto;right:10px;top:calc(56px + env(safe-area-inset-top));width:120px;height:120px}
+  #nitro{position:absolute;left:16px;bottom:calc(150px + env(safe-area-inset-bottom));width:130px;height:10px;background:#0008;border-radius:6px}
+  #nitro i{display:block;height:100%;background:linear-gradient(90deg,#4fc3ff,#b388ff);border-radius:6px}
+  #nitro span{position:absolute;top:-15px;left:0;font-size:10px;font-weight:800}
+  #bust{position:absolute;top:28%;left:50%;transform:translateX(-50%);color:#ff3b30;font-weight:900;font-size:18px;text-shadow:0 2px 8px #000;white-space:nowrap}
+  .btn.e{width:68px;height:68px;background:#34c75988;border-color:#7ee49a;align-self:center}
   .hide{display:none!important}
   /* MENU */
   #menu{position:fixed;inset:0;overflow:auto;padding:14px 16px calc(20px + env(safe-area-inset-bottom));
@@ -94,7 +102,9 @@
 </style>
 </head>
 <body>
-<canvas id="cv"></canvas>
+<canvas id="gl"></canvas>
+<canvas id="cv" style="display:none"></canvas>
+<div id="touch"></div>
 
 <div id="menu">
   <div class="top">
@@ -103,9 +113,9 @@
     <div class="coins">🪙 <span id="m-coins">0</span></div>
   </div>
   <div class="logo">SHAHAR <span>ARENA</span></div>
-  <div class="sub">Shaharni kez · Gol ur · Reytingda birinchi bo'l</div>
+  <div class="sub">3D shahar · Mashinalar · Politsiya · Futbol</div>
   <div class="modes">
-    <button class="mode m-city" onclick="startGame('city')"><div class="ico">🏙</div><b>SHAHAR</b><p>Mashinada katta shahar, topshiriqlar, poyga va politsiyadan qochish</p></button>
+    <button class="mode m-city" onclick="startGame('city')"><div class="ico">🏙</div><b>SHAHAR</b><p>3D ochiq shahar: piyoda yur, istalgan mashinaga o'tir, topshiriq bajar, politsiyadan qoch</p></button>
     <button class="mode m-fb" onclick="startGame('football')"><div class="ico">⚽</div><b>FUTBOL</b><p>4×4 tezkor o'yin, 2 daqiqa. Gol ur — g'alaba qozon!</p></button>
   </div>
   <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
@@ -116,8 +126,9 @@
   </div>
   <div class="vipbar" id="m-vipbar" onclick="openVip()"></div>
   <div class="warn hide" id="m-guest">Mehmon rejimi: natijalar saqlanmaydi. Tanga yig'ish uchun o'yinni Telegram botdan oching.</div>
-  <div class="row" style="grid-template-columns:1fr 1fr">
+  <div class="row">
     <button class="tile" id="m-sound" onclick="toggleSound()"><span>🔊</span>Ovoz</button>
+    <button class="tile" id="m-q" onclick="City3D.setQuality(City3D.quality() > 0 ? 0 : 1)"><span>✨</span>Grafika</button>
     <button class="tile" onclick="location.href='/'"><span>🎁</span>NFT Bozor</button>
   </div>
 </div>
@@ -128,14 +139,19 @@
     <div class="chip">🪙 <span id="h-coins">0</span></div>
     <div class="chip" id="stars"></div>
     <div style="flex:1"></div>
+    <div class="chip" id="h-clock"></div>
     <div class="chip" id="h-speed"></div>
   </div>
+  <canvas id="mm" width="240" height="240"></canvas>
+  <div id="nitro" class="hide"><i></i><span>NITRO</span></div>
+  <div id="bust" class="hide">🚓 Politsiya yaqin — qoching!</div>
   <div id="mission" class="hide"></div>
   <div id="score" class="hide"></div>
   <div id="toast"></div>
   <div id="joy"><i></i></div>
   <div class="hint" id="h-hint">Chap tomonni bosib suring</div>
   <div class="btns">
+    <button class="btn e hide" id="bE"><div><span>🚗</span><em id="lE">O'TIRISH</em></div></button>
     <button class="btn" id="bB"><div><span>🛑</span><em id="lB">TORMOZ</em></div></button>
     <button class="btn a" id="bA"><div><span>🔥</span><em id="lA">NITRO</em></div></button>
   </div>
@@ -145,6 +161,8 @@
 <div id="sheet" class="hide" onclick="if(event.target===this)closeSheet()"><div class="sh" id="sh"></div></div>
 <div id="loading">Yuklanmoqda…</div>
 
+<script src="/three.min.js"></script>
+<script src="/city3d.js"></script>
 <script>
 'use strict';
 // ═════════════ ASOS ═════════════
@@ -204,33 +222,47 @@ function resize() {
 addEventListener('resize', resize); resize();
 
 // ═════════════ BOSHQARUV ═════════════
-const input = {jx: 0, jy: 0, a: false, b: false, aHit: false, bHit: false};
+const input = {jx: 0, jy: 0, a: false, b: false, e: false, aHit: false, bHit: false, eHit: false, dragX: 0, dragY: 0};
 const keys = {};
 let joyId = null, jx0 = 0, jy0 = 0;
 const JR = 55;
 function joyShow(x, y) { const j = $('joy'); j.style.display = 'block'; j.style.left = x + 'px'; j.style.top = y + 'px'; $('h-hint').classList.add('hide'); }
 function joyKnob(dx, dy) { $('joy').firstElementChild.style.transform = `translate(${dx}px,${dy}px)`; }
-cv.addEventListener('touchstart', e => {
-  for (const t of e.changedTouches) if (joyId === null && t.clientX < W * 0.62) {
-    joyId = t.identifier; jx0 = t.clientX; jy0 = t.clientY; joyShow(jx0, jy0); joyKnob(0, 0);
+// Sensor qatlami: chap tomonda joystik, o'ng tomonda kamerani aylantirish
+const touch = $('touch');
+let camId = null, cx0 = 0, cy0 = 0;
+touch.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) {
+    if (joyId === null && t.clientX < W * (mode === 'city' ? 0.45 : 0.62)) { joyId = t.identifier; jx0 = t.clientX; jy0 = t.clientY; joyShow(jx0, jy0); joyKnob(0, 0); }
+    else if (camId === null && mode === 'city') { camId = t.identifier; cx0 = t.clientX; cy0 = t.clientY; }
   }
   e.preventDefault();
 }, {passive: false});
-cv.addEventListener('touchmove', e => {
-  for (const t of e.changedTouches) if (t.identifier === joyId) {
-    let dx = t.clientX - jx0, dy = t.clientY - jy0; const l = Math.hypot(dx, dy);
-    if (l > JR) { dx *= JR / l; dy *= JR / l; }
-    input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy);
+touch.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) {
+      let dx = t.clientX - jx0, dy = t.clientY - jy0; const l = Math.hypot(dx, dy);
+      if (l > JR) { dx *= JR / l; dy *= JR / l; }
+      input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy);
+    } else if (t.identifier === camId) {
+      input.dragX += t.clientX - cx0; input.dragY += t.clientY - cy0; cx0 = t.clientX; cy0 = t.clientY;
+    }
   }
   e.preventDefault();
 }, {passive: false});
-const joyEnd = e => { for (const t of e.changedTouches) if (t.identifier === joyId) { joyId = null; input.jx = input.jy = 0; $('joy').style.display = 'none'; } };
-cv.addEventListener('touchend', joyEnd); cv.addEventListener('touchcancel', joyEnd);
-// sichqoncha (kompyuter)
-let mouseDown = false;
-cv.addEventListener('mousedown', e => { mouseDown = true; jx0 = e.clientX; jy0 = e.clientY; joyShow(jx0, jy0); });
-addEventListener('mousemove', e => { if (!mouseDown) return; let dx = e.clientX - jx0, dy = e.clientY - jy0; const l = Math.hypot(dx, dy); if (l > JR) { dx *= JR / l; dy *= JR / l; } input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy); });
-addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; input.jx = input.jy = 0; $('joy').style.display = 'none'; } });
+const joyEnd = e => { for (const t of e.changedTouches) { if (t.identifier === joyId) { joyId = null; input.jx = input.jy = 0; $('joy').style.display = 'none'; } if (t.identifier === camId) camId = null; } };
+touch.addEventListener('touchend', joyEnd); touch.addEventListener('touchcancel', joyEnd);
+// sichqoncha (kompyuter): chapda joystik, o'ngda kamera
+let mouseDown = 0;
+touch.addEventListener('mousedown', e => {
+  if (e.clientX < W * 0.45 || mode !== 'city') { mouseDown = 1; jx0 = e.clientX; jy0 = e.clientY; joyShow(jx0, jy0); }
+  else { mouseDown = 2; cx0 = e.clientX; cy0 = e.clientY; }
+});
+addEventListener('mousemove', e => {
+  if (mouseDown === 1) { let dx = e.clientX - jx0, dy = e.clientY - jy0; const l = Math.hypot(dx, dy); if (l > JR) { dx *= JR / l; dy *= JR / l; } input.jx = dx / JR; input.jy = dy / JR; joyKnob(dx, dy); }
+  else if (mouseDown === 2) { input.dragX += e.clientX - cx0; input.dragY += e.clientY - cy0; cx0 = e.clientX; cy0 = e.clientY; }
+});
+addEventListener('mouseup', () => { if (mouseDown === 1) { input.jx = input.jy = 0; $('joy').style.display = 'none'; } mouseDown = 0; });
 
 function bindBtn(el, k) {
   const on = e => { e.preventDefault(); if (!input[k]) input[k + 'Hit'] = true; input[k] = true; el.classList.add('on'); };
@@ -238,17 +270,19 @@ function bindBtn(el, k) {
   el.addEventListener('touchstart', on, {passive: false}); el.addEventListener('touchend', off); el.addEventListener('touchcancel', off);
   el.addEventListener('mousedown', on); el.addEventListener('mouseup', off); el.addEventListener('mouseleave', off);
 }
-bindBtn($('bA'), 'a'); bindBtn($('bB'), 'b');
+bindBtn($('bA'), 'a'); bindBtn($('bB'), 'b'); bindBtn($('bE'), 'e');
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' || e.code === 'KeyJ') { if (!input.a) input.aHit = true; input.a = true; }
   if (e.code === 'ShiftLeft' || e.code === 'KeyK') { if (!input.b) input.bHit = true; input.b = true; }
+  if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') { if (!input.e) input.eHit = true; input.e = true; }
   if (e.code === 'Escape' && mode !== 'menu') askExit();
 });
 addEventListener('keyup', e => {
   keys[e.code] = false;
   if (e.code === 'Space' || e.code === 'KeyJ') input.a = false;
   if (e.code === 'ShiftLeft' || e.code === 'KeyK') input.b = false;
+  if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') input.e = false;
 });
 function getMove() {
   let x = input.jx, y = input.jy;
@@ -259,437 +293,19 @@ function getMove() {
   return {x, y, mag};
 }
 
-// ═════════════ SHAHAR (dunyo) ═════════════
-const B = 360, R = 120, N = 9, CELL = B + R, WORLD = N * CELL + R;
-const roadC = i => i * CELL + R / 2;
-let seed = 20261110;
-const srnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-const ROOFS = ['#5b6b8c', '#8c6b5b', '#6b8c7a', '#9a8f7d', '#7d6f9a', '#a4746b', '#5f7f99', '#8a8f99', '#b08d57', '#6e7b8b'];
-const blocks = [];
-for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-  const x = i * CELL + R, y = j * CELL + R, r = srnd();
-  const b = {x, y, type: r < 0.14 ? 'park' : r < 0.2 ? 'plaza' : 'build', solids: [], trees: []};
-  if (b.type === 'build') {
-    const m = 18, g = 16, S = B - 2 * m, split = Math.floor(srnd() * 4);
-    const rects = split === 0 ? [[0, 0, S, S]] : split === 1 ? [[0, 0, S, (S - g) / 2], [0, (S + g) / 2, S, (S - g) / 2]]
-      : split === 2 ? [[0, 0, (S - g) / 2, S], [(S + g) / 2, 0, (S - g) / 2, S]]
-      : [[0, 0, (S - g) / 2, (S - g) / 2], [(S + g) / 2, 0, (S - g) / 2, (S - g) / 2], [0, (S + g) / 2, (S - g) / 2, (S - g) / 2], [(S + g) / 2, (S + g) / 2, (S - g) / 2, (S - g) / 2]];
-    for (const q of rects) b.solids.push({x: x + m + q[0], y: y + m + q[1], w: q[2], h: q[3], c: ROOFS[Math.floor(srnd() * ROOFS.length)], hgt: 8 + srnd() * 14});
-  } else if (b.type === 'park') {
-    for (let k = 0; k < 7; k++) b.trees.push({x: x + 50 + srnd() * (B - 100), y: y + 50 + srnd() * (B - 100), r: 14 + srnd() * 10});
-  } else {
-    b.trees.push({x: x + B / 2, y: y + B / 2, r: 46, fountain: true});
-  }
-  blocks.push(b);
-}
-function blockIdx(x, y) { return [Math.floor((x - R) / CELL), Math.floor((y - R) / CELL)]; }
-function blockAt(x, y) {
-  const [i, j] = blockIdx(x, y);
-  if (i < 0 || j < 0 || i >= N || j >= N) return null;
-  const b = blocks[j * N + i];
-  return (x >= b.x && x <= b.x + B && y >= b.y && y <= b.y + B) ? b : null;
-}
-function onGrass(x, y) { const b = blockAt(x, y); return b && b.type === 'park'; }
-function collideWorld(e, r) {
-  let hit = null;
-  const [bi, bj] = blockIdx(e.x, e.y);
-  for (let j = bj - 1; j <= bj + 1; j++) for (let i = bi - 1; i <= bi + 1; i++) {
-    if (i < 0 || j < 0 || i >= N || j >= N) continue;
-    const b = blocks[j * N + i];
-    for (const s of b.solids) {
-      const cx = clamp(e.x, s.x, s.x + s.w), cy = clamp(e.y, s.y, s.y + s.h);
-      let dx = e.x - cx, dy = e.y - cy; const d2 = dx * dx + dy * dy;
-      if (d2 < r * r) {
-        if (d2 < 1e-6) { // markaz ichida — eng yaqin tomonga chiqarish
-          const opts = [[e.x - s.x, -1, 0], [s.x + s.w - e.x, 1, 0], [e.y - s.y, 0, -1], [s.y + s.h - e.y, 0, 1]].sort((p, q) => p[0] - q[0])[0];
-          e.x += opts[1] * (opts[0] + r); e.y += opts[2] * (opts[0] + r); hit = {nx: opts[1], ny: opts[2]};
-        } else {
-          const d = Math.sqrt(d2); dx /= d; dy /= d; e.x += dx * (r - d); e.y += dy * (r - d); hit = {nx: dx, ny: dy};
-        }
-      }
-    }
-    for (const t of b.trees) {
-      let dx = e.x - t.x, dy = e.y - t.y; const d = Math.hypot(dx, dy) || 1, rr = r + t.r * (t.fountain ? 1 : 0.55);
-      if (d < rr) { dx /= d; dy /= d; e.x = t.x + dx * rr; e.y = t.y + dy * rr; hit = {nx: dx, ny: dy}; }
-    }
-  }
-  if (e.x < r) { e.x = r; hit = {nx: 1, ny: 0}; } if (e.x > WORLD - r) { e.x = WORLD - r; hit = {nx: -1, ny: 0}; }
-  if (e.y < r) { e.y = r; hit = {nx: 0, ny: 1}; } if (e.y > WORLD - r) { e.y = WORLD - r; hit = {nx: 0, ny: -1}; }
-  return hit;
-}
-function roadPoint() {
-  const k = Math.floor(Math.random() * (N + 1)), along = rnd(80, WORLD - 80), off = rnd(-R / 3, R / 3);
-  return Math.random() < 0.5 ? {x: along, y: roadC(k) + off} : {x: roadC(k) + off, y: along};
-}
-function farPoint(from, mn, mx) {
-  let best = null;
-  for (let i = 0; i < 60; i++) { const p = roadPoint(), d = dist(p, from); if (d >= mn && d <= mx) return p; if (!best || Math.abs(d - mn) < Math.abs(dist(best, from) - mn)) best = p; }
-  return best;
-}
-
-// transport oqimi
-const TCOL = ['#e6e6e6', '#2b2b2b', '#c0392b', '#2471a3', '#7f8c8d', '#16a085', '#8e44ad', '#d35400', '#f1c40f', '#5d6d7e'];
-const traffic = [];
-function trafficPos(c) {
-  if (c.axis === 'h') { c.x = c.along; c.y = roadC(c.k) + c.dir * R / 4; c.ang = c.dir > 0 ? 0 : Math.PI; }
-  else { c.y = c.along; c.x = roadC(c.k) - c.dir * R / 4; c.ang = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
-}
-for (let i = 0; i < 46; i++) {
-  const c = {axis: Math.random() < 0.5 ? 'h' : 'v', k: Math.floor(Math.random() * (N + 1)), dir: Math.random() < 0.5 ? 1 : -1,
-    along: rnd(50, WORLD - 50), sp: rnd(95, 150), v: 0, color: TCOL[i % TCOL.length], stun: 0, lastNode: -1};
-  trafficPos(c); traffic.push(c);
-}
-function updateTraffic(dt, player) {
-  for (const c of traffic) {
-    if (c.stun > 0) { c.stun -= dt; c.v *= 0.9; }
-    let want = c.stun > 0 ? 0 : c.sp;
-    const hx = Math.cos(c.ang), hy = Math.sin(c.ang);
-    const ahead = o => { const dx = o.x - c.x, dy = o.y - c.y, f = dx * hx + dy * hy, l = Math.abs(-dx * hy + dy * hx); return f > 0 && f < 75 && l < 24; };
-    if (player && ahead(player)) want = 0;
-    else for (const o of traffic) if (o !== c && ahead(o)) { want = Math.min(want, o.v * 0.8); break; }
-    c.v += clamp(want - c.v, -300 * dt, 160 * dt);
-    const prev = c.along; c.along += c.dir * c.v * dt;
-    // chorrahada burilish
-    const lo = Math.min(prev, c.along), hi = Math.max(prev, c.along);
-    const m = Math.round((c.along - R / 2) / CELL), node = roadC(m);
-    if (m >= 0 && m <= N && node >= lo && node <= hi && m !== c.lastNode) {
-      c.lastNode = m;
-      if (Math.random() < 0.3) {
-        const cross = c.axis === 'h' ? c.y : c.x;
-        c.axis = c.axis === 'h' ? 'v' : 'h'; c.k = m; c.along = cross; c.dir = Math.random() < 0.5 ? 1 : -1;
-        c.lastNode = Math.round((c.along - R / 2) / CELL);
-      }
-    }
-    if (c.along < 30 || c.along > WORLD - 30) { c.dir *= -1; c.along = clamp(c.along, 30, WORLD - 30); }
-    trafficPos(c);
-  }
-}
-
-// ═════════════ RENDER (shahar) ═════════════
-const mini = document.createElement('canvas'); mini.width = mini.height = 240;
-(() => {
-  const m = mini.getContext('2d'), s = 240 / WORLD;
-  m.fillStyle = '#1b2230'; m.fillRect(0, 0, 240, 240);
-  for (const b of blocks) { m.fillStyle = b.type === 'park' ? '#2f6b3a' : b.type === 'plaza' ? '#5c5444' : '#2c3445'; m.fillRect(b.x * s, b.y * s, B * s, B * s); }
-})();
-function drawCar(x, y, ang, color, w, h, opt) {
-  opt = opt || {};
-  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
-  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.roundRect(-w / 2 + 3, -h / 2 + 4, w, h, 6); ctx.fill();
-  ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 6); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(-w / 2 + 3, -h / 2 + 2, w - 6, 3);
-  ctx.fillStyle = '#1d2733'; ctx.beginPath(); ctx.roundRect(w * 0.05, -h / 2 + 3, w * 0.22, h - 6, 3); ctx.fill();
-  ctx.fillStyle = '#26323f'; ctx.beginPath(); ctx.roundRect(-w * 0.38, -h / 2 + 3, w * 0.16, h - 6, 3); ctx.fill();
-  ctx.fillStyle = opt.light || '#fff6c2'; ctx.fillRect(w / 2 - 3, -h / 2 + 2, 3, 4); ctx.fillRect(w / 2 - 3, h / 2 - 6, 3, 4);
-  ctx.fillStyle = '#ff3b30'; ctx.fillRect(-w / 2, -h / 2 + 2, 2, 4); ctx.fillRect(-w / 2, h / 2 - 6, 2, 4);
-  if (opt.taxi) { ctx.fillStyle = '#222'; ctx.fillRect(-4, -4, 8, 8); ctx.fillStyle = '#fff'; ctx.font = 'bold 7px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('T', 0, 3); }
-  if (opt.police) { const t = performance.now() / 120 | 0; ctx.fillStyle = t % 2 ? '#ff2d2d' : '#2d6bff'; ctx.fillRect(-5, -h / 2 + 2, 5, h - 4); ctx.fillStyle = t % 2 ? '#2d6bff' : '#ff2d2d'; ctx.fillRect(0, -h / 2 + 2, 5, h - 4); }
-  if (opt.stripe) { ctx.fillStyle = opt.stripe; ctx.fillRect(-w / 2, -2, w, 4); }
-  ctx.restore();
-}
-function drawCity(cx, cy, z) {
-  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cx * z), DPR * (H / 2 - cy * z));
-  const vw = W / z / 2 + 60, vh = H / z / 2 + 60, x0 = cx - vw, x1 = cx + vw, y0 = cy - vh, y1 = cy + vh;
-  ctx.fillStyle = '#3a3f49'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-  ctx.fillStyle = '#20262f'; // dunyo tashqarisi
-  if (x0 < 0) ctx.fillRect(x0, y0, -x0, y1 - y0); if (x1 > WORLD) ctx.fillRect(WORLD, y0, x1 - WORLD, y1 - y0);
-  if (y0 < 0) ctx.fillRect(x0, y0, x1 - x0, -y0); if (y1 > WORLD) ctx.fillRect(x0, WORLD, x1 - x0, y1 - WORLD);
-  // yo'l chiziqlari
-  ctx.strokeStyle = '#e8c547'; ctx.lineWidth = 3; ctx.setLineDash([28, 24]); ctx.beginPath();
-  for (let k = 0; k <= N; k++) {
-    const c = roadC(k);
-    if (c > y0 && c < y1) { ctx.moveTo(Math.max(0, x0), c); ctx.lineTo(Math.min(WORLD, x1), c); }
-    if (c > x0 && c < x1) { ctx.moveTo(c, Math.max(0, y0)); ctx.lineTo(c, Math.min(WORLD, y1)); }
-  }
-  ctx.stroke(); ctx.setLineDash([]);
-  const shadows = [], roofs = [];
-  for (const b of blocks) {
-    if (b.x > x1 || b.x + B < x0 || b.y > y1 || b.y + B < y0) continue;
-    ctx.fillStyle = '#9a9ca3'; ctx.beginPath(); ctx.roundRect(b.x - 4, b.y - 4, B + 8, B + 8, 14); ctx.fill();
-    if (b.type === 'park') {
-      ctx.fillStyle = '#3f8f4a'; ctx.beginPath(); ctx.roundRect(b.x + 8, b.y + 8, B - 16, B - 16, 10); ctx.fill();
-      ctx.strokeStyle = '#c9b38a'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(b.x + 8, b.y + B / 2); ctx.quadraticCurveTo(b.x + B / 2, b.y + B * 0.2, b.x + B - 8, b.y + B / 2); ctx.stroke();
-    } else if (b.type === 'plaza') {
-      ctx.fillStyle = '#c8b892'; ctx.fillRect(b.x + 8, b.y + 8, B - 16, B - 16);
-      ctx.strokeStyle = '#b3a27b'; ctx.lineWidth = 2; for (let q = 40; q < B; q += 40) { ctx.beginPath(); ctx.moveTo(b.x + q, b.y + 8); ctx.lineTo(b.x + q, b.y + B - 8); ctx.moveTo(b.x + 8, b.y + q); ctx.lineTo(b.x + B - 8, b.y + q); ctx.stroke(); }
-    } else {
-      ctx.fillStyle = '#6d717a'; ctx.fillRect(b.x + 10, b.y + 10, B - 20, B - 20);
-    }
-    for (const s of b.solids) { shadows.push(s); roofs.push(s); }
-    for (const t of b.trees) roofs.push(t);
-  }
-  ctx.fillStyle = 'rgba(0,0,0,.35)';
-  for (const s of shadows) ctx.fillRect(s.x + s.hgt, s.y + s.hgt, s.w, s.h);
-  return roofs;
-}
-function drawRoofs(roofs) {
-  const t = performance.now() / 1000;
-  for (const s of roofs) {
-    if (s.r) {
-      if (s.fountain) {
-        ctx.fillStyle = '#8f8a7c'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
-        ctx.fillStyle = '#4fb3e8'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 7, 0, 7); ctx.fill();
-        ctx.fillStyle = '#d6f1ff'; ctx.beginPath(); ctx.arc(s.x, s.y, 8 + Math.sin(t * 4) * 2, 0, 7); ctx.fill();
-      } else {
-        ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(s.x + 6, s.y + 7, s.r, 0, 7); ctx.fill();
-        ctx.fillStyle = '#2e6b34'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
-        ctx.fillStyle = '#3f8a45'; ctx.beginPath(); ctx.arc(s.x - s.r * 0.25, s.y - s.r * 0.25, s.r * 0.6, 0, 7); ctx.fill();
-      }
-      continue;
-    }
-    ctx.fillStyle = s.c; ctx.fillRect(s.x, s.y, s.w, s.h);
-    ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(s.x, s.y, s.w, 5); ctx.fillRect(s.x, s.y, 5, s.h);
-    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(s.x + s.w - 5, s.y, 5, s.h); ctx.fillRect(s.x, s.y + s.h - 5, s.w, 5);
-    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(s.x + s.w * 0.15, s.y + s.h * 0.2, Math.min(28, s.w * 0.2), Math.min(22, s.h * 0.2));
-  }
-}
-
-// ═════════════ SHAHAR (o'yin) ═════════════
+// ═════════════ SHAHAR (3D — city3d.js) ═════════════
 const CAR_STATS = {
-  sedan: {max: 250, acc: 230, turn: 2.7, color: '#4a90e2', w: 36, h: 19, ico: '🚗'},
-  taxi:  {max: 272, acc: 260, turn: 2.9, color: '#f5c518', w: 36, h: 19, ico: '🚕', taxi: true},
-  suv:   {max: 265, acc: 245, turn: 2.5, color: '#2e7d4f', w: 41, h: 23, ico: '🚙', heavy: true},
-  sport: {max: 325, acc: 335, turn: 3.1, color: '#e53935', w: 38, h: 18, ico: '🏎', stripe: '#fff'},
-  super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', w: 40, h: 19, ico: '👑', stripe: '#1a1a1a'},
+  sedan: {max: 250, acc: 230, turn: 2.7, color: '#4a90e2', ico: '🚗'},
+  taxi:  {max: 272, acc: 260, turn: 2.9, color: '#f5c518', ico: '🚕'},
+  suv:   {max: 265, acc: 245, turn: 2.5, color: '#2e7d4f', ico: '🚙', heavy: true},
+  sport: {max: 325, acc: 335, turn: 3.1, color: '#e53935', ico: '🏎'},
+  super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', ico: '👑'},
 };
-function carStats() {
-  const s = Object.assign({}, CAR_STATS[P.car] || CAR_STATS.sedan), u = P.up || {}, vb = P.vip ? 1.15 : 1;
-  s.max *= (1 + 0.06 * (u.engine || 0)) * vb; s.acc *= (1 + 0.06 * (u.engine || 0)) * vb;
-  s.turn *= 1 + 0.05 * (u.handling || 0);
-  s.nitroCap = 2.5 * (1 + 0.2 * (u.nitro || 0)); s.nitroRe = (P.vip ? 0.36 : 0.22) * (1 + 0.1 * (u.nitro || 0));
-  return s;
-}
 const MISSION_COINS = 60, PICKUP_COINS = 3;
-let cs = null;
-const parts = [];
-function burst(x, y, color, n, sp, life) {
-  for (let i = 0; i < n; i++) { const a = Math.random() * 7, v = rnd(sp * 0.3, sp); parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life || 0.6, max: life || 0.6, color, s: rnd(2, 5)}); }
-}
-function cityStart() {
-  const st = carStats(), p = {x: roadC(4) + R / 4, y: roadC(4) + 200};
-  cs = {st, car: {x: p.x, y: p.y, ang: -Math.PI / 2, v: 0}, nitro: st.nitroCap, missions: 0, pickups: 0, wanted: 0, police: [],
-        mission: null, givers: [], coins: [], bust: 0, calm: 0, crashCd: 0, shake: 0, t: 0};
-  for (let i = 0; i < 70; i++) cs.coins.push(Object.assign(roadPoint(), {ph: Math.random() * 6}));
-  for (let i = 0; i < 3; i++) cs.givers.push(newGiver());
-  parts.length = 0;
-}
-function newGiver() {
-  const types = ['deliver', 'taxi', 'race'];
-  return Object.assign(farPoint(cs ? cs.car : {x: WORLD / 2, y: WORLD / 2}, 350, 1500), {type: types[Math.floor(Math.random() * 3)]});
-}
-const MNAME = {deliver: '📦 Yetkazib berish', taxi: '🚕 Taksi', race: '🏁 Poyga'};
-function startMission(g) {
-  const c = cs.car; let pts = [], total = 0, from = c, speed = 175;
-  if (g.type === 'deliver') { pts = [farPoint(c, 1200, 2400)]; }
-  else if (g.type === 'taxi') { const a = farPoint(c, 500, 1000); pts = [a, farPoint(a, 1100, 2200)]; }
-  else { speed = 215; for (let i = 0; i < 4; i++) { const p = farPoint(from, 600, 1050); pts.push(p); from = p; } }
-  from = c; for (const p of pts) { total += dist(from, p); from = p; }
-  cs.mission = {type: g.type, pts, idx: 0, time: total / speed + 12};
-  toast(MNAME[g.type], 'Vaqt: ' + Math.round(cs.mission.time) + ' soniya'); sfx(660, 0.12); sfx(880, 0.15);
-}
-function missionLabel(m) {
-  if (m.type === 'deliver') return '📦 Posilkani manzilga yetkazing';
-  if (m.type === 'taxi') return m.idx === 0 ? '🚕 Yo\'lovchini oling' : '🚕 Yo\'lovchini manzilga olib boring';
-  return `🏁 Nazorat nuqtasi ${m.idx + 1}/${m.pts.length}`;
-}
-function sessionCoins() { return (cs.missions * MISSION_COINS + cs.pickups * PICKUP_COINS) * (P.vip ? 2 : 1); }
-
-function driveCar(c, dt, tx, ty, max, acc, turn, throttle) {
-  // AI uchun: (tx,ty) nuqtaga qarab haydash
-  const target = Math.atan2(ty - c.y, tx - c.x), d = angDiff(target, c.ang);
-  c.ang += clamp(d, -turn * dt, turn * dt);
-  const want = max * throttle * (Math.abs(d) > 0.9 ? 0.45 : 1);
-  c.v += clamp(want - c.v, -acc * 2 * dt, acc * dt);
-  if (c.stuck > 0) { c.stuck -= dt; c.v = -120; }
-  c.x += Math.cos(c.ang) * c.v * dt; c.y += Math.sin(c.ang) * c.v * dt;
-  const hit = collideWorld(c, 15);
-  if (hit) { c.v *= 0.6; c.slow = (c.slow || 0) + dt; if (c.slow > 1.2) { c.stuck = 0.6; c.slow = 0; c.ang += rnd(-1, 1); } } else c.slow = 0;
-}
 function bump(a, b, r) {
   const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
   if (d >= r || d === 0) return false;
   const k = (r - d) / 2; a.x += dx / d * k; a.y += dy / d * k; b.x -= dx / d * k; b.y -= dy / d * k; return true;
-}
-function cityUpdate(dt) {
-  const c = cs.car, st = cs.st, m = getMove();
-  cs.t += dt; cs.crashCd -= dt; cs.shake = Math.max(0, cs.shake - dt * 30);
-  // haydash
-  let max = st.max, acc = st.acc;
-  const boost = input.a && cs.nitro > 0.05 && c.v > 20;
-  if (boost) { max *= 1.45; acc *= 1.8; cs.nitro = Math.max(0, cs.nitro - dt);
-    const bx = c.x - Math.cos(c.ang) * 20, by = c.y - Math.sin(c.ang) * 20;
-    parts.push({x: bx, y: by, vx: -Math.cos(c.ang) * 120 + rnd(-30, 30), vy: -Math.sin(c.ang) * 120 + rnd(-30, 30), life: 0.3, max: 0.3, color: Math.random() < 0.5 ? '#ffb02e' : '#4fc3ff', s: rnd(3, 6)});
-  } else if (!input.a) cs.nitro = Math.min(st.nitroCap, cs.nitro + st.nitroRe * dt);
-  if (onGrass(c.x, c.y)) max *= 0.6;
-  if (input.b) {
-    if (c.v > 10) c.v -= acc * 2.4 * dt; else c.v = Math.max(-120, c.v - acc * 0.6 * dt);
-    if (m.mag > 0.15) c.ang += clamp(angDiff(Math.atan2(m.y, m.x), c.ang), -st.turn * dt, st.turn * dt) * (c.v < 0 ? -0.6 : 1);
-  } else if (m.mag > 0.15) {
-    const d = angDiff(Math.atan2(m.y, m.x), c.ang), tr = st.turn * Math.min(1, 0.35 + Math.abs(c.v) / 150);
-    c.ang += clamp(d, -tr * dt, tr * dt);
-    const want = max * m.mag * (0.35 + 0.65 * Math.max(0, Math.cos(d)));
-    if (c.v < want) c.v = Math.min(want, c.v + acc * dt); else c.v -= (c.v - want) * 1.6 * dt;
-  } else { c.v -= c.v * 1.4 * dt; if (Math.abs(c.v) < 4) c.v = 0; }
-  if (boost && c.v < max) c.v = Math.min(max, c.v + acc * dt);
-  c.x += Math.cos(c.ang) * c.v * dt; c.y += Math.sin(c.ang) * c.v * dt;
-  const hit = collideWorld(c, 16);
-  if (hit) {
-    const vx = Math.cos(c.ang) * c.v, vy = Math.sin(c.ang) * c.v, vn = vx * hit.nx + vy * hit.ny;
-    if (vn < 0) {
-      const nvx = vx - hit.nx * vn * 1.25, nvy = vy - hit.ny * vn * 1.25;
-      c.v = (nvx * Math.cos(c.ang) + nvy * Math.sin(c.ang)) * 0.85;
-      if (-vn > 170) { cs.shake = Math.min(14, -vn / 25); burst(c.x - hit.nx * 16, c.y - hit.ny * 16, '#ffd27a', 10, 160); sfx(90, 0.15, 'sawtooth', 0.06); haptic('medium'); }
-    }
-  }
-  // transport
-  updateTraffic(dt, c);
-  for (const t of traffic) {
-    if (Math.abs(t.x - c.x) > 40 || Math.abs(t.y - c.y) > 40) continue;
-    const rel = Math.abs(c.v);
-    if (bump(c, t, st.heavy ? 34 : 31)) {
-      c.v *= st.heavy ? 0.75 : 0.5; t.stun = 1.2;
-      if (rel > 150 && cs.crashCd <= 0) {
-        cs.crashCd = 1.2; burst((c.x + t.x) / 2, (c.y + t.y) / 2, '#ffd27a', 14, 200); sfx(80, 0.2, 'sawtooth', 0.07); haptic('heavy');
-        if (cs.wanted < 5) { cs.wanted++; cs.calm = 0; toast('⭐'.repeat(cs.wanted), 'Politsiya sizni qidirmoqda!'); }
-      }
-    }
-  }
-  // politsiya
-  while (cs.police.length < cs.wanted) {
-    const p = farPoint(c, 650, 1000);
-    cs.police.push({x: p.x, y: p.y, ang: Math.atan2(c.y - p.y, c.x - p.x), v: 0, node: null});
-  }
-  let near = false;
-  const pmax = st.max * (0.9 + 0.04 * cs.wanted);
-  for (const p of cs.police) {
-    const d = dist(p, c);
-    if (d < 520) near = true;
-    let tx = c.x, ty = c.y;
-    if (d > 260) {
-      if (!p.node || Math.hypot(roadC(p.node.i) - p.x, roadC(p.node.j) - p.y) < 55) {
-        const ci = clamp(Math.round((p.x - R / 2) / CELL), 0, N), cj = clamp(Math.round((p.y - R / 2) / CELL), 0, N);
-        let best = null, bd = 1e9;
-        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni > N || nj > N) continue;
-          const dd = Math.hypot(roadC(ni) - c.x, roadC(nj) - c.y); if (dd < bd) { bd = dd; best = {i: ni, j: nj}; }
-        }
-        const here = Math.hypot(roadC(ci) - p.x, roadC(cj) - p.y);
-        p.node = here > 55 ? {i: ci, j: cj} : best;
-      }
-      tx = roadC(p.node.i); ty = roadC(p.node.j);
-    } else p.node = null;
-    driveCar(p, dt, tx, ty, pmax, st.acc, 3, 1);
-    if (bump(c, p, 32)) { c.v *= 0.85; }
-    for (const t of traffic) if (Math.abs(t.x - p.x) < 34 && Math.abs(t.y - p.y) < 34) bump(p, t, 30);
-  }
-  for (let i = 0; i < cs.police.length; i++) for (let j = i + 1; j < cs.police.length; j++) bump(cs.police[i], cs.police[j], 30);
-  if (cs.wanted > 0) {
-    const close = cs.police.some(p => dist(p, c) < 48);
-    if (close && Math.abs(c.v) < 90) cs.bust += dt; else cs.bust = Math.max(0, cs.bust - dt * 0.5);
-    if (cs.bust > 2.2) {
-      const lost = Math.floor(cs.pickups * 0.3);
-      cs.pickups -= lost; cs.wanted = 0; cs.police = []; cs.bust = 0; c.v = 0;
-      toast('🚓 Qo\'lga tushdingiz!', lost ? `−${lost * PICKUP_COINS * (P.vip ? 2 : 1)} tanga jarima` : 'Bu safar ogohlantirish'); sfx(200, 0.4, 'triangle', 0.08); haptic('heavy');
-    }
-    if (!near) { cs.calm += dt; if (cs.calm > 9) { cs.calm = 0; cs.wanted--; cs.police.pop(); if (!cs.wanted) toast('😎 Qochib qutuldingiz!', ''); } } else cs.calm = 0;
-  }
-  // tangalar
-  for (const k of cs.coins) {
-    if (Math.abs(k.x - c.x) < 34 && Math.abs(k.y - c.y) < 34) {
-      cs.pickups++; burst(k.x, k.y, '#f5c542', 8, 120, 0.4); sfx(1200, 0.06, 'square', 0.03); Object.assign(k, roadPoint());
-    }
-  }
-  // topshiriqlar
-  const ms = cs.mission;
-  if (!ms) {
-    for (let i = 0; i < cs.givers.length; i++) if (dist(cs.givers[i], c) < 60) { startMission(cs.givers[i]); cs.givers[i] = newGiver(); break; }
-  } else {
-    ms.time -= dt;
-    if (dist(ms.pts[ms.idx], c) < 62) {
-      ms.idx++; sfx(990, 0.1); haptic('light');
-      if (ms.idx >= ms.pts.length) {
-        cs.missions++; cs.mission = null; burst(c.x, c.y, '#34c759', 26, 260, 0.8); sfx(1320, 0.25, 'triangle', 0.06); haptic('heavy');
-        toast('✅ Bajarildi!', `+${MISSION_COINS * (P.vip ? 2 : 1)} tanga`);
-      } else if (ms.type === 'race') ms.time += 4;
-    } else if (ms.time <= 0) { cs.mission = null; toast('⌛ Vaqt tugadi', 'Topshiriq bajarilmadi'); sfx(160, 0.3, 'triangle', 0.06); }
-  }
-  // zarrachalar
-  for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.life -= dt; if (q.life <= 0) { parts.splice(i, 1); continue; } q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.92; q.vy *= 0.92; }
-  // HUD
-  $('h-coins').textContent = fmt(sessionCoins());
-  $('stars').innerHTML = '<b>' + '★'.repeat(cs.wanted) + '</b>' + '★'.repeat(5 - cs.wanted);
-  $('h-speed').textContent = Math.round(Math.abs(c.v) * 0.42) + ' km/soat';
-  const mEl = $('mission');
-  if (cs.mission) { mEl.classList.remove('hide'); mEl.innerHTML = esc(missionLabel(cs.mission)) + `<small>⏱ ${Math.ceil(cs.mission.time)} s · ${Math.round(dist(cs.car, cs.mission.pts[cs.mission.idx]) / 10)} m</small>`; }
-  else { mEl.classList.remove('hide'); mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>'; }
-}
-let menuCam = {t: 0};
-function cityRender(menuMode) {
-  let cx, cy, z = clamp(Math.min(W, H) / 470, 0.75, 1.6);
-  if (menuMode) {
-    menuCam.t += 1 / 60;
-    cx = WORLD / 2 + Math.cos(menuCam.t * 0.05) * 1400; cy = WORLD / 2 + Math.sin(menuCam.t * 0.07) * 1400; z *= 0.8;
-  } else {
-    const c = cs.car; z *= 1 - Math.min(0.22, Math.abs(c.v) / 1600);
-    cx = c.x + Math.cos(c.ang) * c.v * 0.35; cy = c.y + Math.sin(c.ang) * c.v * 0.35;
-    if (cs.shake) { cx += rnd(-cs.shake, cs.shake); cy += rnd(-cs.shake, cs.shake); }
-  }
-  const roofs = drawCity(cx, cy, z);
-  const t = performance.now() / 1000;
-  if (!menuMode) {
-    for (const k of cs.coins) {
-      if (Math.abs(k.x - cx) > W / z || Math.abs(k.y - cy) > H / z) continue;
-      const s = Math.abs(Math.cos(t * 3 + k.ph));
-      ctx.fillStyle = '#b8860b'; ctx.beginPath(); ctx.ellipse(k.x, k.y, 10 * s + 1, 10, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#f5c542'; ctx.beginPath(); ctx.ellipse(k.x, k.y, 7 * s + 1, 7, 0, 0, 7); ctx.fill();
-    }
-    if (!cs.mission) for (const g of cs.givers) {
-      const r = 34 + Math.sin(t * 4) * 5;
-      ctx.strokeStyle = '#f5c542'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, 7); ctx.stroke();
-      ctx.fillStyle = '#f5c54233'; ctx.fill();
-      ctx.fillStyle = '#f5c542'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', g.x, g.y);
-    }
-    if (cs.mission) {
-      const p = cs.mission.pts[cs.mission.idx], r = 46 + Math.sin(t * 5) * 6;
-      ctx.fillStyle = '#34c75944'; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
-      ctx.strokeStyle = '#34c759'; ctx.lineWidth = 6; ctx.stroke();
-      ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(cs.mission.type === 'race' ? '🏁' : cs.mission.type === 'taxi' ? (cs.mission.idx ? '📍' : '🙋') : '📦', p.x, p.y);
-    }
-  }
-  for (const c of traffic) if (Math.abs(c.x - cx) < W / z && Math.abs(c.y - cy) < H / z) drawCar(c.x, c.y, c.ang, c.color, 34, 18);
-  if (!menuMode) {
-    for (const p of cs.police) drawCar(p.x, p.y, p.ang, '#f2f4f7', 37, 19, {police: true});
-    const c = cs.car, S = cs.st;
-    drawCar(c.x, c.y, c.ang, S.color, S.w, S.h, {taxi: S.taxi, stripe: S.stripe});
-    for (const q of parts) { ctx.globalAlpha = q.life / q.max; ctx.fillStyle = q.color; ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); }
-    ctx.globalAlpha = 1;
-  }
-  drawRoofs(roofs);
-  if (menuMode) return;
-  // yo'nalish strelkasi
-  const c = cs.car, tgt = cs.mission ? cs.mission.pts[cs.mission.idx] : cs.givers.reduce((a, b) => dist(a, c) < dist(b, c) ? a : b);
-  const a = Math.atan2(tgt.y - c.y, tgt.x - c.x);
-  if (dist(tgt, c) > 140) {
-    ctx.save(); ctx.translate(c.x + Math.cos(a) * 62, c.y + Math.sin(a) * 62); ctx.rotate(a);
-    ctx.fillStyle = cs.mission ? '#34c759' : '#f5c542'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-3, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
-  // ekran HUD: nitro va minikarta
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const ms = Math.min(118, W * 0.3), mx = W - ms - 10, my = 54;
-  ctx.globalAlpha = 0.9; ctx.drawImage(mini, mx, my, ms, ms); ctx.globalAlpha = 1;
-  ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 1.5; ctx.strokeRect(mx, my, ms, ms);
-  const sc = ms / WORLD, dot = (x, y, col, r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx + x * sc, my + y * sc, r, 0, 7); ctx.fill(); };
-  if (cs.mission) dot(tgt.x, tgt.y, '#34c759', 4); else for (const g of cs.givers) dot(g.x, g.y, '#f5c542', 3.5);
-  for (const p of cs.police) dot(p.x, p.y, '#ff3b30', 3);
-  dot(c.x, c.y, '#fff', 3.5);
-  // nitro
-  const nw = 120, nx = 16, ny = H - 30;
-  ctx.fillStyle = '#0008'; ctx.beginPath(); ctx.roundRect(nx, ny - 150, nw, 10, 5); ctx.fill();
-  ctx.fillStyle = '#4fc3ff'; ctx.beginPath(); ctx.roundRect(nx, ny - 150, nw * cs.nitro / cs.st.nitroCap, 10, 5); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText('NITRO', nx, ny - 153);
-  if (cs.bust > 0.2) { ctx.fillStyle = '#ff3b30'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🚓 To\'xtamang! Qoching!', W / 2, H * 0.25); }
 }
 
 // ═════════════ FUTBOL ═════════════
@@ -932,31 +548,36 @@ async function startGame(m) {
   sid = null;
   if (!GUEST) { const r = await api('start', {mode: m}); if (r.ok) sid = r.sid; }
   mode = m; paused = false;
-  input.a = input.b = false; input.jx = input.jy = 0;
+  input.a = input.b = input.e = false; input.jx = input.jy = input.dragX = input.dragY = 0;
+  if (m === 'city' && !City3D.ok) { mode = 'menu'; return alertMsg('Qurilmangiz 3D grafikani qo\'llab-quvvatlamaydi. Futbol rejimini o\'ynab ko\'ring.'); }
   $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
   const city = m === 'city';
-  $('stars').classList.toggle('hide', !city); $('h-speed').classList.toggle('hide', !city);
+  $('stars').classList.toggle('hide', !city); $('h-speed').classList.toggle('hide', !city); $('h-clock').classList.toggle('hide', !city);
+  $('mm').classList.toggle('hide', !city); $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide');
+  cv.style.display = city ? 'none' : 'block'; $('gl').style.display = city ? 'block' : 'none';
   $('h-coins').parentElement.classList.toggle('hide', !city);
   $('mission').classList.toggle('hide', !city); $('score').classList.toggle('hide', city);
   $('bA').querySelector('span').textContent = city ? '🔥' : '⚽'; $('lA').textContent = city ? 'NITRO' : 'ZARBA';
   $('bB').querySelector('span').textContent = city ? '🛑' : '👟'; $('lB').textContent = city ? 'TORMOZ' : 'PAS';
-  $('h-hint').textContent = city ? 'Chap tomonni bosib suring — mashina shu tomonga yuradi' : 'Chap tomon — yugurish · ZARBA — darvozaga · PAS — sherikka';
-  if (city) cityStart(); else fbStart();
+  $('h-hint').textContent = city ? 'Chap tomon — yurish/haydash · O\'ng tomonni suring — kamerani aylantirish' : 'Chap tomon — yugurish · ZARBA — darvozaga · PAS — sherikka';
+  if (city) City3D.start(); else fbStart();
+  setTimeout(() => $('h-hint').classList.add('hide'), 7000);
   try { tg.BackButton.show(); } catch (e) {}
 }
 async function askExit() {
   if (mode === 'menu') return;
   paused = true;
-  const msg = mode === 'city' ? `O'yinni tugatib ${fmt(sessionCoins())} tangani olasizmi?` : 'O\'yinni tugatasizmi? Natija hozirgi hisob bo\'yicha yoziladi.';
+  const msg = mode === 'city' ? `O'yinni tugatib ${fmt(City3D.coins())} tangani olasizmi?` : 'O\'yinni tugatasizmi? Natija hozirgi hisob bo\'yicha yoziladi.';
   if (await confirmMsg(msg)) endGame(); else paused = false;
 }
 async function endGame() {
   const m = mode; mode = 'result';
   $('hud').classList.add('hide'); $('joy').style.display = 'none';
   try { tg.BackButton.hide(); } catch (e) {}
-  const body = m === 'city' ? {missions: cs.missions, pickups: cs.pickups} : {gf: fb.gf, ga: fb.ga};
+  const body = m === 'city' ? City3D.stats() : {gf: fb.gf, ga: fb.ga};
+  if (m === 'city') City3D.stop();
   let title, sub, coins = 0, xp = 0, lvlUp = false;
-  if (m === 'city') { title = '🏙 Sayohat tugadi'; sub = `Topshiriqlar: ${cs.missions} · Tangalar: ${cs.pickups}`; }
+  if (m === 'city') { title = '🏙 Sayohat tugadi'; sub = `Topshiriqlar: ${body.missions} · Tangalar: ${body.pickups}`; }
   else { title = fb.gf > fb.ga ? '🏆 G\'ALABA!' : fb.gf === fb.ga ? '🤝 Durang' : '😔 Mag\'lubiyat'; sub = `Hisob: ${fb.gf} : ${fb.ga}`; }
   $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div><div class="st">Saqlanmoqda…</div>`;
   $('result').classList.remove('hide');
@@ -975,7 +596,7 @@ async function endGame() {
   if (fb && m === 'football' && fb.gf > fb.ga) haptic('heavy');
 }
 function toMenu() {
-  mode = 'menu'; $('result').classList.add('hide'); $('hud').classList.add('hide'); $('menu').classList.remove('hide');
+  mode = 'menu'; cv.style.display = 'none'; $('gl').style.display = 'block'; $('result').classList.add('hide'); $('hud').classList.add('hide'); $('menu').classList.remove('hide');
   try { tg.BackButton.hide(); } catch (e) {}
   renderMenu();
 }
@@ -985,10 +606,10 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && (mo
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (mode === 'city') { if (!paused) cityUpdate(dt); if (mode === 'city') cityRender(false); }
+  if (mode === 'city') { if (!paused) City3D.update(dt); City3D.render(false, dt); }
   else if (mode === 'football') { if (!paused) fbUpdate(dt); if (mode === 'football') fbRender(); }
-  else { updateTraffic(dt, null); cityRender(true); }
-  input.aHit = input.bHit = false;
+  else if (!document.hidden) City3D.render(true, dt);
+  input.aHit = input.bHit = input.eHit = false;
   requestAnimationFrame(frame);
 }
 
@@ -1009,6 +630,7 @@ function renderMenu() {
   else vb.innerHTML = `👑 <div><b>VIP</b> — ×2 tanga, +15% kuch, oltin superkar. ${SHOP ? fmt(SHOP.vip_price) + ' so\'m/oy' : ''}</div><span style="margin-left:auto">›</span>`;
   $('m-guest').classList.toggle('hide', !GUEST);
   $('m-sound').innerHTML = `<span>${SOUND ? '🔊' : '🔇'}</span>Ovoz ${SOUND ? 'yoqiq' : 'o\'chiq'}`;
+  $('m-q').innerHTML = `<span>${City3D.quality() > 0 ? '✨' : '⚡️'}</span>Grafika: ${City3D.quality() > 0 ? 'yuqori' : 'tezkor'}`;
 }
 async function claimDaily() {
   const r = await api('daily');
@@ -1087,6 +709,7 @@ async function openTop() {
 (async function boot() {
   try { SHOP = await (await fetch('/api/game/shop')).json(); } catch (e) {}
   if (!GUEST) { const r = await api('me'); if (r.ok) { P = r.profile; SHOP = r.shop; } }
+  City3D.init(); $('gl').style.display = 'block';
   renderMenu(); $('loading').classList.add('hide');
   requestAnimationFrame(frame);
 })();

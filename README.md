@@ -25,8 +25,12 @@ Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
 
 ## 🎮 Shahar Arena — o'yin (`/game`, botda `/oyin`)
 Mini App ichidagi bepul o'yin, ikki rejim:
-- 🏙 **Shahar** — mashinada katta shaharni kezish: yetkazib berish, taksi va poyga topshiriqlari,
-  yo'lda tanga yig'ish, avariya qilsangiz politsiya quvadi (⭐ qidiruv darajasi), qo'lga tushsangiz jarima.
+- 🏙 **Shahar (3D)** — ochiq 3D shahar (three.js, `webapp/city3d.js`): piyoda yurish, yugurish, sakrash;
+  istalgan mashinaga o'tirish (yo'ldagisini olsangiz — politsiya qidiradi), o'z garaj mashinangiz yoningizda turadi.
+  Transport oqimi, piyodalar, kun/tun (tunda derazalar, ko'cha chiroqlari va faralar yonadi), mini-xarita,
+  yetkazib berish / taksi / poyga topshiriqlari, tangalar, ⭐ qidiruv darajasi va politsiya ta'qibi.
+  Boshqaruv: chap tomonda joystik, o'ng tomonni surib kamerani aylantirish; menyuda «Grafika: yuqori/tezkor»
+  (kuchsiz telefonlar uchun soyalar o'chadi).
 - ⚽ **Futbol** — 4×4 tezkor o'yin (2 daqiqa), sun'iy intellektga qarshi. Joystik + ZARBA / PAS tugmalari.
 
 Tangalarga garajda mashinalar (Taksi, Yo'ltanlamas, Sport kupe) va yaxshilashlar
