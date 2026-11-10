@@ -33,6 +33,13 @@ Mini App ichidagi bepul 3D shahar o'yini:
   (kuchsiz telefonlar uchun soyalar o'chadi).
 - 🧍 **Personaj** — teri, soch turmagi va rangi, kiyim (futbolka/kurtka/xudi), ranglar, aksessuarlar.
   Bir qismi bepul, bir qismi tangaga (bir marta sotib olinadi), oltin pidjak, toj, oltin zanjir va oltin rang — faqat VIP.
+- 🕌 **Toshkent uslubi** — tumanlar (Chilonzor, Yunusobod, Mirobod...), do'kon peshtaxtalari (Choyxona, Somsa, Non...),
+  ko'k gumbazli madrasa, teleminora, svetoforlar (transport qizilda to'xtaydi), avtobuslar.
+- ⛽ **Yoqilg'i shoxobchasi** — nitroni to'ldiradi; 🎨 **bo'yash ustaxonasi** — o'z mashinangizni 150 tangaga bo'yatish
+  (oltin va xrom — faqat VIP).
+- 📻 **Tovushlar** — mashina radiosi (Shahar FM, Chill FM, Bazm FM — musiqa o'yinda yaratiladi), signal 📯, politsiya sirenasi.
+- 🏁 **Onlayn poyga** — 💬 → «Poygaga chaqirish» (60 m ichidagi o'yinchi, ikkalasi ham mashinada). 5 ta nazorat nuqtasini
+  server tanlaydi va o'zi tekshiradi (teleport hisobga o'tmaydi). G'olib 150 tanga (VIP — 300), sutkada 20 tagacha.
 - 👥 **Onlayn shahar** — `/ws/city` WebSocket: bir xonada 25 tagacha o'yinchi bir-birini real vaqtda ko'radi
   (yurish, mashinada haydash, ism yorlig'i, 👑 VIP belgisi), tayyor iboralar bilan chat. Transport, piyodalar va
   politsiya har o'yinchida o'ziniki. Xonalar server xotirasida — bitta server jarayoni bilan ishlaydi.

@@ -1040,6 +1040,7 @@ function exitCar() {
 }
 function updateCar(dt) {
   const v = cur, m = getMove();
+  if (G.race && tNow < G.race.startAt) { v.vx = v.vz = 0; v.vF = 0; v.mesh.position.set(v.x, 0, v.z); headL.intensity = night * 2.2; return; }
   const thr = -m.y, steer = m.x;
   const boost = input.a && v.nitro > 0.05 && (v.vF || 0) > 2;
   if (boost) v.nitro = Math.max(0, v.nitro - dt); else if (!input.a) v.nitro = Math.min(v.spec.cap, v.nitro + v.spec.re * dt);
@@ -1153,6 +1154,20 @@ function updateWorldObjs(dt) {
     coinMesh.setMatrixAt(i, _o.matrix);
   }
   coinMesh.instanceMatrix.needsUpdate = true;
+  // onlayn poyga
+  if (G.race) {
+    for (const mk of giverMk) mk.visible = false;
+    const rc = G.race, p = rc.pts[Math.min(rc.idx, rc.pts.length - 1)];
+    targetMk.visible = true; targetMk.position.set(p[0], 0, p[1]); targetMk.ring.scale.setScalar(1 + Math.sin(tNow * 6) * 0.12);
+    const t = {x: p[0], z: p[1]};
+    arrow.material.color.setHex(0xb388ff);
+    const aa = Math.atan2(t.x - me.x, t.z - me.z), ar = (cur ? 4.2 : 1.6) + Math.sin(tNow * 5) * 0.15;
+    arrow.position.set(me.x + Math.sin(aa) * ar, 0.12, me.z + Math.cos(aa) * ar); arrow.rotation.y = aa; arrow.visible = true;
+    const left = rc.startAt - tNow, cEl = $('count');
+    if (left > 0) { cEl.classList.remove('hide'); const n = Math.ceil(left); if (n !== rc.lastN) { rc.lastN = n; cEl.textContent = n; sfx(440, 0.12, 'square', 0.05); } }
+    else if (!rc.go) { rc.go = true; cEl.textContent = 'GO!'; sfx(880, 0.3, 'square', 0.06); haptic('heavy'); setTimeout(() => cEl.classList.add('hide'), 700); }
+    return t;
+  }
   // topshiriqlar
   const ms = G.mission;
   if (!ms) {
@@ -1236,7 +1251,8 @@ function drawMinimap(tgt) {
   g.translate(S / 2, S / 2); g.rotate(rot); g.scale(sc, sc); g.translate(-me.x * k, -me.z * k);
   g.drawImage(API.mapImg, 0, 0);
   const dot = (x, z, col, r) => { g.fillStyle = col; g.beginPath(); g.arc(x * k, z * k, r / sc, 0, 7); g.fill(); };
-  if (G.mission) { const p = G.mission.pts[G.mission.idx]; dot(p.x, p.z, '#34c759', 5); } else for (const q of G.givers) dot(q.x, q.z, '#f5c542', 4.5);
+  if (G.race) { const p = G.race.pts[Math.min(G.race.idx, G.race.pts.length - 1)]; dot(p[0], p[1], '#b388ff', 6); }
+  else if (G.mission) { const p = G.mission.pts[G.mission.idx]; dot(p.x, p.z, '#34c759', 5); } else for (const q of G.givers) dot(q.x, q.z, '#f5c542', 4.5);
   for (const v of police) dot(v.x, v.z, (tNow * 6 | 0) % 2 ? '#ff3b30' : '#3b6bff', 4);
   for (const v of vehicles) if (v.own && v !== cur) dot(v.x, v.z, '#4fc3ff', 3.5);
   g.font = `${14 / sc}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -1254,7 +1270,7 @@ function drawMinimap(tgt) {
   // shimol yo'nalishi chetga
   if (tgt && dxz(tgt, me) > R) {
     const ta = rot + Math.atan2(tgt.z - me.z, tgt.x - me.x);
-    g.fillStyle = G.mission ? '#34c759' : '#f5c542'; g.beginPath(); g.arc(S / 2 + Math.cos(ta) * (S / 2 - 7), S / 2 + Math.sin(ta) * (S / 2 - 7), 5, 0, 7); g.fill();
+    g.fillStyle = G.race ? '#b388ff' : G.mission ? '#34c759' : '#f5c542'; g.beginPath(); g.arc(S / 2 + Math.cos(ta) * (S / 2 - 7), S / 2 + Math.sin(ta) * (S / 2 - 7), 5, 0, 7); g.fill();
   }
 }
 let lastCtx = '';
@@ -1266,7 +1282,8 @@ function hud(tgt) {
   const me0 = pos(), dn = districtAt(me0.x, me0.z);
   if (dn !== G.district) { G.district = dn; $('h-dist').textContent = '📍 ' + dn; }
   const mEl = $('mission');
-  if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>⏱ ${Math.ceil(G.mission.time)} s · ${Math.round(dxz(pos(), G.mission.pts[G.mission.idx]))} m</small>`;
+  if (G.race) mEl.innerHTML = `🏁 Poyga: ${Math.min(G.race.idx + 1, G.race.pts.length)}/${G.race.pts.length}<small>vs ${esc(G.race.vs)} — ${G.race.opp}/${G.race.pts.length}</small>`;
+  else if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>⏱ ${Math.ceil(G.mission.time)} s · ${Math.round(dxz(pos(), G.mission.pts[G.mission.idx]))} m</small>`;
   else mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>';
   // tugmalar
   const near = !cur ? nearestCar() : null;
@@ -1336,6 +1353,24 @@ function onNet(m) {
       const first = !r.tgt; r.tgt = row;
       if (first) { r.x = row[1]; r.z = row[2]; r.yaw = row[4]; r.cyaw = row[8]; }
     }
+  } else if (m.t === 'info') { toast('ℹ️ ' + m.m, '');
+  } else if (m.t === 'ri') { if (window.onRaceInvite) window.onRaceInvite(m.from, m.name);
+  } else if (m.t === 'rs') {
+    G.mission = null;
+    G.race = {pts: m.pts, idx: 0, opp: 0, vs: m.vs, vsId: m.vs_id, startAt: tNow + m.in, go: false};
+    toast('🏁 Poyga: ' + m.vs, 'Tayyorlaning!'); haptic('heavy');
+  } else if (m.t === 'rp') {
+    if (G.race) { G.race.idx = m.i; sfx(990, 0.1); haptic('light'); if (m.i < G.race.pts.length) toast(`✅ ${m.i}/${G.race.pts.length}`, ''); }
+  } else if (m.t === 'ro') { if (G.race) G.race.opp = m.i;
+  } else if (m.t === 're') {
+    const won = net && m.winner === net.id;
+    if (G.race) {
+      if (won) { toast('🏆 G\'ALABA!', m.coins ? `+${m.coins} tanga` : 'Bugungi tanga limiti tugagan'); sfx(523, 0.15, 'triangle', 0.08); setTimeout(() => sfx(784, 0.3, 'triangle', 0.08), 150); haptic('heavy'); }
+      else if (m.winner) { toast('😔 ' + m.name + ' yutdi', 'Keyingi safar omad!'); sfx(200, 0.3, 'triangle', 0.06); }
+      else toast('🏁 Poyga tugadi', m.reason === 'timeout' ? 'Vaqt tugadi' : 'Raqib chiqib ketdi');
+      if (won && m.coins) G.raceCoins = (G.raceCoins || 0) + m.coins;
+    }
+    G.race = null;
   } else if (m.t === 'c') {
     const text = PHRASES[m.m] || '';
     if (m.id === net.id) showBubble(meBubble, text);
@@ -1423,7 +1458,13 @@ const API = {
   paints: PAINTS,
   radioNext() { station = (station + 1) % STATIONS.length; try { localStorage.setItem('sa_radio', String(station)); } catch (e) {} toast(STATIONS[station].name, ''); return STATIONS[station].name; },
   repaint(type, idx) { const v = vehicles.find(q => q.own); if (!v || v.type !== type) return; v.color = PAINTS[idx]; v.mesh.geometry = carGeometry(v.type, v.color); toast('🎨 Mashina bo\'yaldi!', ''); },
-  phrases: PHRASES, preview, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
+  phrases: PHRASES, preview,
+  online() { return !!(net && net.id !== null); },
+  inCar() { return !!cur; },
+  players() { const me = pos(); return [...remotes.values()].filter(r => r.tgt).map(r => ({id: r.id, name: r.name, vip: r.vip, d: Math.round(Math.hypot(r.x - me.x, r.z - me.z))})).sort((a, b) => a.d - b.d); },
+  raceInvite(id) { if (!cur) return toast('Avval mashinaga o\'tiring', ''); if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'ri', to: id})); },
+  raceAccept(id) { if (!cur) return toast('Avval mashinaga o\'tiring', 'Keyin qabul qiling'); if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'ra', to: id})); },
+  racing() { return !!(G && G.race); }, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
   stop() { API.active = false; stop(); },
   stats() { return {missions: G ? G.missions : 0, pickups: G ? G.pickups : 0}; },

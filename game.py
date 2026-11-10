@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import math
+import random
 import secrets
 import time
 
@@ -314,14 +315,95 @@ _next_id = [1]
 _loop = [None]
 
 
+RACE_COINS = 150             # g'olibga (VIP — ×2)
+RACE_XP = 60
+RACE_DAILY = 20              # sutkada tanga beriladigan g'alabalar soni
+RACE_TIMEOUT = 240
+_races = []
+_invites = {}                # (kimdan, kimga) -> vaqt
+_race_wins = {}              # uid -> [vaqtlar]
+
+
+def _road_point(rng):
+    k = rng.randint(0, 8)
+    along, off = rng.uniform(15, WORLD - 15), rng.uniform(-3, 3)
+    c = k * 60 + 7
+    return [round(along, 1), round(c + off, 1)] if rng.random() < 0.5 else [round(c + off, 1), round(along, 1)]
+
+
+def _race_points(x, z, n=5):
+    rng, pts = random.Random(), []
+    for _ in range(n):
+        p = _road_point(rng)
+        for _ in range(150):
+            if 90 <= math.hypot(p[0] - x, p[1] - z) <= 160:
+                break
+            p = _road_point(rng)
+        pts.append(p)
+        x, z = p
+    return pts
+
+
+class Race:
+    def __init__(self, a, b, pts):
+        self.a, self.b, self.pts = a, b, pts
+        self.start = time.time() + 4
+        self.prog = {a.id: 0, b.id: 0}
+        self.done = False
+
+
+async def _race_end(race, winner=None, reason=""):
+    if race.done:
+        return
+    race.done = True
+    if race in _races:
+        _races.remove(race)
+    coins = 0
+    if winner:
+        now = time.time()
+        wins = [t for t in _race_wins.get(winner.uid, []) if now - t < 86400]
+        if len(wins) < RACE_DAILY:
+            p = db.game_profile(winner.uid)
+            coins = RACE_COINS * (VIP_MULT if is_vip(p) else 1)
+            db.game_add(winner.uid, coins=coins, xp=RACE_XP)
+            wins.append(now)
+        _race_wins[winner.uid] = wins
+    msg = json.dumps({"t": "re", "winner": winner.id if winner else None, "name": winner.name if winner else "",
+                      "coins": coins, "reason": reason})
+    for c in (race.a, race.b):
+        if c.race is race:
+            c.race = None
+        await _send(c, msg)
+
+
+async def _race_progress(c, x, z):
+    race = c.race
+    now = time.time()
+    if not race or race.done or now < race.start:
+        return
+    i = race.prog[c.id]
+    if i >= len(race.pts):
+        return
+    px, pz = race.pts[i]
+    if math.hypot(x - px, z - pz) < 12:
+        race.prog[c.id] = i + 1
+        await _send(c, json.dumps({"t": "rp", "i": i + 1}))
+        other = race.b if c is race.a else race.a
+        await _send(other, json.dumps({"t": "ro", "i": i + 1}))
+        if i + 1 >= len(race.pts):
+            await _race_end(race, c)
+
+
 class Client:
-    __slots__ = ("id", "uid", "name", "look", "vip", "ws", "state", "room", "chat_t", "msg_t", "msgs")
+    __slots__ = ("id", "uid", "name", "look", "vip", "ws", "state", "room", "chat_t", "msg_t", "msgs",
+                 "race", "inv_t", "last_pos")
 
     def __init__(self, uid, name, look, vip, ws):
         self.id = _next_id[0]
         _next_id[0] += 1
         self.uid, self.name, self.look, self.vip, self.ws = uid, name, look, vip, ws
         self.state, self.room, self.chat_t, self.msg_t, self.msgs = None, None, 0.0, time.time(), 0
+        self.race, self.inv_t, self.last_pos = None, 0.0, None
 
     def info(self):
         return {"id": self.id, "name": self.name, "look": self.look, "vip": self.vip}
@@ -342,6 +424,12 @@ async def _bcast(room, msg, skip=None):
 async def _tick():
     while True:
         await asyncio.sleep(0.1)
+        now = time.time()
+        for race in list(_races):
+            if now - race.start > RACE_TIMEOUT:
+                await _race_end(race, None, "timeout")
+        for k in [k for k, t in _invites.items() if now - t > 30]:
+            _invites.pop(k, None)
         for room in list(_rooms):
             if len(room) < 2:
                 continue
@@ -404,6 +492,44 @@ async def ws_city(request, verify):
                     ct = ct if ct in CAR_TYPES else ""
                     c.state = [_num(x, 0, WORLD), _num(z, 0, WORLD), _num(y, 0, 5), _num(yaw, -10, 10), _num(sp, 0, 80),
                                ct, int(cc) & 0xFFFFFF, _num(cy, -10, 10)]
+                    # teleportni sezish: oxirgi ishonchli nuqtadan 65 m/s dan tez siljish qabul qilinmaydi
+                    # (eng tez mashina nitro bilan ~62 m/s), ishonchli nuqta faqat qabul qilinganda yangilanadi
+                    lp = c.last_pos
+                    if not lp or math.hypot(c.state[0] - lp[0], c.state[1] - lp[1]) <= 65 * (now - lp[2]) + 2:
+                        c.last_pos = (c.state[0], c.state[1], now)
+                        await _race_progress(c, c.state[0], c.state[1])
+                elif m.get("t") == "ri":                      # poygaga taklif
+                    o = room.get(int(m.get("to", 0)))
+                    if not o or o is c or now - c.inv_t < 3:
+                        continue
+                    c.inv_t = now
+                    err_ = ("Siz poygadasiz" if c.race else "U hozir poygada" if o.race
+                            else "Avval mashinaga o'tiring" if not (c.state and c.state[5]) else
+                            "Juda uzoqdasiz (60 m dan yaqin keling)" if not o.state or
+                            math.hypot(c.state[0] - o.state[0], c.state[1] - o.state[1]) > 60 else "")
+                    if err_:
+                        await _send(c, json.dumps({"t": "info", "m": err_}))
+                        continue
+                    _invites[(c.id, o.id)] = now
+                    await _send(o, json.dumps({"t": "ri", "from": c.id, "name": c.name}))
+                    await _send(c, json.dumps({"t": "info", "m": f"{o.name} ga taklif yuborildi"}))
+                elif m.get("t") == "ra":                      # taklifni qabul qilish
+                    o = room.get(int(m.get("to", 0)))
+                    if not o or not _invites.pop((o.id, c.id), None):
+                        await _send(c, json.dumps({"t": "info", "m": "Taklif eskirgan"}))
+                        continue
+                    if c.race or o.race or not (c.state and c.state[5]) or not (o.state and o.state[5]):
+                        await _send(c, json.dumps({"t": "info", "m": "Ikkalangiz ham mashinada bo'lishingiz kerak"}))
+                        continue
+                    race = Race(o, c, _race_points(o.state[0], o.state[1]))
+                    _races.append(race)
+                    o.race = c.race = race
+                    for me, vs in ((o, c), (c, o)):
+                        await _send(me, json.dumps({"t": "rs", "pts": race.pts, "in": 4, "vs": vs.name, "vs_id": vs.id}))
+                elif m.get("t") == "rq" and c.race:          # poygadan chiqish
+                    other = c.race.b if c is c.race.a else c.race.a
+                    await _race_end(c.race, None, "quit")
+                    await _send(other, json.dumps({"t": "info", "m": f"{c.name} poygadan chiqdi"}))
                 elif m.get("t") == "c":
                     i = int(m.get("m"))
                     if 0 <= i < CHAT and now - c.chat_t > 2:
@@ -416,6 +542,8 @@ async def ws_city(request, verify):
     except Exception as e:
         logging.warning("ws_city: %s", e)
     finally:
+        if c and c.race:
+            await _race_end(c.race, None, "left")
         if c and c.room is not None:
             c.room.pop(c.id, None)
             if _by_uid.get(c.uid) is c:

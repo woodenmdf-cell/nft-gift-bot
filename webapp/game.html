@@ -25,6 +25,10 @@
   .btn.hb{position:absolute;right:24px;bottom:calc(122px + env(safe-area-inset-bottom));width:56px;height:56px;pointer-events:auto}
   #chatpick{position:absolute;left:8px;top:calc(94px + env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px;pointer-events:auto;z-index:4}
   #chatpick button{background:#000c;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;text-align:left}
+  #count{position:absolute;top:19%;left:50%;transform:translate(-50%,-50%);font-size:96px;font-weight:900;color:#fff;text-shadow:0 4px 20px #000,0 0 30px #b388ff}
+  #raceinv{position:absolute;top:calc(100px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#1b1530ee;border:1px solid #b388ff88;border-radius:16px;padding:12px;width:min(320px,90%);pointer-events:auto;text-align:center;font-weight:700}
+  #raceinv .r{display:flex;gap:8px;margin-top:10px}#raceinv button{flex:1;border-radius:11px;padding:10px;font-weight:800;background:#34c759}#raceinv button.n{background:#3a3f4b}
+  #chatpick .rb{background:#5b3fb8cc}
   #chatfeed{position:absolute;left:8px;bottom:calc(175px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;max-width:60%}
   #chatfeed div{background:#000a;border-radius:10px;padding:5px 9px;font-size:12px;font-weight:600}
   .lk h4{color:var(--hint);font-size:12px;font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:.5px}
@@ -166,6 +170,8 @@
   <button class="btn hb hide" id="bH"><div><span>📯</span></div></button>
   <div id="chatpick" class="hide"></div>
   <div id="chatfeed"></div>
+  <div id="count" class="hide"></div>
+  <div id="raceinv" class="hide"></div>
   <div id="toast"></div>
   <div id="joy"><i></i></div>
   <div class="hint" id="h-hint">Chap tomon — yurish/haydash · O'ng tomonni suring — kamerani aylantirish</div>
@@ -333,7 +339,7 @@ async function startGame() {
   input.a = input.b = input.e = false; input.jx = input.jy = input.dragX = input.dragY = 0;
   $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
   $('h-chat').classList.toggle('hide', GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide');
-  $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide');
+  $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide'); $('count').classList.add('hide'); $('raceinv').classList.add('hide');
   City3D.start();
   setTimeout(() => $('h-hint').classList.add('hide'), 7000);
   try { tg.BackButton.show(); } catch (e) {}
@@ -341,7 +347,8 @@ async function startGame() {
 async function askExit() {
   if (mode !== 'city') return;
   paused = true;
-  if (await confirmMsg(`O'yinni tugatib ${fmt(City3D.coins())} tangani olasizmi?`)) endGame(); else paused = false;
+  const rq = City3D.racing() ? '\nPoyga davom etmoqda — chiqsangiz poyga bekor bo\'ladi.' : '';
+  if (await confirmMsg(`O'yinni tugatib ${fmt(City3D.coins())} tangani olasizmi?${rq}`)) endGame(); else paused = false;
 }
 async function endGame() {
   mode = 'result';
@@ -416,9 +423,27 @@ async function doPaint() {
 function toggleChat() {
   const el = $('chatpick');
   if (!el.classList.contains('hide')) return el.classList.add('hide');
-  el.innerHTML = City3D.phrases.map((t, i) => `<button onclick="City3D.chat(${i});$('chatpick').classList.add('hide')">${esc(t)}</button>`).join('');
+  el.innerHTML = `<button class="rb" onclick="racePick()">🏁 Poygaga chaqirish</button>` +
+    City3D.phrases.map((t, i) => `<button onclick="City3D.chat(${i});$('chatpick').classList.add('hide')">${esc(t)}</button>`).join('');
   el.classList.remove('hide');
 }
+function racePick() {
+  const el = $('chatpick');
+  if (!City3D.online()) { el.classList.add('hide'); return toast('Onlayn emas', 'Poyga uchun internet kerak'); }
+  if (!City3D.inCar()) { el.classList.add('hide'); return toast('Avval mashinaga o\'tiring', ''); }
+  const ps = City3D.players();
+  el.innerHTML = ps.length ? ps.slice(0, 6).map(p => `<button class="rb" onclick="City3D.raceInvite(${p.id});$('chatpick').classList.add('hide')">🏁 ${p.vip ? '👑 ' : ''}${esc(p.name)} · ${p.d} m</button>`).join('')
+    + `<button onclick="$('chatpick').classList.add('hide')">Bekor qilish</button>`
+    : `<button onclick="$('chatpick').classList.add('hide')">Shaharda hozir boshqa o'yinchi yo'q</button>`;
+}
+let invT = null;
+window.onRaceInvite = (from, name) => {
+  const el = $('raceinv');
+  el.innerHTML = `🏁 <b>${esc(name)}</b> sizni poygaga chaqiryapti!<div style="color:var(--hint);font-size:12px;margin-top:4px">G'olib: 🪙 150 (VIP — 300)</div>
+    <div class="r"><button onclick="City3D.raceAccept(${from});$('raceinv').classList.add('hide')">Qabul qilish</button><button class="n" onclick="$('raceinv').classList.add('hide')">Rad etish</button></div>`;
+  el.classList.remove('hide'); haptic('heavy'); sfx(660, 0.12); setTimeout(() => sfx(880, 0.15), 140);
+  clearTimeout(invT); invT = setTimeout(() => el.classList.add('hide'), 25000);
+};
 
 // ═════════════ PERSONAJ (garderob) ═════════════
 const LOOK_UI = [
