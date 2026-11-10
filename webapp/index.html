@@ -476,6 +476,7 @@ $('rq').oninput = () => { clearTimeout(t2); t2 = setTimeout(loadRent, 300); };
   try { CFG = await (await fetch('/api/config')).json(); } catch(e){}
   await loadMe(); loadGifts();
   if (location.hash === '#rent') go('rent');
+  if (location.hash === '#topup') { go('profile'); openTopup(); }
 })();
 </script>
 </body>

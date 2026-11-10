@@ -65,6 +65,11 @@
   .row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
   .tile{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600}
   .tile span{font-size:24px}
+  .tile.coint{border-color:#f5c54266;background:linear-gradient(180deg,#2b2412,#161a22)}
+  .pack{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:8px;position:relative}
+  .pack .ic{font-size:30px;width:46px;text-align:center}.pack b{font-size:18px;color:var(--gold)}.pack small{display:block;color:var(--hint);font-size:12px}
+  .pack .tag{position:absolute;top:-7px;right:10px;background:var(--acc);color:#fff;border-radius:8px;padding:1px 7px;font-size:10px;font-weight:800}
+  .streak{display:flex;gap:4px;margin-top:6px}.streak i{flex:1;height:6px;border-radius:3px;background:var(--bg3)}.streak i.f{background:var(--gold)}
   .tile.vipt{border-color:#f5c54266;background:linear-gradient(180deg,#2b2412,#161a22)}
   .daily{margin-top:12px;width:100%;border-radius:16px;padding:13px;font-weight:800;background:var(--bg2);border:1px dashed var(--gold);color:var(--gold)}
   .daily:disabled{opacity:.55;border-color:var(--line);color:var(--hint)}
@@ -149,11 +154,12 @@
     <button class="mode m-city" onclick="startGame()"><div class="ico">🏙</div><b>▶ O'YNASH</b><p>3D ochiq shahar: piyoda yur, istalgan mashinaga o'tir, topshiriqlar bajar, politsiyadan qoch, do'stlar bilan birga o'yna</p></button>
   </div>
   <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
-  <div class="row" style="grid-template-columns:repeat(4,1fr)">
+  <div class="row" style="grid-template-columns:repeat(5,1fr)">
     <button class="tile" onclick="openLook()"><span>🧍</span>Personaj</button>
     <button class="tile" onclick="openGarage()"><span>🛠</span>Garaj</button>
     <button class="tile vipt" onclick="openVip()"><span>👑</span>VIP</button>
     <button class="tile" onclick="openTop()"><span>🏆</span>Reyting</button>
+    <button class="tile coint" onclick="openCoins()"><span>🪙</span>Tanga</button>
   </div>
   <div class="vipbar" id="m-vipbar" onclick="openVip()"></div>
   <div class="warn hide" id="m-guest">Mehmon rejimi: natijalar saqlanmaydi. Tanga yig'ish uchun o'yinni Telegram botdan oching.</div>
@@ -341,7 +347,7 @@ const CAR_STATS = {
   sport: {max: 325, acc: 335, turn: 3.1, color: '#e53935', ico: '🏎'},
   super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', ico: '👑'},
 };
-const MISSION_COINS = 60, PICKUP_COINS = 3;
+const PICKUP_COINS = 3;
 
 // ═════════════ O'YIN OQIMI ═════════════
 let mode = 'menu', sid = null, paused = false;
@@ -378,7 +384,7 @@ async function endGame() {
   try { tg.BackButton.hide(); } catch (e) {}
   const body = City3D.stats();
   City3D.stop();
-  const title = '🏙 Sayohat tugadi', sub = `Topshiriqlar: ${body.missions} · Tangalar: ${body.pickups}`;
+  const title = '🏙 Sayohat tugadi', sub = `Topshiriqlar: ${body.total} · Tangalar: ${body.pickups}`;
   let coins = 0, xp = 0, lvlUp = false;
   $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div><div class="st">Saqlanmoqda…</div>`;
   $('result').classList.remove('hide');
@@ -437,7 +443,7 @@ function renderPaint() {
 }
 async function doPaint() {
   const r = await api('paint', {car: paintCar, color: paintSel});
-  if (!r.ok) return alertMsg(r.error);
+  if (!r.ok) return needCoins(r.error);
   P = r.profile; City3D.repaint(paintCar, paintSel); haptic('heavy'); sfx(880, 0.15, 'triangle'); closeSheet();
 }
 
@@ -508,7 +514,7 @@ function lookBody() {
 function setLook(k, i) { draft[k] = i; sfx(800, 0.04, 'triangle', 0.03); $('lkbody').innerHTML = lookBody(); if (City3D.ok) City3D.preview($('pvc'), draft); }
 async function saveLook() {
   const cost = lookCost();
-  if (cost > P.coins) return alertMsg(`Tanga yetarli emas: kerak ${fmt(cost)}, sizda ${fmt(P.coins)}. O'ynab tanga yig'ing!`);
+  if (cost > P.coins) return needCoins('Tanga yetarli emas');
   if (cost && !await confirmMsg(`Yangi buyumlar uchun ${fmt(cost)} tanga yechiladi. Tasdiqlaysizmi?`)) return;
   const r = await api('look', {look: draft});
   if (r.ok) { P = r.profile; haptic('medium'); sfx(990, 0.12, 'triangle'); closeSheet(); alertMsg('✅ Personaj saqlandi! Shaharga kirganingizda yangi ko\'rinishda bo\'lasiz.'); }
@@ -526,7 +532,8 @@ function renderMenu() {
   $('m-coins').textContent = fmt(P.coins);
   const d = $('m-daily');
   if (P.daily_in > 0) { d.disabled = true; d.textContent = `🎁 Keyingi bonus ${Math.ceil(P.daily_in / 3600)} soatdan keyin`; }
-  else { d.disabled = GUEST; d.textContent = `🎁 Kunlik bonusni olish: +${SHOP ? (P.vip ? SHOP.daily_vip : SHOP.daily) : 100} tanga`; }
+  else { d.disabled = GUEST; d.innerHTML = `🎁 Kunlik bonus — ${P.daily_day || 1}-kun: +${fmt(P.daily_amount || 100)} tanga
+    <div class="streak">${Array.from({length: 7}, (_, i) => `<i class="${i < (P.daily_day || 1) ? 'f' : ''}"></i>`).join('')}</div>`; }
   const vb = $('m-vipbar');
   if (P.vip) vb.innerHTML = `👑 <div><b>VIP faol</b> — ${new Date(P.vip_until * 1000).toLocaleDateString('ru-RU')} gacha. ×2 tanga, +15% kuch</div>`;
   else vb.innerHTML = `👑 <div><b>VIP</b> — ×2 tanga, +15% kuch, oltin superkar. ${SHOP ? fmt(SHOP.vip_price) + ' so\'m/oy' : ''}</div><span style="margin-left:auto">›</span>`;
@@ -536,9 +543,46 @@ function renderMenu() {
 }
 async function claimDaily() {
   const r = await api('daily');
-  if (r.ok) { P = r.profile; sfx(880, 0.1); sfx(1320, 0.2, 'triangle'); haptic('heavy'); alertMsg(`🎁 +${r.coins} tanga!`); renderMenu(); }
+  if (r.ok) { P = r.profile; sfx(880, 0.1); sfx(1320, 0.2, 'triangle'); haptic('heavy'); alertMsg(`🎁 ${r.day}-kun: +${fmt(r.coins)} tanga!` + (r.day < 7 ? `\nErtaga ham kiring — bonus oshadi 🔥` : '')); renderMenu(); }
   else alertMsg(r.error);
 }
+// ═════════════ TANGA DO'KONI (donat) ═════════════
+function openCoins() {
+  if (!SHOP || !SHOP.packs) return alertMsg('Yuklanmoqda…');
+  const icons = ['🪙', '💰', '💎', '👑', '🏆'];
+  const bonus = (P.first_buy ? SHOP.first_bonus : 0) + (P.vip ? SHOP.vip_coin_bonus : 0);
+  let h = `<h3>🪙 Tanga do'koni <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px;margin-bottom:10px">Tangalar bot balansidan sotib olinadi. Sizda: <b style="color:var(--gold)">🪙 ${fmt(P.coins)}</b> · Balans: <b style="color:var(--text)">${fmt(P.balance)} so'm</b></div>`;
+  if (P.first_buy) h += `<div class="ups" style="margin-bottom:10px">🎁 <b>Birinchi xarid: +${Math.round(SHOP.first_bonus * 100)}% bonus!</b></div>`;
+  if (P.vip) h += `<div class="ups" style="margin-bottom:10px">👑 VIP: har xaridga <b>+${Math.round(SHOP.vip_coin_bonus * 100)}%</b></div>`;
+  SHOP.packs.forEach((p, i) => {
+    const total = Math.floor(p.coins * (1 + bonus)), per = p.coins / p.price * 5000, extra = Math.round((per / (SHOP.packs[0].coins) - 1) * 100);
+    h += `<div class="pack">${extra > 0 ? `<span class="tag">+${extra}% foyda</span>` : ''}<div class="ic">${icons[i] || '🪙'}</div>
+      <div style="flex:1"><b>${fmt(total)} tanga</b>${bonus ? `<small>${fmt(p.coins)} + ${fmt(total - p.coins)} bonus</small>` : '<small>&nbsp;</small>'}</div>
+      <button class="buy${P.balance >= p.price ? '' : ' g'}" onclick="buyCoins(${i})">${fmt(p.price)} so'm</button></div>`;
+  });
+  if (GUEST) h += '<div class="warn">Xarid uchun o\'yinni Telegram botdan oching.</div>';
+  else h += `<button class="big s" onclick="location.href='/#topup'">💳 Balansni to'ldirish</button>`;
+  sheet(h);
+}
+async function buyCoins(i) {
+  const p = SHOP.packs[i];
+  if (P.balance < p.price) {
+    if (await confirmMsg(`Balans yetarli emas (kerak ${fmt(p.price)} so'm, sizda ${fmt(P.balance)} so'm). Balansni to'ldirasizmi?`)) location.href = '/#topup';
+    return;
+  }
+  if (!await confirmMsg(`${fmt(p.price)} so'm balansdan yechiladi. Tasdiqlaysizmi?`)) return;
+  const r = await api('coins', {pack: i});
+  if (!r.ok) return alertMsg(r.error);
+  P = r.profile; haptic('heavy'); sfx(880, 0.1); setTimeout(() => sfx(1320, 0.25, 'triangle'), 120);
+  alertMsg(`✅ +${fmt(r.coins)} tanga qo'shildi!`); openCoins();
+}
+// tanga yetmasa — do'konni taklif qilish
+async function needCoins(msg) {
+  if (msg && /Tanga yetarli emas/.test(msg) && !GUEST) { if (await confirmMsg('🪙 Tanga yetarli emas. Tanga do\'koniga o\'tasizmi?')) openCoins(); }
+  else alertMsg(msg);
+}
+
 function sheet(html) { $('sh').innerHTML = html; $('sheet').classList.remove('hide'); }
 function closeSheet() { $('sheet').classList.add('hide'); if (mode === 'city') paused = false; else renderMenu(); }
 let gTab = 'cars';
@@ -571,13 +615,13 @@ function openGarage(tab) {
   if (GUEST) h += '<div class="warn">Xarid qilish uchun o\'yinni Telegram botdan oching.</div>';
   sheet(h);
 }
-async function pickCar(k) { const r = await api('car', {key: k}); if (r.ok) { P = r.profile; sfx(700, 0.1); openGarage(); } else alertMsg(r.error); }
-async function buyUp(k) { const r = await api('upgrade', {key: k}); if (r.ok) { P = r.profile; sfx(990, 0.12, 'triangle'); haptic('medium'); openGarage(); } else alertMsg(r.error); }
+async function pickCar(k) { const r = await api('car', {key: k}); if (r.ok) { P = r.profile; sfx(700, 0.1); openGarage(); } else needCoins(r.error); }
+async function buyUp(k) { const r = await api('upgrade', {key: k}); if (r.ok) { P = r.profile; sfx(990, 0.12, 'triangle'); haptic('medium'); openGarage(); } else needCoins(r.error); }
 function openVip() {
   if (!SHOP) return;
   const perks = [['🪙', `<b>×${SHOP.vip_mult} tanga</b> har bir o'yinda`], ['⚡️', '<b>+15% kuch</b>: mashina tezligi va tezlanishi, piyoda tezroq yugurish'],
     ['👑', '<b>Oltin superkar</b> — eng tez mashina'], ['🔥', 'Nitro tezroq to\'ladi'], ['🧍', 'Oltin pidjak, toj, oltin zanjir — faqat VIP'],
-    ['🎁', `Kunlik bonus <b>${SHOP.daily_vip}</b> tanga (oddiy: ${SHOP.daily})`], ['🏆', 'Reytingda 👑 belgisi']];
+    ['🎁', `Kunlik bonus <b>×2</b> (7-kun: <b>${fmt((SHOP.daily_streak || [600]).slice(-1)[0] * 2)}</b> tanga)`], ['🪙', `Tanga xaridiga <b>+${Math.round((SHOP.vip_coin_bonus || 0.1) * 100)}%</b>`], ['🏆', 'Reytingda 👑 belgisi']];
   let h = `<h3>👑 VIP obuna <button onclick="closeSheet()">✕</button></h3>
     <div style="color:var(--hint);font-size:13px">O'yin hamma uchun bepul. VIP — ixtiyoriy, kuchliroq o'ynash va tezroq rivojlanish uchun.</div>
     ${perks.map(p => `<div class="perk"><span>${p[0]}</span><div>${p[1]}</div></div>`).join('')}

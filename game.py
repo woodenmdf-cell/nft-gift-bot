@@ -47,6 +47,17 @@ PAINT_PRICE = 150
 PAINT_VIP = {12, 13}
 PAINT_COUNT = 14
 LOOK_DEFAULT = {"skin": 1, "hair": 0, "hc": 0, "top": 0, "tc": 1, "pc": 0, "acc": 0}
+# Topshiriq turlari bo'yicha mukofot (tanga) va tajriba
+MISSION_REWARD = {"deliver": 50, "taxi": 70, "race": 90}
+MISSION_XP = {"deliver": 20, "taxi": 28, "race": 35}
+PICKUP_COINS = 3
+LEVEL_BONUS = 0.03           # har daraja uchun +3% tanga (maks. +60%)
+# Kunlik bonus seriyasi: ketma-ket kunlar (48 soat ichida qaytsangiz seriya davom etadi)
+DAILY_STREAK = [100, 150, 200, 250, 300, 400, 600]
+# Donat: (narx so'mda, tanga). Birinchi xaridga +50%, VIP'ga +10%
+COIN_PACKS = [(5000, 1000), (10000, 2200), (25000, 6000), (50000, 13000), (100000, 30000)]
+FIRST_BUY_BONUS = 0.5
+VIP_COIN_BONUS = 0.1
 VIP_MULT = 2                 # VIP tanga ko'paytiruvchisi
 DAILY = 100                  # kunlik bonus
 DAILY_VIP = 300
@@ -109,6 +120,9 @@ def view(uid):
         "look": clean_look(d, vip), "owned": d["owned"],
         "paint": {k: v for k, v in d["paint"].items() if vip or v not in PAINT_VIP},
         "balance": db.balance(uid),
+        "daily_day": daily_next(d, p, vip, now)[0], "daily_amount": daily_next(d, p, vip, now)[1],
+        "level_bonus": round(level_bonus(p["xp"]) * 100),
+        "first_buy": db.game_coin_purchases(uid) == 0,
     }
 
 
@@ -120,25 +134,56 @@ def shop():
                      for k, (n, m, b) in UPGRADES.items()},
         "cars": {k: {"name": n, "price": pr, "vip": v} for k, (n, pr, v) in CARS.items()},
         "look": LOOK, "paint_price": PAINT_PRICE, "paint_vip": sorted(PAINT_VIP),
+        "missions": MISSION_REWARD, "pickup": PICKUP_COINS, "daily_streak": DAILY_STREAK,
+        "packs": [{"price": pr, "coins": c} for pr, c in COIN_PACKS],
+        "first_bonus": FIRST_BUY_BONUS, "vip_coin_bonus": VIP_COIN_BONUS,
     }
 
 
-def calc_reward(mode, body, elapsed, vip):
+def level_bonus(xp):
+    return min(0.6, LEVEL_BONUS * (level(xp) - 1))
+
+
+def calc_reward(mode, body, elapsed, vip, xp=0):
     """(tanga, xp, bajarilgan topshiriqlar) — server o'lchagan vaqt bo'yicha cheklangan."""
     if mode != "city":
         return 0, 0, 0
-    missions = min(max(int(body.get("missions") or 0), 0), int(elapsed // 8))
+    m = body.get("missions") or {}
+    if not isinstance(m, dict):                       # eski mijozlar: faqat son
+        m = {"deliver": m}
+    counts = {k: max(int(m.get(k) or 0), 0) for k in MISSION_REWARD}
+    total, cap = sum(counts.values()), int(elapsed // 8)
+    if total > cap:                                   # vaqtga sig'maydigan topshiriqlar kesiladi
+        k = cap / total
+        counts = {t: int(n * k) for t, n in counts.items()}
+        total = sum(counts.values())
     pickups = min(max(int(body.get("pickups") or 0), 0), int(elapsed))
-    coins = missions * 60 + pickups * 3
-    coins = min(coins, int(elapsed * 6) + 30, 3000)
-    xp = missions * 25 + min(int(elapsed // 10), 120)
+    coins = sum(MISSION_REWARD[t] * n for t, n in counts.items()) + pickups * PICKUP_COINS
+    coins = int(coins * (1 + level_bonus(xp)))
+    coins = min(coins, int(elapsed * 8) + 40, 4000)
+    xp_ = sum(MISSION_XP[t] * n for t, n in counts.items()) + min(int(elapsed // 10), 120)
     if vip:
         coins *= VIP_MULT
-    return coins, xp, missions
+    return coins, xp_, total
+
+
+def coin_pack(i, first, vip):
+    price, coins = COIN_PACKS[i]
+    bonus = (FIRST_BUY_BONUS if first else 0) + (VIP_COIN_BONUS if vip else 0)
+    return price, int(coins * (1 + bonus))
+
+
+def daily_next(d, p, vip, now):
+    """Keyingi kunlik bonus: (seriya kuni 1..7, tanga)."""
+    last = p.get("last_daily") or 0
+    streak = int(d.get("streak") or 0)
+    day = streak % len(DAILY_STREAK) + 1 if last and now - last < 48 * 3600 else 1
+    amount = DAILY_STREAK[day - 1] * (VIP_MULT if vip else 1)
+    return day, amount
 
 
 # ── HTTP ──
-def setup(r, auth, ok, err, on_vip=None, verify=None):
+def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
     async def me(request):
         user, _ = await auth(request)
         return ok(profile=view(user["id"]), shop=shop())
@@ -162,7 +207,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
             return err("O'yin sessiyasi topilmadi")
         elapsed = min(time.time() - s[2], SESSION_MAX)
         p = db.game_profile(user["id"])
-        coins, xp, win = calc_reward(s[1], body, elapsed, is_vip(p))
+        coins, xp, win = calc_reward(s[1], body, elapsed, is_vip(p), p["xp"])
         old_lvl = level(p["xp"])
         db.game_add(user["id"], coins=coins, xp=xp, games=1, wins=win)
         v = view(user["id"])
@@ -174,10 +219,12 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
         now = int(time.time())
         if (p["last_daily"] or 0) + DAILY_EVERY > now:
             return err("Kunlik bonus hali tayyor emas")
-        amount = DAILY_VIP if is_vip(p) else DAILY
-        db.game_save(user["id"], last_daily=now)
+        d = _data(p)
+        day, amount = daily_next(d, p, is_vip(p), now)
+        d["streak"] = day
+        db.game_save(user["id"], last_daily=now, data=json.dumps(d))
         db.game_add(user["id"], coins=amount)
-        return ok(coins=amount, profile=view(user["id"]))
+        return ok(coins=amount, day=day, profile=view(user["id"]))
 
     async def upgrade(request):
         user, body = await auth(request)
@@ -275,6 +322,20 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
             db.game_save(user["id"], data=json.dumps(d))
         return ok(profile=view(user["id"]), spent=cost)
 
+    async def coins(request):
+        user, body = await auth(request)
+        i = body.get("pack")
+        if not isinstance(i, int) or not 0 <= i < len(COIN_PACKS):
+            return err("Noto'g'ri paket")
+        p = db.game_profile(user["id"])
+        price, amount = coin_pack(i, db.game_coin_purchases(user["id"]) == 0, is_vip(p))
+        total, e = db.game_buy_coins(user["id"], price, amount)
+        if e:
+            return err(e)
+        if on_coins:
+            await on_coins(user, price, amount)
+        return ok(coins=amount, profile=view(user["id"]))
+
     async def top(request):
         rows = db.game_top(30)
         now = time.time()
@@ -294,6 +355,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
     r.add_post("/api/game/vip", vip)
     r.add_post("/api/game/look", look)
     r.add_post("/api/game/paint", paint)
+    r.add_post("/api/game/coins", coins)
     if verify:
         async def ws_h(request):
             return await ws_city(request, verify)
