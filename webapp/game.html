@@ -49,11 +49,10 @@
   .logo span{color:var(--acc)}
   .sub{text-align:center;color:var(--hint);font-size:13px;margin-bottom:18px}
   .modes{display:grid;gap:12px}
-  .mode{border-radius:20px;padding:18px;text-align:left;position:relative;overflow:hidden;min-height:118px;display:flex;flex-direction:column;justify-content:flex-end}
+  .mode{border-radius:20px;padding:18px;text-align:left;position:relative;overflow:hidden;min-height:170px;display:flex;flex-direction:column;justify-content:flex-end}
   .mode b{font-size:22px;font-weight:900;position:relative}.mode p{font-size:13px;opacity:.85;margin-top:3px;position:relative;max-width:75%}
   .mode .ico{position:absolute;right:12px;top:8px;font-size:64px;opacity:.9}
   .m-city{background:linear-gradient(135deg,#ff5a36,#c2185b)}
-  .m-fb{background:linear-gradient(135deg,#1f9d55,#0d5c63)}
   .mode:active{transform:scale(.98)}
   .row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
   .tile{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600}
@@ -72,8 +71,6 @@
   #stars{color:#555;letter-spacing:1px}#stars b{color:var(--gold)}
   #mission{position:absolute;top:calc(52px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:8px 14px;font-weight:700;font-size:14px;text-align:center;white-space:nowrap}
   #mission small{display:block;color:var(--gold);font-size:12px}
-  #score{position:absolute;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:6px 12px;font-weight:900;font-size:16px;display:flex;gap:8px;align-items:center;white-space:nowrap}
-  #score small{color:var(--hint);font-size:12px;font-weight:700}
   #toast{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%);font-weight:900;font-size:26px;text-align:center;text-shadow:0 3px 12px #000;opacity:0;transition:opacity .25s;white-space:nowrap}
   #toast.on{opacity:1}#toast small{display:block;font-size:14px;font-weight:700}
   .btns{position:absolute;right:14px;bottom:calc(22px + env(safe-area-inset-bottom));display:flex;gap:14px;align-items:flex-end;pointer-events:auto}
@@ -117,7 +114,6 @@
 </head>
 <body>
 <canvas id="gl"></canvas>
-<canvas id="cv" style="display:none"></canvas>
 <div id="touch"></div>
 
 <div id="menu">
@@ -127,10 +123,9 @@
     <div class="coins">🪙 <span id="m-coins">0</span></div>
   </div>
   <div class="logo">SHAHAR <span>ARENA</span></div>
-  <div class="sub">3D shahar · Mashinalar · Politsiya · Futbol</div>
+  <div class="sub">3D shahar · Mashinalar · Politsiya · Onlayn</div>
   <div class="modes">
-    <button class="mode m-city" onclick="startGame('city')"><div class="ico">🏙</div><b>SHAHAR</b><p>3D ochiq shahar: piyoda yur, istalgan mashinaga o'tir, topshiriq bajar, politsiyadan qoch</p></button>
-    <button class="mode m-fb" onclick="startGame('football')"><div class="ico">⚽</div><b>FUTBOL</b><p>4×4 tezkor o'yin, 2 daqiqa. Gol ur — g'alaba qozon!</p></button>
+    <button class="mode m-city" onclick="startGame()"><div class="ico">🏙</div><b>▶ O'YNASH</b><p>3D ochiq shahar: piyoda yur, istalgan mashinaga o'tir, topshiriqlar bajar, politsiyadan qoch, do'stlar bilan birga o'yna</p></button>
   </div>
   <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
   <div class="row" style="grid-template-columns:repeat(4,1fr)">
@@ -165,7 +160,6 @@
   <button class="x chatb hide" id="h-chat" onclick="toggleChat()">💬</button>
   <div id="chatpick" class="hide"></div>
   <div id="chatfeed"></div>
-  <div id="score" class="hide"></div>
   <div id="toast"></div>
   <div id="joy"><i></i></div>
   <div class="hint" id="h-hint">Chap tomonni bosib suring</div>
@@ -227,17 +221,9 @@ function sfx(f, d, type, vol) {
 }
 function toggleSound() { SOUND = !SOUND; try { localStorage.setItem('sa_sound', SOUND ? '1' : '0'); } catch (e) {} renderMenu(); }
 
-// canvas
-const cv = $('cv'), ctx = cv.getContext('2d');
-if (!ctx.roundRect) ctx.roundRect = function (x, y, w, h, r) {
-  this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
-  this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath();
-};
-let W = 0, H = 0, DPR = 1;
-function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
-  cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px';
-}
+// ekran o'lchami
+let W = 0, H = 0;
+function resize() { W = innerWidth; H = innerHeight; }
 addEventListener('resize', resize); resize();
 
 // ═════════════ BOSHQARUV ═════════════
@@ -252,7 +238,7 @@ const touch = $('touch');
 let camId = null, cx0 = 0, cy0 = 0;
 touch.addEventListener('touchstart', e => {
   for (const t of e.changedTouches) {
-    if (joyId === null && t.clientX < W * (mode === 'city' ? 0.45 : 0.62)) { joyId = t.identifier; jx0 = t.clientX; jy0 = t.clientY; joyShow(jx0, jy0); joyKnob(0, 0); }
+    if (joyId === null && t.clientX < W * 0.45) { joyId = t.identifier; jx0 = t.clientX; jy0 = t.clientY; joyShow(jx0, jy0); joyKnob(0, 0); }
     else if (camId === null && mode === 'city') { camId = t.identifier; cx0 = t.clientX; cy0 = t.clientY; }
   }
   e.preventDefault();
@@ -274,7 +260,7 @@ touch.addEventListener('touchend', joyEnd); touch.addEventListener('touchcancel'
 // sichqoncha (kompyuter): chapda joystik, o'ngda kamera
 let mouseDown = 0;
 touch.addEventListener('mousedown', e => {
-  if (e.clientX < W * 0.45 || mode !== 'city') { mouseDown = 1; jx0 = e.clientX; jy0 = e.clientY; joyShow(jx0, jy0); }
+  if (e.clientX < W * 0.45) { mouseDown = 1; jx0 = e.clientX; jy0 = e.clientY; joyShow(jx0, jy0); }
   else { mouseDown = 2; cx0 = e.clientX; cy0 = e.clientY; }
 });
 addEventListener('mousemove', e => {
@@ -321,239 +307,6 @@ const CAR_STATS = {
   super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', ico: '👑'},
 };
 const MISSION_COINS = 60, PICKUP_COINS = 3;
-function bump(a, b, r) {
-  const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
-  if (d >= r || d === 0) return false;
-  const k = (r - d) / 2; a.x += dx / d * k; a.y += dy / d * k; b.x -= dx / d * k; b.y -= dy / d * k; return true;
-}
-
-// ═════════════ FUTBOL ═════════════
-const F = {W: 680, H: 1050, GW: 190};
-let fb = null;
-function fbStart() {
-  const u = P.up || {}, vb = P.vip ? 1.15 : 1, lv = Math.min(P.level || 1, 15);
-  fb = {camX: null, t: 0, time: 120, gf: 0, ga: 0, pl: [], ball: {x: F.W / 2, y: F.H / 2, vx: 0, vy: 0, owner: null, roll: 1, beat: null},
-        pause: 0, next: null, ctrl: null, camY: F.H / 2,
-        T: [{speed: 178 * (1 + 0.06 * (u.f_speed || 0)) * vb, shot: 650 * (1 + 0.07 * (u.f_shot || 0)) * vb, keep: (1 + 0.12 * (u.f_keeper || 0)) * vb, tackle: 2.4 * vb, aim: 70 - 8 * (u.f_shot || 0),
-             c1: P.vip ? '#d4af37' : '#2f7cf6', c2: P.vip ? '#1a1a1a' : '#ffffff', gk: '#22c55e'},
-            {speed: 172 * (1 + lv * 0.012), shot: 620 * (1 + lv * 0.01), keep: 1 + lv * 0.035, tackle: 2.0 + lv * 0.05, aim: 80,
-             c1: '#e53935', c2: '#ffffff', gk: '#a855f7'}]};
-  const form = [['GK', 0.5, 0.965, 1], ['DF', 0.5, 0.78, 4], ['FW', 0.27, 0.6, 7], ['FW', 0.73, 0.6, 10]];
-  for (const team of [0, 1]) for (const f of form) {
-    const hx = team ? F.W - f[1] * F.W : f[1] * F.W, hy = team ? (1 - f[2]) * F.H : f[2] * F.H;
-    fb.pl.push({team, role: f[0], num: f[3], hx, hy, x: hx, y: hy, vx: 0, vy: 0, fx: 0, fy: team ? 1 : -1, cd: 0, sprint: 0, think: 0, hold: 0});
-  }
-  kickoff(0);
-}
-function kickoff(team) {
-  const b = fb.ball;
-  for (const p of fb.pl) { p.x = p.hx; p.y = p.hy + (p.team ? -40 : 40); p.vx = p.vy = 0; p.cd = 0; p.hold = 0; p.fx = 0; p.fy = p.team ? 1 : -1; }
-  b.x = F.W / 2; b.y = F.H / 2; b.vx = b.vy = 0; b.beat = null;
-  const k = fb.pl.find(p => p.team === team && p.role === 'FW');
-  k.x = F.W / 2; k.y = F.H / 2 + (team ? -16 : 16); b.owner = k; fb.ctrl = team === 0 ? k : fb.ctrl;
-}
-function kick(p, tx, ty, power, spread) {
-  const b = fb.ball; let dx = tx - p.x, dy = ty - p.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-  const a = Math.atan2(dy, dx) + (spread ? rnd(-spread, spread) : 0);
-  b.owner = null; b.vx = Math.cos(a) * power; b.vy = Math.sin(a) * power; b.x = p.x + Math.cos(a) * 20; b.y = p.y + Math.sin(a) * 20;
-  b.roll = Math.random(); b.beat = null; p.cd = 0.35; p.hold = 0;
-  sfx(power > 500 ? 180 : 260, 0.07, 'triangle', 0.08);
-}
-function shoot(p) {
-  const T = fb.T[p.team], gy = p.team ? F.H + 10 : -10, dGoal = Math.abs(p.y - gy);
-  let tx = F.W / 2 + clamp(p.fx * 220, -F.GW * 0.42, F.GW * 0.42), ty = gy;
-  if (p.team === 0 && dGoal > 520 && p.fy > -0.2) { tx = p.x + p.fx * 300; ty = p.y + p.fy * 300; }
-  if (p.team === 1) tx = F.W / 2 + rnd(-F.GW * 0.42, F.GW * 0.42);
-  kick(p, tx + rnd(-T.aim, T.aim) * Math.min(1, dGoal / 600), ty, T.shot, 0.04);
-}
-function pass(p) {
-  let best = null, bs = -1e9;
-  for (const q of fb.pl) {
-    if (q.team !== p.team || q === p) continue;
-    const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
-    let s = (dx * p.fx + dy * p.fy) / d * 1.2 - d / 700 + (p.team ? dy : -dy) / 900;
-    if (q.role === 'GK') s -= 1.5;
-    const opp = fb.pl.filter(o => o.team !== p.team);
-    for (const o of opp) { const t = clamp(((o.x - p.x) * dx + (o.y - p.y) * dy) / (d * d), 0, 1); if (Math.hypot(p.x + dx * t - o.x, p.y + dy * t - o.y) < 26) s -= 0.6; }
-    if (s > bs) { bs = s; best = q; }
-  }
-  if (!best) return;
-  const d = dist(p, best), lead = 0.35;
-  kick(p, best.x + best.vx * lead, best.y + best.vy * lead, clamp(d * 1.45 + 170, 280, 760), 0.02);
-}
-function steer(p, tx, ty, sp, dt) {
-  let dx = tx - p.x, dy = ty - p.y; const l = Math.hypot(dx, dy);
-  const s = l < 8 ? 0 : Math.min(sp, l * 4);
-  const vx = l ? dx / l * s : 0, vy = l ? dy / l * s : 0, k = Math.min(1, dt * 8);
-  p.vx += (vx - p.vx) * k; p.vy += (vy - p.vy) * k;
-}
-function goal(us) {
-  if (us) { fb.gf++; toast('⚽ GOOOL!', `${fb.gf} : ${fb.ga}`); sfx(523, 0.15, 'triangle', 0.08); setTimeout(() => sfx(784, 0.3, 'triangle', 0.08), 140); haptic('heavy'); }
-  else { fb.ga++; toast('😬 Gol o\'tkazildi', `${fb.gf} : ${fb.ga}`); sfx(150, 0.35, 'sawtooth', 0.05); haptic('medium'); }
-  fb.pause = 1.8; fb.next = us ? 1 : 0; fb.ball.owner = null; fb.ball.vx *= 0.2; fb.ball.vy *= 0.2;
-}
-function fbUpdate(dt) {
-  const b = fb.ball;
-  if (fb.pause > 0) {
-    fb.pause -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
-    if (fb.pause <= 0 && fb.next !== null) { kickoff(fb.next); fb.next = null; }
-    fbHud(); return;
-  }
-  fb.t += dt;
-  if (fb.t >= fb.time) { endGame(); return; }
-  // boshqariladigan o'yinchi
-  const mine = fb.pl.filter(p => p.team === 0 && p.role !== 'GK');
-  const closest = mine.reduce((a, q) => dist(q, b) < dist(a, b) ? q : a);
-  if (b.owner && b.owner.team === 0) fb.ctrl = b.owner;
-  else if (!fb.ctrl || fb.ctrl.role === 'GK' || input.bHit || dist(closest, b) < dist(fb.ctrl, b) - 90) {
-    if (fb.ctrl !== closest && input.bHit) haptic('light');
-    fb.ctrl = closest;
-  }
-  const chaser = [null, null];
-  for (const team of [0, 1]) if (!(b.owner && b.owner.team === team)) {
-    let bd = 1e9; for (const p of fb.pl) if (p.team === team && p.role !== 'GK' && p !== fb.ctrl) { const d = dist(p, b); if (d < bd) { bd = d; chaser[team] = p; } }
-    if (team === 0 && bd > 90) chaser[0] = null;
-  }
-  for (const p of fb.pl) {
-    const T = fb.T[p.team], sgn = p.team ? 1 : -1;
-    p.cd -= dt; p.sprint -= dt;
-    let sp = T.speed * (p.sprint > 0 ? 1.45 : 1);
-    if (p === b.owner) sp *= 0.9;
-    if (p === fb.ctrl) {
-      const m = getMove(); const k = Math.min(1, dt * 10);
-      p.vx += (m.x * sp - p.vx) * k; p.vy += (m.y * sp - p.vy) * k;
-      if (b.owner === p) { if (input.aHit) shoot(p); else if (input.bHit) pass(p); }
-      else if (input.aHit && p.sprint < -0.6) { p.sprint = 0.5; }
-    } else if (p.role === 'GK') {
-      const gy = p.team ? 22 : F.H - 22;
-      if (b.owner === p) {
-        p.hold += dt; steer(p, p.x, gy + sgn * 40, sp * 0.5, dt);
-        if (p.hold > 0.8) { if (p.team === 0) { fb.ctrl = mine[0]; } pass(p); }
-      } else {
-        const danger = Math.abs(b.y - gy) < 170 && Math.abs(b.x - F.W / 2) < 200 && !(b.owner && b.owner.team === p.team);
-        const tx = danger ? b.x : clamp(b.x, F.W / 2 - F.GW / 2 + 12, F.W / 2 + F.GW / 2 - 12);
-        const ty = danger ? b.y : gy;
-        steer(p, tx, ty, sp * 0.9 * T.keep, dt);
-      }
-    } else if (b.owner === p) {
-      // raqib (yoki hamjamoa) to'p bilan — AI
-      p.hold += dt; p.think -= dt;
-      const gx = F.W / 2, gy = p.team ? F.H : 0;
-      let tx = gx, ty = gy;
-      const foe = fb.pl.filter(o => o.team !== p.team).reduce((a, o) => dist(o, p) < dist(a, p) ? o : a);
-      const fd = dist(foe, p);
-      if (fd < 80 && (foe.y - p.y) * sgn > 0) tx = p.x + (p.x < foe.x ? -120 : 120);
-      steer(p, clamp(tx, 30, F.W - 30), ty, sp, dt);
-      if (p.think <= 0) {
-        p.think = 0.25;
-        const dG = Math.abs(gy - p.y);
-        if (dG < 330 && Math.random() < 0.55) shoot(p);
-        else if ((fd < 46 && Math.random() < 0.45) || p.hold > 2.6) pass(p);
-      }
-    } else {
-      let tx, ty, f = 0.8;
-      if (p === chaser[p.team]) {
-        tx = b.x; ty = b.y + (b.owner ? -sgn * 10 : 0); f = 1;
-        if (b.owner && b.owner.team !== p.team && p.team === 1) ty = b.y - sgn * 6;
-      } else {
-        const has = b.owner && b.owner.team === p.team;
-        tx = p.hx + (b.x - F.W / 2) * 0.35;
-        ty = p.hy + (b.y - F.H / 2) * 0.55 + (has ? sgn * (p.role === 'FW' ? 170 : 80) : 0);
-        if (p.role === 'DF') ty = p.team ? Math.min(ty, F.H * 0.55) : Math.max(ty, F.H * 0.45);
-      }
-      steer(p, clamp(tx, 20, F.W - 20), clamp(ty, 20, F.H - 20), sp * f, dt);
-    }
-    p.x = clamp(p.x + p.vx * dt, 12, F.W - 12); p.y = clamp(p.y + p.vy * dt, 12, F.H - 12);
-    const s = Math.hypot(p.vx, p.vy); if (s > 20) { p.fx = p.vx / s; p.fy = p.vy / s; }
-  }
-  // o'yinchilar to'qnashuvi
-  for (let i = 0; i < fb.pl.length; i++) for (let j = i + 1; j < fb.pl.length; j++) bump(fb.pl[i], fb.pl[j], 30);
-  // to'p
-  if (b.owner) {
-    const o = b.owner;
-    b.x = o.x + o.fx * 19; b.y = o.y + o.fy * 19; b.vx = o.vx; b.vy = o.vy;
-    for (const p of fb.pl) {
-      if (p.team === o.team || p.cd > 0 || dist(p, o) > 28) continue;
-      const T = fb.T[p.team];
-      if (Math.random() < T.tackle * dt * (p.sprint > 0 ? 1.8 : 1) * (o.role === 'GK' ? 0.2 : 1)) {
-        b.owner = p; o.cd = 0.7; p.hold = 0; sfx(300, 0.05, 'square', 0.04);
-        if (p.team === 0) haptic('light');
-        break;
-      }
-    }
-  } else {
-    b.x += b.vx * dt; b.y += b.vy * dt;
-    const k = Math.pow(0.42, dt); b.vx *= k; b.vy *= k;
-    const spd = Math.hypot(b.vx, b.vy);
-    for (const p of fb.pl) {
-      if (p.cd > 0 || p === b.beat) continue;
-      const d = dist(p, b);
-      if (p.role === 'GK') {
-        const reach = 30 * fb.T[p.team].keep;
-        if (d < reach) {
-          const chance = clamp(0.62 * fb.T[p.team].keep - (spd - 450) / 1400, 0.12, 0.96);
-          if (spd < 260 || b.roll < chance) { b.owner = p; p.hold = 0; if (spd > 400) { toast('🧤 Qaytardi!', ''); sfx(400, 0.08); } break; }
-          else b.beat = p;
-        }
-      } else if (d < 21) {
-        if (spd < 470 || Math.random() < 0.25) { b.owner = p; p.hold = 0; p.think = 0.3; break; }
-        b.vx *= 0.6; b.vy *= 0.6;
-      }
-    }
-  }
-  // chegaralar va gol
-  const inGoal = Math.abs(b.x - F.W / 2) < F.GW / 2 - 6;
-  if (b.y < 6) { if (inGoal) return goal(true); b.y = 6; b.vy = Math.abs(b.vy) * 0.6; if (b.owner) b.owner.y = 30; }
-  if (b.y > F.H - 6) { if (inGoal) return goal(false); b.y = F.H - 6; b.vy = -Math.abs(b.vy) * 0.6; if (b.owner) b.owner.y = F.H - 30; }
-  if (b.x < 6) { b.x = 6; b.vx = Math.abs(b.vx) * 0.6; } if (b.x > F.W - 6) { b.x = F.W - 6; b.vx = -Math.abs(b.vx) * 0.6; }
-  fbHud();
-}
-function fbHud() {
-  const min = Math.min(90, Math.floor(fb.t / fb.time * 90));
-  $('score').innerHTML = `<span style="color:${fb.T[0].c1}">●</span> SIZ ${fb.gf} : ${fb.ga} RAQIB <span style="color:${fb.T[1].c1}">●</span><small>${min}'</small>`;
-}
-function fbRender() {
-  const s = Math.max(W / (F.W + 70), Math.min(W / 440, H / 700)), viewW = W / s, viewH = H / s;
-  const camX = viewW >= F.W + 60 ? F.W / 2 : clamp(fb.ball.x, viewW / 2 - 30, F.W - viewW / 2 + 30);
-  fb.camX = fb.camX == null ? camX : fb.camX + (camX - fb.camX) * 0.12;
-  fb.camY += (clamp(fb.ball.y, viewH / 2 - 60, F.H - viewH / 2 + 60) - fb.camY) * 0.12;
-  if (viewH > F.H + 120) fb.camY = F.H / 2;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = '#1f5f2e'; ctx.fillRect(0, 0, W, H);
-  ctx.setTransform(DPR * s, 0, 0, DPR * s, DPR * (W / 2 - fb.camX * s), DPR * (H / 2 - fb.camY * s));
-  for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? '#2f8f45' : '#2a8340'; ctx.fillRect(0, i * F.H / 14, F.W, F.H / 14 + 1); }
-  ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 3;
-  ctx.strokeRect(0, 0, F.W, F.H);
-  ctx.beginPath(); ctx.moveTo(0, F.H / 2); ctx.lineTo(F.W, F.H / 2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(F.W / 2, F.H / 2, 85, 0, 7); ctx.stroke();
-  for (const top of [true, false]) {
-    const y = top ? 0 : F.H, d = top ? 1 : -1;
-    ctx.strokeRect(F.W / 2 - 200, top ? 0 : F.H - 165, 400, 165);
-    ctx.strokeRect(F.W / 2 - 105, top ? 0 : F.H - 60, 210, 60);
-    ctx.beginPath(); ctx.arc(F.W / 2, y + d * 115, 3, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
-    ctx.fillStyle = '#ffffff22'; ctx.fillRect(F.W / 2 - F.GW / 2, top ? -34 : F.H, F.GW, 34);
-    ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 1;
-    for (let x = F.W / 2 - F.GW / 2; x <= F.W / 2 + F.GW / 2; x += 12) { ctx.beginPath(); ctx.moveTo(x, top ? -34 : F.H); ctx.lineTo(x, top ? 0 : F.H + 34); ctx.stroke(); }
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.beginPath();
-    ctx.moveTo(F.W / 2 - F.GW / 2, y); ctx.lineTo(F.W / 2 - F.GW / 2, y - d * 34); ctx.lineTo(F.W / 2 + F.GW / 2, y - d * 34); ctx.lineTo(F.W / 2 + F.GW / 2, y); ctx.stroke();
-    ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 3;
-  }
-  const b = fb.ball;
-  const ps = fb.pl.slice().sort((a, q) => a.y - q.y);
-  for (const p of ps) {
-    const T = fb.T[p.team], gk = p.role === 'GK';
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(p.x + 4, p.y + 6, 16, 11, 0, 0, 7); ctx.fill();
-    if (p === fb.ctrl) { ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y, 23, 0, 7); ctx.stroke(); }
-    ctx.fillStyle = gk ? T.gk : T.c1; ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, 7); ctx.fill();
-    ctx.fillStyle = T.c2; ctx.beginPath(); ctx.arc(p.x + p.fx * 8, p.y + p.fy * 8, 6, 0, 7); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.strokeStyle = '#0008'; ctx.lineWidth = 3; ctx.strokeText(p.num, p.x - p.fx * 3, p.y - p.fy * 3); ctx.fillText(p.num, p.x - p.fx * 3, p.y - p.fy * 3);
-    if (p === fb.ctrl) { ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.moveTo(p.x, p.y - 27); ctx.lineTo(p.x - 7, p.y - 38); ctx.lineTo(p.x + 7, p.y - 38); ctx.fill(); }
-  }
-  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + 4, 8, 6, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, 7); ctx.fill();
-  ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(b.x + 2, b.y - 1, 3, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, 7); ctx.stroke();
-}
 
 // ═════════════ O'YIN OQIMI ═════════════
 let mode = 'menu', sid = null, paused = false;
@@ -562,42 +315,33 @@ function toast(t, s) {
   const el = $('toast'); el.innerHTML = esc(t) + (s ? `<small>${esc(s)}</small>` : ''); el.classList.add('on');
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1700);
 }
-async function startGame(m) {
+async function startGame() {
+  if (!City3D.ok) return alertMsg('Qurilmangiz 3D grafikani qo\'llab-quvvatlamaydi. Menyuda «Grafika: tezkor» ni tanlab qayta urinib ko\'ring.');
   try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume && AC.resume(); } catch (e) {}
   sid = null;
-  if (!GUEST) { const r = await api('start', {mode: m}); if (r.ok) sid = r.sid; }
-  mode = m; paused = false;
+  if (!GUEST) { const r = await api('start', {mode: 'city'}); if (r.ok) sid = r.sid; }
+  mode = 'city'; paused = false;
   input.a = input.b = input.e = false; input.jx = input.jy = input.dragX = input.dragY = 0;
-  if (m === 'city' && !City3D.ok) { mode = 'menu'; return alertMsg('Qurilmangiz 3D grafikani qo\'llab-quvvatlamaydi. Futbol rejimini o\'ynab ko\'ring.'); }
   $('menu').classList.add('hide'); $('result').classList.add('hide'); $('hud').classList.remove('hide'); $('h-hint').classList.remove('hide');
-  const city = m === 'city';
-  $('stars').classList.toggle('hide', !city); $('h-speed').classList.toggle('hide', !city); $('h-clock').classList.toggle('hide', !city);
-  $('mm').classList.toggle('hide', !city); $('h-chat').classList.toggle('hide', !city || GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide'); $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide');
-  cv.style.display = city ? 'none' : 'block'; $('gl').style.display = city ? 'block' : 'none';
-  $('h-coins').parentElement.classList.toggle('hide', !city);
-  $('mission').classList.toggle('hide', !city); $('score').classList.toggle('hide', city);
-  $('bA').querySelector('span').textContent = city ? '🔥' : '⚽'; $('lA').textContent = city ? 'NITRO' : 'ZARBA';
-  $('bB').querySelector('span').textContent = city ? '🛑' : '👟'; $('lB').textContent = city ? 'TORMOZ' : 'PAS';
-  $('h-hint').textContent = city ? 'Chap tomon — yurish/haydash · O\'ng tomonni suring — kamerani aylantirish' : 'Chap tomon — yugurish · ZARBA — darvozaga · PAS — sherikka';
-  if (city) City3D.start(); else fbStart();
+  $('h-chat').classList.toggle('hide', GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide');
+  $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide');
+  City3D.start();
   setTimeout(() => $('h-hint').classList.add('hide'), 7000);
   try { tg.BackButton.show(); } catch (e) {}
 }
 async function askExit() {
-  if (mode === 'menu') return;
+  if (mode !== 'city') return;
   paused = true;
-  const msg = mode === 'city' ? `O'yinni tugatib ${fmt(City3D.coins())} tangani olasizmi?` : 'O\'yinni tugatasizmi? Natija hozirgi hisob bo\'yicha yoziladi.';
-  if (await confirmMsg(msg)) endGame(); else paused = false;
+  if (await confirmMsg(`O'yinni tugatib ${fmt(City3D.coins())} tangani olasizmi?`)) endGame(); else paused = false;
 }
 async function endGame() {
-  const m = mode; mode = 'result';
+  mode = 'result';
   $('hud').classList.add('hide'); $('joy').style.display = 'none';
   try { tg.BackButton.hide(); } catch (e) {}
-  const body = m === 'city' ? City3D.stats() : {gf: fb.gf, ga: fb.ga};
-  if (m === 'city') City3D.stop();
-  let title, sub, coins = 0, xp = 0, lvlUp = false;
-  if (m === 'city') { title = '🏙 Sayohat tugadi'; sub = `Topshiriqlar: ${body.missions} · Tangalar: ${body.pickups}`; }
-  else { title = fb.gf > fb.ga ? '🏆 G\'ALABA!' : fb.gf === fb.ga ? '🤝 Durang' : '😔 Mag\'lubiyat'; sub = `Hisob: ${fb.gf} : ${fb.ga}`; }
+  const body = City3D.stats();
+  City3D.stop();
+  const title = '🏙 Sayohat tugadi', sub = `Topshiriqlar: ${body.missions} · Tangalar: ${body.pickups}`;
+  let coins = 0, xp = 0, lvlUp = false;
   $('res').innerHTML = `<h2>${title}</h2><div class="st">${esc(sub)}</div><div class="st">Saqlanmoqda…</div>`;
   $('result').classList.remove('hide');
   if (!GUEST && sid) {
@@ -610,23 +354,21 @@ async function endGame() {
     ${lvlUp ? `<div class="ups" style="background:#123a1c;border-color:#34c75955">🎉 Yangi daraja: <b style="color:#34c759">${P.level}</b></div>` : ''}
     ${GUEST ? '<div class="warn">Mehmon rejimi — natija saqlanmadi. O\'yinni botdan oching.</div>' : ''}
     ${lost ? `<div class="ups" onclick="openVip()">👑 VIP bilan yana <b>+${fmt(lost)}</b> tanga olardingiz</div>` : ''}
-    <button class="big" onclick="startGame('${m}')">🔄 Yana o'ynash</button>
+    <button class="big" onclick="startGame()">🔄 Yana o'ynash</button>
     <button class="big s" onclick="toMenu()">Menyu</button>`;
-  if (fb && m === 'football' && fb.gf > fb.ga) haptic('heavy');
 }
 function toMenu() {
-  mode = 'menu'; cv.style.display = 'none'; $('gl').style.display = 'block'; $('result').classList.add('hide'); $('hud').classList.add('hide'); $('menu').classList.remove('hide');
+  mode = 'menu'; $('result').classList.add('hide'); $('hud').classList.add('hide'); $('menu').classList.remove('hide');
   try { tg.BackButton.hide(); } catch (e) {}
   renderMenu();
 }
-try { tg.BackButton.onClick(() => { if (mode === 'city' || mode === 'football') askExit(); }); } catch (e) {}
-document.addEventListener('visibilitychange', () => { if (document.hidden && (mode === 'city' || mode === 'football')) { paused = true; askExit(); } });
+try { tg.BackButton.onClick(() => { if (mode === 'city') askExit(); }); } catch (e) {}
+document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'city') { paused = true; askExit(); } });
 
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (mode === 'city') { if (!paused) City3D.update(dt); City3D.render(false, dt); }
-  else if (mode === 'football') { if (!paused) fbUpdate(dt); if (mode === 'football') fbRender(); }
   else if (!document.hidden) City3D.render(true, dt);
   input.aHit = input.bHit = input.eHit = false;
   requestAnimationFrame(frame);
@@ -695,7 +437,7 @@ function renderMenu() {
   $('m-lvl').textContent = P.level; $('m-lvl').classList.toggle('vip', !!P.vip);
   const prev = (P.level - 1) ** 2 * 100;
   $('m-xp').style.width = clamp((P.xp - prev) / Math.max(1, P.next_xp - prev) * 100, 0, 100) + '%';
-  $('m-xpt').textContent = `${P.level}-daraja · ${fmt(P.xp)}/${fmt(P.next_xp)} XP · G'alabalar: ${P.wins}`;
+  $('m-xpt').textContent = `${P.level}-daraja · ${fmt(P.xp)}/${fmt(P.next_xp)} XP · Topshiriqlar: ${P.wins}`;
   $('m-coins').textContent = fmt(P.coins);
   const d = $('m-daily');
   if (P.daily_in > 0) { d.disabled = true; d.textContent = `🎁 Keyingi bonus ${Math.ceil(P.daily_in / 3600)} soatdan keyin`; }
@@ -732,8 +474,8 @@ function openGarage(tab) {
         <small>Tezlik ${Math.round(S.max * 0.42)} · Tezlanish ${S.acc} · Burilish ${S.turn}${S.heavy ? ' · og\'ir' : ''}</small></div>${btn}</div>`;
     }
   } else {
-    const IC = {engine: '⚙️', nitro: '🔥', handling: '🎯', f_speed: '👟', f_shot: '🦵', f_keeper: '🧤'};
-    const DESC = {engine: 'Mashina tezligi +6%', nitro: 'Nitro hajmi +20%', handling: 'Burilish +5%', f_speed: 'Futbolchilar +6% tez', f_shot: 'Zarba +7% kuchli, aniqroq', f_keeper: 'Darvozabon +12% yaxshi'};
+    const IC = {engine: '⚙️', nitro: '🔥', handling: '🎯'};
+    const DESC = {engine: 'Mashina tezligi +6%', nitro: 'Nitro hajmi +20%', handling: 'Burilish +5%'};
     for (const [k, u] of Object.entries(SHOP.upgrades)) {
       const lv = P.up[k] || 0, max = lv >= u.max;
       h += `<div class="it"><div class="ic">${IC[k] || '⚡️'}</div><div class="tx"><b>${esc(u.name)}</b><small>${DESC[k] || ''}</small>
@@ -748,8 +490,8 @@ async function pickCar(k) { const r = await api('car', {key: k}); if (r.ok) { P 
 async function buyUp(k) { const r = await api('upgrade', {key: k}); if (r.ok) { P = r.profile; sfx(990, 0.12, 'triangle'); haptic('medium'); openGarage(); } else alertMsg(r.error); }
 function openVip() {
   if (!SHOP) return;
-  const perks = [['🪙', `<b>×${SHOP.vip_mult} tanga</b> har bir o'yinda`], ['⚡️', '<b>+15% kuch</b>: mashina tezligi, futbolchilar tezligi, zarba va darvozabon'],
-    ['👑', '<b>Oltin superkar</b> — eng tez mashina'], ['🔥', 'Nitro tezroq to\'ladi'], ['🟡', 'Oltin futbol formasi'],
+  const perks = [['🪙', `<b>×${SHOP.vip_mult} tanga</b> har bir o'yinda`], ['⚡️', '<b>+15% kuch</b>: mashina tezligi va tezlanishi, piyoda tezroq yugurish'],
+    ['👑', '<b>Oltin superkar</b> — eng tez mashina'], ['🔥', 'Nitro tezroq to\'ladi'], ['🧍', 'Oltin pidjak, toj, oltin zanjir — faqat VIP'],
     ['🎁', `Kunlik bonus <b>${SHOP.daily_vip}</b> tanga (oddiy: ${SHOP.daily})`], ['🏆', 'Reytingda 👑 belgisi']];
   let h = `<h3>👑 VIP obuna <button onclick="closeSheet()">✕</button></h3>
     <div style="color:var(--hint);font-size:13px">O'yin hamma uchun bepul. VIP — ixtiyoriy, kuchliroq o'ynash va tezroq rivojlanish uchun.</div>
@@ -777,7 +519,7 @@ async function openTop() {
   try { rows = await (await fetch('/api/game/top')).json(); } catch (e) {}
   sheet(`<h3>🏆 Reyting <button onclick="closeSheet()">✕</button></h3>` + (rows.length ? rows.map((x, i) =>
     `<div class="lb"><div class="n">${i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</div><div class="nm">${x.vip ? '👑 ' : ''}${esc(x.name)}</div>
-     <div style="color:var(--hint);font-size:12px">🏆 ${x.wins}</div><div class="v">${x.level}-dr.</div></div>`).join('')
+     <div style="color:var(--hint);font-size:12px">✅ ${x.wins}</div><div class="v">${x.level}-dr.</div></div>`).join('')
     : '<div style="color:var(--hint);padding:20px 0;text-align:center">Hali hech kim yo\'q — birinchi bo\'ling!</div>'));
 }
 

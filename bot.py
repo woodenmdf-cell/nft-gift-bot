@@ -80,13 +80,13 @@ async def game_cmd(m: Message):
     db.upsert_user(m.from_user.id, m.from_user.username, m.from_user.full_name)
     await m.answer(
         "🎮 <b>Shahar Arena</b>\n\n"
-        "🏙 <b>Shahar</b> — mashinada katta shaharni kezing, topshiriqlar bajaring, "
+        "🏙 3D ochiq shahar: piyoda yuring, istalgan mashinaga o'tiring, topshiriqlar bajaring, "
         "politsiyadan qoching, tanga yig'ing\n"
-        "⚽ <b>Futbol</b> — 4×4 tezkor o'yin, gol urib g'alaba qozoning\n"
-        "🛠 Tangalarga mashina va yaxshilashlar sotib oling\n\n"
+        "👥 Do'stlaringiz bilan bir shaharda onlayn o'ynang\n"
+        "🧍 Personajingizni kiyintiring, 🛠 mashina va yaxshilashlar sotib oling\n\n"
         "O'yin <b>bepul</b>. 👑 <b>VIP</b> obuna (ixtiyoriy, "
         f"{som(GAME_VIP_PRICE)} / {GAME_VIP_DAYS} kun): ×2 tanga, +15% kuch, oltin superkar, "
-        "oltin forma va katta kunlik bonus.", reply_markup=game_kb())
+        "VIP kiyimlar va katta kunlik bonus.", reply_markup=game_kb())
 
 
 @dp.message(Command("balans", "balance"))

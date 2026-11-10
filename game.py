@@ -22,9 +22,6 @@ UPGRADES = {
     "engine":   ("Dvigatel", 5, 150),
     "nitro":    ("Nitro", 5, 200),
     "handling": ("Boshqaruv", 5, 120),
-    "f_speed":  ("Futbolchilar tezligi", 5, 150),
-    "f_shot":   ("Zarba kuchi", 5, 150),
-    "f_keeper": ("Darvozabon", 5, 150),
 }
 CARS = {
     # kalit: (nomi, narxi tangada, faqat VIP)
@@ -120,32 +117,17 @@ def shop():
 
 
 def calc_reward(mode, body, elapsed, vip):
-    """(tanga, xp, g'alaba) — server o'lchagan vaqt bo'yicha cheklangan."""
-    win = 0
-    if mode == "city":
-        missions = min(max(int(body.get("missions") or 0), 0), int(elapsed // 8))
-        pickups = min(max(int(body.get("pickups") or 0), 0), int(elapsed))
-        coins = missions * 60 + pickups * 3
-        coins = min(coins, int(elapsed * 6) + 30, 3000)
-        xp = missions * 25 + min(int(elapsed // 10), 120)
-    elif mode == "football":
-        if elapsed < 30:
-            return 0, 0, 0
-        gf = min(max(int(body.get("gf") or 0), 0), int(elapsed // 6))
-        ga = min(max(int(body.get("ga") or 0), 0), 30)
-        full = elapsed >= 100
-        if gf > ga and full:
-            coins, xp, win = 60, 70, 1
-        elif gf == ga and full:
-            coins, xp = 25, 40
-        else:
-            coins, xp = 10, 20
-        coins += gf * 10
-    else:
+    """(tanga, xp, bajarilgan topshiriqlar) — server o'lchagan vaqt bo'yicha cheklangan."""
+    if mode != "city":
         return 0, 0, 0
+    missions = min(max(int(body.get("missions") or 0), 0), int(elapsed // 8))
+    pickups = min(max(int(body.get("pickups") or 0), 0), int(elapsed))
+    coins = missions * 60 + pickups * 3
+    coins = min(coins, int(elapsed * 6) + 30, 3000)
+    xp = missions * 25 + min(int(elapsed // 10), 120)
     if vip:
         coins *= VIP_MULT
-    return coins, xp, win
+    return coins, xp, missions
 
 
 # ── HTTP ──
@@ -157,7 +139,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
     async def start(request):
         user, body = await auth(request)
         mode = body.get("mode")
-        if mode not in ("city", "football"):
+        if mode != "city":
             return err("Noma'lum rejim")
         now = time.time()
         for k in [k for k, v in _sessions.items() if v[0] == user["id"] or now - v[2] > SESSION_MAX]:

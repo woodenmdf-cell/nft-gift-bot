@@ -24,7 +24,7 @@ Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
 - Muddatdan 12 soat o'tsa — «Muddati o'tgan», adminga xabar
 
 ## 🎮 Shahar Arena — o'yin (`/game`, botda `/oyin`)
-Mini App ichidagi bepul o'yin, ikki rejim:
+Mini App ichidagi bepul 3D shahar o'yini:
 - 🏙 **Shahar (3D)** — ochiq 3D shahar (three.js, `webapp/city3d.js`): piyoda yurish, yugurish, sakrash;
   istalgan mashinaga o'tirish (yo'ldagisini olsangiz — politsiya qidiradi), o'z garaj mashinangiz yoningizda turadi.
   Transport oqimi, piyodalar, kun/tun (tunda derazalar, ko'cha chiroqlari va faralar yonadi), mini-xarita,
@@ -36,13 +36,12 @@ Mini App ichidagi bepul o'yin, ikki rejim:
 - 👥 **Onlayn shahar** — `/ws/city` WebSocket: bir xonada 25 tagacha o'yinchi bir-birini real vaqtda ko'radi
   (yurish, mashinada haydash, ism yorlig'i, 👑 VIP belgisi), tayyor iboralar bilan chat. Transport, piyodalar va
   politsiya har o'yinchida o'ziniki. Xonalar server xotirasida — bitta server jarayoni bilan ishlaydi.
-- ⚽ **Futbol** — 4×4 tezkor o'yin (2 daqiqa), sun'iy intellektga qarshi. Joystik + ZARBA / PAS tugmalari.
 
 Tangalarga garajda mashinalar (Taksi, Yo'ltanlamas, Sport kupe) va yaxshilashlar
-(dvigatel, nitro, boshqaruv, futbolchilar tezligi, zarba, darvozabon) sotib olinadi. Kunlik bonus, XP/daraja, reyting bor.
+(dvigatel, nitro, boshqaruv) sotib olinadi. Kunlik bonus, XP/daraja, reyting bor.
 
 **👑 VIP obuna — ixtiyoriy** (`GAME_VIP_PRICE` so'm / `GAME_VIP_DAYS` kun, bot balansidan to'lanadi):
-×2 tanga, +15% kuch (mashina va futbol jamoasi), oltin superkar, oltin forma, tezroq nitro, kunlik bonus 300 tanga.
+×2 tanga, +15% kuch, oltin superkar, VIP kiyimlar, tezroq nitro, kunlik bonus 300 tanga.
 VIP sotib olinganda adminga xabar keladi; admin panelda o'yinchilar soni, faol VIP va VIP daromadi ko'rinadi.
 
 Mukofot vaqti serverda o'lchanadi (`/api/game/start` → `/api/game/reward`), shuning uchun soxta natija bilan
