@@ -34,19 +34,17 @@ CARS = {
 }
 # Personaj: har bir qism uchun variantlar narxi (0 = bepul, "vip" = faqat VIP uchun)
 LOOK = {
-    "skin": [0, 0, 0, 0, 0],                       # teri rangi
-    "hair": [0, 0, 0, 0, 300, 250],                # qisqa, uzun, kepka, kal, irokez, jingalak
-    "hc":   [0, 0, 0, 0, 0, 0, 150, 150],          # soch rangi (oxirgi 2 — yorqin)
-    "top":  [0, 400, 300, "vip"],                  # futbolka, kurtka, xudi, oltin pidjak
-    "tc":   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "vip"],  # kiyim rangi (oxirgisi — oltin)
-    "pc":   [0, 0, 0, 0, 0, 0],                    # shim rangi
+    # Kenney personajlari (city3d.js dagi CHAR_FILES tartibida): 6 erkak, 6 ayol
+    "char": [0, 0, 300, 400, 600, "vip", 0, 0, 300, 400, 600, "vip"],
     "acc":  [0, 200, 350, "vip", "vip"],           # yo'q, ko'zoynak, quyosh ko'zoynagi, toj, oltin zanjir
 }
+# Eski garderob (soch/kiyim) uchun sotib olingan buyumlar narxi — yangi tizimga o'tganda qaytariladi
+OLD_LOOK_PRICES = {"hair:4": 300, "hair:5": 250, "hc:6": 150, "hc:7": 150, "top:1": 400, "top:2": 300}
 # Mashina bo'yoqlari (city3d.js dagi PAINTS bilan bir xil tartib): oxirgi ikkitasi — oltin va xrom, faqat VIP
 PAINT_PRICE = 150
 PAINT_VIP = {12, 13}
 PAINT_COUNT = 14
-LOOK_DEFAULT = {"skin": 1, "hair": 0, "hc": 0, "top": 0, "tc": 1, "pc": 0, "acc": 0}
+LOOK_DEFAULT = {"char": 0, "acc": 0}
 # Topshiriq turlari bo'yicha mukofot (tanga) va tajriba
 MISSION_REWARD = {"deliver": 50, "taxi": 70, "race": 90}
 MISSION_XP = {"deliver": 20, "taxi": 28, "race": 35}
@@ -103,9 +101,25 @@ def clean_look(d, vip):
     return out
 
 
+def migrate_look(uid, p, d):
+    """Eski garderob buyumlari tangasini bir marta qaytarish (look_v=2)."""
+    if d.get("look_v") == 2:
+        return p, d
+    refund = sum(OLD_LOOK_PRICES.get(k, 0) for k in d["owned"])
+    d["owned"] = [k for k in d["owned"] if k.startswith("acc:")]
+    d["look"] = {"char": 0, "acc": d["look"].get("acc", 0)}
+    d["look_v"] = 2
+    db.game_save(uid, data=json.dumps(d))
+    if refund:
+        db.game_add(uid, coins=refund)
+        p = db.game_profile(uid)
+    return p, d
+
+
 def view(uid):
     p = db.game_profile(uid)
     d = _data(p)
+    p, d = migrate_look(uid, p, d)
     vip = is_vip(p)
     if d["car"] not in d["cars"] and not (d["car"] == "super" and vip):
         d["car"] = "sedan"
@@ -278,7 +292,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
         user, body = await auth(request)
         new = body.get("look") or {}
         p = db.game_profile(user["id"])
-        d = _data(p)
+        p, d = migrate_look(user["id"], p, _data(p))
         vip = is_vip(p)
         cost, buy, look_ = 0, [], {}
         for k, opts in LOOK.items():
@@ -369,7 +383,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
 # yuboradi, server esa xonadagi hamma holatlarni 10 marta/soniya tarqatadi.
 ROOM_MAX = 25
 WORLD = 14 * 60 + 14          # 854 m — city3d.js dagi N=14 bilan bir xil
-CAR_TYPES = {"", "sedan", "taxi", "suv", "sport", "super", "van", "bus", "police"}
+CAR_TYPES = {"", "sedan", "taxi", "suv", "sport", "super", "van", "bus", "police", "hatch", "suvlux", "delivery", "truck", "ambulance"}
 CHAT = 8                     # tayyor iboralar soni (mijozda)
 _rooms = []                  # [{cid: Client}]
 _by_uid = {}

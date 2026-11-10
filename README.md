@@ -31,8 +31,11 @@ Mini App ichidagi bepul 3D shahar o'yini:
   yetkazib berish / taksi / poyga topshiriqlari, tangalar, ⭐ qidiruv darajasi va politsiya ta'qibi.
   Boshqaruv: chap tomonda joystik, o'ng tomonni surib kamerani aylantirish; menyuda «Grafika: yuqori/tezkor»
   (kuchsiz telefonlar uchun soyalar o'chadi).
-- 🧍 **Personaj** — teri, soch turmagi va rangi, kiyim (futbolka/kurtka/xudi), ranglar, aksessuarlar.
-  Bir qismi bepul, bir qismi tangaga (bir marta sotib olinadi), oltin pidjak, toj, oltin zanjir va oltin rang — faqat VIP.
+- 🎨 **Grafika** — Kenney (kenney.nl, CC0) modellari: 12 xil animatsiyali personaj, 12 xil mashina, shahar chetidagi
+  binolar (`webapp/assets/`, `LICENSE-KENNEY.txt`). Markazdagi osmono'parlar pastel uslubda protsedural. Uzoqdagi binolar
+  soddalashtirilgan (LOD) — telefonda tez ishlashi uchun. Modellar yuklanmasa o'yin oddiy grafikada ishlayveradi.
+- 🧍 **Personaj** — 12 ta Kenney personaji (4 bepul, 6 tangaga, 2 VIP) va aksessuarlar (ko'zoynak, qora ko'zoynak,
+  toj va oltin zanjir — VIP). Eski garderobda sotib olingan soch/kiyim tangasi avtomatik qaytariladi.
 - 🕌 **Toshkent uslubi** — tumanlar (Chilonzor, Yunusobod, Mirobod...), do'kon peshtaxtalari (Choyxona, Somsa, Non...),
   ko'k gumbazli madrasa, teleminora, svetoforlar (transport qizilda to'xtaydi), avtobuslar.
 - ⛽ **Yoqilg'i shoxobchasi** — nitroni to'ldiradi; 🎨 **bo'yash ustaxonasi** — o'z mashinangizni 150 tangaga bo'yatish
