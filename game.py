@@ -41,6 +41,10 @@ LOOK = {
     "pc":   [0, 0, 0, 0, 0, 0],                    # shim rangi
     "acc":  [0, 200, 350, "vip", "vip"],           # yo'q, ko'zoynak, quyosh ko'zoynagi, toj, oltin zanjir
 }
+# Mashina bo'yoqlari (city3d.js dagi PAINTS bilan bir xil tartib): oxirgi ikkitasi — oltin va xrom, faqat VIP
+PAINT_PRICE = 150
+PAINT_VIP = {12, 13}
+PAINT_COUNT = 14
 LOOK_DEFAULT = {"skin": 1, "hair": 0, "hc": 0, "top": 0, "tc": 1, "pc": 0, "acc": 0}
 VIP_MULT = 2                 # VIP tanga ko'paytiruvchisi
 DAILY = 100                  # kunlik bonus
@@ -71,6 +75,7 @@ def _data(p):
     d.setdefault("cars", ["sedan"])
     d.setdefault("car", "sedan")
     d.setdefault("owned", [])
+    d.setdefault("paint", {})
     d["look"] = {**LOOK_DEFAULT, **{k: v for k, v in (d.get("look") or {}).items() if k in LOOK}}
     return d
 
@@ -101,6 +106,7 @@ def view(uid):
         "daily_in": max(0, (p["last_daily"] or 0) + DAILY_EVERY - now),
         "up": d["up"], "cars": d["cars"] + (["super"] if vip else []), "car": d["car"],
         "look": clean_look(d, vip), "owned": d["owned"],
+        "paint": {k: v for k, v in d["paint"].items() if vip or v not in PAINT_VIP},
         "balance": db.balance(uid),
     }
 
@@ -112,7 +118,7 @@ def shop():
         "upgrades": {k: {"name": n, "max": m, "costs": [b * (i + 1) for i in range(m)]}
                      for k, (n, m, b) in UPGRADES.items()},
         "cars": {k: {"name": n, "price": pr, "vip": v} for k, (n, pr, v) in CARS.items()},
-        "look": LOOK,
+        "look": LOOK, "paint_price": PAINT_PRICE, "paint_vip": sorted(PAINT_VIP),
     }
 
 
@@ -247,6 +253,27 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
             db.game_save(user["id"], data=json.dumps(d))
         return ok(profile=view(user["id"]), spent=cost)
 
+    async def paint(request):
+        user, body = await auth(request)
+        car, color = body.get("car"), body.get("color")
+        p = db.game_profile(user["id"])
+        d = _data(p)
+        vip = is_vip(p)
+        if car not in CARS or not (car in d["cars"] or (car == "super" and vip)):
+            return err("Bu mashina sizda yo'q")
+        if not isinstance(color, int) or not 0 <= color < PAINT_COUNT:
+            return err("Noto'g'ri rang")
+        if color in PAINT_VIP and not vip:
+            return err("Bu rang faqat VIP uchun")
+        d["paint"][car] = color
+        cost = 0 if color in PAINT_VIP else PAINT_PRICE
+        if cost:
+            if not db.game_spend(user["id"], cost, json.dumps(d)):
+                return err("Tanga yetarli emas")
+        else:
+            db.game_save(user["id"], data=json.dumps(d))
+        return ok(profile=view(user["id"]), spent=cost)
+
     async def top(request):
         rows = db.game_top(30)
         now = time.time()
@@ -265,6 +292,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
     r.add_post("/api/game/car", car)
     r.add_post("/api/game/vip", vip)
     r.add_post("/api/game/look", look)
+    r.add_post("/api/game/paint", paint)
     if verify:
         async def ws_h(request):
             return await ws_city(request, verify)
@@ -278,7 +306,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None):
 # yuboradi, server esa xonadagi hamma holatlarni 10 marta/soniya tarqatadi.
 ROOM_MAX = 25
 WORLD = 494
-CAR_TYPES = {"", "sedan", "taxi", "suv", "sport", "super", "van"}
+CAR_TYPES = {"", "sedan", "taxi", "suv", "sport", "super", "van", "bus", "police"}
 CHAT = 8                     # tayyor iboralar soni (mijozda)
 _rooms = []                  # [{cid: Client}]
 _by_uid = {}

@@ -15,6 +15,7 @@
   #gl{display:none}
   #touch{position:fixed;inset:0;z-index:2;touch-action:none}
   #mm{position:absolute;inset:auto;right:10px;top:calc(56px + env(safe-area-inset-top));width:120px;height:120px}
+  #h-dist{position:absolute;right:10px;top:calc(180px + env(safe-area-inset-top));width:120px;text-align:center;font-size:11px;font-weight:800;text-shadow:0 1px 4px #000}
   #nitro{position:absolute;left:16px;bottom:calc(150px + env(safe-area-inset-bottom));width:130px;height:10px;background:#0008;border-radius:6px}
   #nitro i{display:block;height:100%;background:linear-gradient(90deg,#4fc3ff,#b388ff);border-radius:6px}
   #nitro span{position:absolute;top:-15px;left:0;font-size:10px;font-weight:800}
@@ -154,6 +155,7 @@
     <div class="chip" id="h-speed"></div>
   </div>
   <canvas id="mm" width="240" height="240"></canvas>
+  <div id="h-dist"></div>
   <div id="nitro" class="hide"><i></i><span>NITRO</span></div>
   <div id="bust" class="hide">🚓 Politsiya yaqin — qoching!</div>
   <div id="mission" class="hide"></div>
@@ -162,7 +164,7 @@
   <div id="chatfeed"></div>
   <div id="toast"></div>
   <div id="joy"><i></i></div>
-  <div class="hint" id="h-hint">Chap tomonni bosib suring</div>
+  <div class="hint" id="h-hint">Chap tomon — yurish/haydash · O'ng tomonni suring — kamerani aylantirish</div>
   <div class="btns">
     <button class="btn e hide" id="bE"><div><span>🚗</span><em id="lE">O'TIRISH</em></div></button>
     <button class="btn" id="bB"><div><span>🛑</span><em id="lB">TORMOZ</em></div></button>
@@ -374,6 +376,35 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// ═════════════ BO'YASH USTAXONASI ═════════════
+let paintCar = null, paintSel = null;
+window.onPaintShop = type => {
+  if (GUEST) return toast('🎨 Bo\'yash ustaxonasi', 'Botdan oching — natija saqlanadi');
+  paused = true; paintCar = type; paintSel = (P.paint && P.paint[type] != null) ? P.paint[type] : null;
+  renderPaint();
+};
+function renderPaint() {
+  const vipSet = new Set(SHOP.paint_vip || []), price = SHOP.paint_price || 150;
+  let h = `<h3>🎨 Bo'yash ustaxonasi <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px;margin-bottom:10px">Rangni tanlang. Bo'yash: <b style="color:var(--gold)">🪙 ${price}</b>, oltin va xrom — faqat 👑 VIP (bepul). Sizda: 🪙 ${fmt(P.coins)}</div><div class="opts">`;
+  City3D.paints.forEach((c, i) => {
+    h += `<button class="sw${paintSel === i ? ' on' : ''}" style="width:44px;height:44px;background:#${c.toString(16).padStart(6, '0')}" onclick="paintSel=${i};renderPaint()">${vipSet.has(i) ? '<i>👑</i>' : ''}</button>`;
+  });
+  h += '</div>';
+  if (paintSel != null) {
+    const vip = vipSet.has(paintSel);
+    h += vip && !P.vip ? `<button class="big" onclick="openVip()">👑 Bu rang faqat VIP uchun</button>`
+      : `<button class="big" onclick="doPaint()">🎨 Bo'yash${vip ? '' : ' — 🪙 ' + price}</button>`;
+  }
+  h += `<button class="big s" onclick="closeSheet()">Chiqish</button>`;
+  sheet(h);
+}
+async function doPaint() {
+  const r = await api('paint', {car: paintCar, color: paintSel});
+  if (!r.ok) return alertMsg(r.error);
+  P = r.profile; City3D.repaint(paintCar, paintSel); haptic('heavy'); sfx(880, 0.15, 'triangle'); closeSheet();
+}
+
 // ═════════════ CHAT ═════════════
 function toggleChat() {
   const el = $('chatpick');
@@ -455,7 +486,7 @@ async function claimDaily() {
   else alertMsg(r.error);
 }
 function sheet(html) { $('sh').innerHTML = html; $('sheet').classList.remove('hide'); }
-function closeSheet() { $('sheet').classList.add('hide'); renderMenu(); }
+function closeSheet() { $('sheet').classList.add('hide'); if (mode === 'city') paused = false; else renderMenu(); }
 let gTab = 'cars';
 function openGarage(tab) {
   if (tab) gTab = tab;

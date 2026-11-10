@@ -47,6 +47,35 @@ const PAL = [0xd9d4c7, 0xc9b8a0, 0xa9b4c2, 0xe0c9a6, 0xb7c4b0, 0xcfa79a, 0x9fb1c
     blocks.push(b);
   }
 })();
+// Toshkent uslubidagi maxsus joylar (barcha mijozlarda bir xil joyda)
+const SPECIAL = {dome: [3, 3], tower: [5, 2], fuel: [2, 5], paint: [5, 5]};
+const ZONES = {};
+for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
+  const b = blocks[sj * N + si], cx = b.x + BL / 2, cz = b.z + BL / 2;
+  b.type = type; b.solids = []; b.trees = []; b.spots = [];
+  if (type === 'dome') {
+    b.solids.push({x: cx - 12, z: cz - 12, w: 24, d: 20, h: 12, top: 27, custom: true});
+    b.trees.push({x: cx - 15, z: cz + 11, r: 1.5}, {x: cx + 15, z: cz + 11, r: 1.5});
+    for (const [a, c] of [[6, 6], [BL - 6, 6], [6, BL - 6], [BL - 6, BL - 6]]) b.trees.push({x: b.x + a, z: b.z + c, r: 0.5});
+  } else if (type === 'tower') {
+    b.trees.push({x: cx, z: cz, r: 3.4, tower: true});
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; b.trees.push({x: cx + Math.cos(a) * 14, z: cz + Math.sin(a) * 14, r: 0.5}); }
+  } else if (type === 'fuel') {
+    b.solids.push({x: b.x + 9, z: b.z + 5, w: 28, d: 8, h: 4.5, top: 5, custom: true});
+    for (const [a, c] of [[-10, -3], [10, -3], [-10, 5], [10, 5]]) b.trees.push({x: cx + a, z: cz + 4 + c, r: 0.35, pillar: true});
+    b.trees.push({x: cx - 4, z: cz + 5, r: 0.6, pump: true}, {x: cx + 4, z: cz + 5, r: 0.6, pump: true});
+    ZONES.fuel = {x: cx - 13, z: cz - 2, w: 26, d: 14};
+  } else {
+    b.solids.push({x: b.x + 7, z: b.z + 4, w: 32, d: 13, h: 8, top: 8.5, custom: true});
+    ZONES.paint = {x: cx - 7, z: cz + 2, w: 14, d: 12};
+  }
+}
+const inZone = (z, p) => z && p.x > z.x && p.x < z.x + z.w && p.z > z.z && p.z < z.z + z.d;
+const DISTRICTS = [['Olmazor', 'Shayxontohur', 'Yunusobod'], ['Chilonzor', 'Markaz', 'Mirzo Ulug\'bek'], ['Sergeli', 'Yakkasaroy', 'Mirobod']];
+function districtAt(x, z) {
+  const gi = cl(Math.floor((x / WORLD) * 3), 0, 2), gj = cl(Math.floor((z / WORLD) * 3), 0, 2);
+  return DISTRICTS[gj][gi];
+}
 // chiroq ustunlari (chorrahalar burchagida)
 const poles = {};
 for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
@@ -103,6 +132,7 @@ function farPoint(from, mn, mx) {
 }
 
 // ═════════════ GRAFIKA ═════════════
+let signMat = null;
 let renderer, scene, camera, sun, hemi, bldMat, bulbMat, headL, vehMat, gl, maxAniso = 1;
 const texCache = {};
 function canvasTex(c, repeat) {
@@ -142,6 +172,17 @@ function buildGround() {
     g.strokeStyle = '#d6d6d0'; g.lineWidth = 3; g.strokeRect(X + 1.5, Z + 1.5, Bk - 3, Bk - 3);
     const ix = X + s, iz = Z + s, iw = Bk - 2 * s;
     if (b.type === 'build') { g.fillStyle = '#74777e'; g.fillRect(ix, iz, iw, iw); }
+    else if (b.type === 'dome') {
+      g.fillStyle = '#d8c7a0'; g.fillRect(ix, iz, iw, iw);
+      g.strokeStyle = '#c4b088'; g.lineWidth = 1.5; for (let q = 0; q < iw; q += 2 * k) { g.beginPath(); g.moveTo(ix + q, iz); g.lineTo(ix + q, iz + iw); g.moveTo(ix, iz + q); g.lineTo(ix + iw, iz + q); g.stroke(); }
+      g.fillStyle = '#2a8fa3'; g.fillRect(X + Bk / 2 - 2 * k, Z + Bk / 2 + 8 * k, 4 * k, Bk / 2 - 8 * k);
+    } else if (b.type === 'tower') {
+      g.fillStyle = '#4f8f3e'; g.fillRect(ix, iz, iw, iw);
+      g.fillStyle = '#cdb88e'; g.beginPath(); g.arc(X + Bk / 2, Z + Bk / 2, 9 * k, 0, 7); g.fill();
+    } else if (b.type === 'fuel' || b.type === 'paint') {
+      g.fillStyle = '#4a4d54'; g.fillRect(ix, iz, iw, iw);
+      g.strokeStyle = b.type === 'fuel' ? '#f5c542' : '#3fa9f5'; g.lineWidth = 0.25 * k; g.strokeRect(ix + 4 * k, iz + 14 * k, iw - 8 * k, iw - 18 * k);
+    }
     else if (b.type === 'park') {
       g.fillStyle = '#4f8f3e'; g.fillRect(ix, iz, iw, iw);
       for (let q = 0; q < 300; q++) { g.fillStyle = Math.random() < 0.5 ? '#468436' : '#5a9a48'; g.fillRect(ix + Math.random() * iw, iz + Math.random() * iw, 3, 3); }
@@ -222,7 +263,13 @@ function buildBuildings() {
     quad([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], uvw(d), hex);
     quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], Z4, roof);
   }
+  const SP = [], SU = [];
+  const signQuad = (x0, x1, y0, y1, z, cell) => {
+    const col = cell % 2, row = Math.floor(cell / 2), u0 = col / 2, u1 = u0 + 0.5, v1 = 1 - row / 8, v0 = v1 - 1 / 8;
+    for (const [px, py, u, v] of [[x0, y0, u0, v0], [x1, y0, u1, v0], [x1, y1, u1, v1], [x0, y0, u0, v0], [x1, y1, u1, v1], [x0, y1, u0, v1]]) { SP.push(px, py, z); SU.push(u, v); }
+  };
   for (const b of blocks) for (const s of b.solids) {
+    if (s.custom) continue;
     const roof = shade(s.c, 0.6);
     box(s.x, 0, s.z, s.w, s.h, s.d, s.c, roof, true);
     box(s.x - 0.15, s.h, s.z - 0.15, s.w + 0.3, 0.6, s.d + 0.3, shade(s.c, 0.8), roof, false);
@@ -238,17 +285,126 @@ function buildBuildings() {
     // kirish eshigi va soyabon
     box(s.x + s.w / 2 - 1.6, 0, s.z + s.d - 0.05, 3.2, 2.8, 0.15, 0x2a2f38, 0x2a2f38, false);
     box(s.x + s.w / 2 - 2.2, 3, s.z + s.d - 0.1, 4.4, 0.18, 1.4, pick([0xb03a2e, 0x1f618d, 0x117a65, 0x7d3c98]), 0x555555, false);
+    const sw2 = Math.min(2.6, s.w / 2 - 0.5), mx = s.x + s.w / 2;
+    signQuad(mx - sw2, mx + sw2, 3.35, 3.35 + sw2 * 0.4, s.z + s.d + 0.06, Math.floor(srnd() * 16));
   }
   const geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.Float32BufferAttribute(P, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(Nn, 3));
   geo.setAttribute('uv', new T.Float32BufferAttribute(U, 2)); geo.setAttribute('color', new T.Float32BufferAttribute(C, 3));
   bldMat = new T.MeshLambertMaterial({map, emissiveMap: emi, emissive: 0xffffff, emissiveIntensity: 0, vertexColors: true});
   const m = new T.Mesh(geo, bldMat); m.castShadow = m.receiveShadow = true; scene.add(m);
+  // peshtaxtalar (bitta tekstura atlasida 16 ta nom)
+  const SIGNS = ['CHOYXONA', 'NON', 'SOMSA', 'DORIXONA', 'MARKET', 'OSHXONA', 'KAFE', 'SARTAROSH', 'GULLAR', 'TELEFONLAR', 'KIYIMLAR', 'MEVALAR', 'KITOBLAR', 'SHIRINLIKLAR', 'BANK', 'POYABZAL'];
+  const SBG = ['#1f6f8b', '#b03a2e', '#117a65', '#7d3c98', '#c0392b', '#1a5276', '#d35400', '#2c3e50'];
+  const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 1024; const sg = sc.getContext('2d');
+  SIGNS.forEach((t, i) => {
+    const X = (i % 2) * 512, Y = Math.floor(i / 2) * 128;
+    sg.fillStyle = SBG[i % SBG.length]; sg.fillRect(X, Y, 512, 128);
+    sg.strokeStyle = '#ffffff55'; sg.lineWidth = 8; sg.strokeRect(X + 6, Y + 6, 500, 116);
+    sg.fillStyle = '#fff'; sg.font = 'bold 64px sans-serif'; sg.textAlign = 'center'; sg.textBaseline = 'middle'; sg.fillText(t, X + 256, Y + 68, 470);
+  });
+  const st = canvasTex(sc);
+  const sgeo = new T.BufferGeometry();
+  sgeo.setAttribute('position', new T.Float32BufferAttribute(SP, 3)); sgeo.setAttribute('uv', new T.Float32BufferAttribute(SU, 2)); sgeo.computeVertexNormals();
+  signMat = new T.MeshLambertMaterial({map: st, emissiveMap: st, emissive: 0xffffff, emissiveIntensity: 0});
+  scene.add(new T.Mesh(sgeo, signMat));
+}
+
+// ── diqqatga sazovor joylar ──
+function textPlane(text, w, h, bg, fg) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = Math.round(512 * h / w); const g = c.getContext('2d');
+  g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = fg; g.font = `bold ${Math.round(c.height * 0.55)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, c.height * 0.55, 480);
+  const t = canvasTex(c);
+  return new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshLambertMaterial({map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.2}));
+}
+let towerLamp = null;
+function buildLandmarks() {
+  const M = (c, e) => new T.MeshLambertMaterial(Object.assign({color: c}, e || {}));
+  const add = (geo, mat, x, y, z, shadow) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); if (shadow !== false) { m.castShadow = true; m.receiveShadow = true; } scene.add(m); return m; };
+  const sand = M(0xead8b0), tile = M(0x2aa7b8), deep = M(0x1d5f8a), gold = M(0xe0b84a);
+  for (const b of blocks) {
+    const cx = b.x + BL / 2, cz = b.z + BL / 2;
+    if (b.type === 'dome') {
+      // madrasa: asos, peshtoq, baraban, ko'k gumbaz, ikki minora
+      add(new T.BoxGeometry(24, 12, 20), sand, cx, 6, cz - 2);
+      add(new T.BoxGeometry(12, 17, 2.4), sand, cx, 8.5, cz + 8.6);
+      add(new T.BoxGeometry(7, 11, 0.6), deep, cx, 6.2, cz + 9.9, false);
+      add(new T.CylinderGeometry(3.5, 3.5, 0.6, 20, 1, false, 0, Math.PI), deep, cx, 11.7, cz + 9.9, false).rotation.x = Math.PI / 2;
+      add(new T.BoxGeometry(12.4, 1.2, 2.6), tile, cx, 16.4, cz + 8.6);
+      add(new T.CylinderGeometry(7, 7.4, 4, 24), tile, cx, 14, cz - 2);
+      const dome = add(new T.SphereGeometry(7.2, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), tile, cx, 16, cz - 2); dome.scale.y = 1.25;
+      add(new T.CylinderGeometry(0.25, 0.25, 2.4, 6), gold, cx, 26, cz - 2);
+      for (const t of b.trees) if (t.r === 1.5) {
+        add(new T.CylinderGeometry(1.2, 1.6, 24, 14), sand, t.x, 12, t.z);
+        add(new T.CylinderGeometry(1.75, 1.75, 1, 14), tile, t.x, 18, t.z);
+        add(new T.CylinderGeometry(1.9, 1.3, 1.6, 14), sand, t.x, 24.8, t.z);
+        add(new T.SphereGeometry(1.3, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), tile, t.x, 25.6, t.z);
+      }
+    } else if (b.type === 'tower') {
+      // teleminora
+      add(new T.CylinderGeometry(1.2, 3.2, 90, 16), M(0xb8bcc4), cx, 45, cz);
+      for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; const leg = add(new T.CylinderGeometry(0.5, 0.9, 40, 8), M(0x9aa0aa), cx + Math.cos(a) * 5, 18, cz + Math.sin(a) * 5); leg.rotation.set(Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12); }
+      add(new T.SphereGeometry(6, 20, 12), M(0x8fa5b8), cx, 72, cz).scale.y = 0.7;
+      add(new T.CylinderGeometry(6.6, 6.6, 1.2, 20), M(0x2b3442, {emissive: 0xffd27a, emissiveIntensity: 0}), cx, 72, cz);
+      for (let k = 0; k < 6; k++) add(new T.CylinderGeometry(0.55 - k * 0.06, 0.6 - k * 0.06, 6, 8), M(k % 2 ? 0xffffff : 0xd32f2f), cx, 93 + k * 6, cz);
+      towerLamp = add(new T.SphereGeometry(0.7, 8, 6), new T.MeshBasicMaterial({color: 0xff2020}), cx, 129.5, cz, false);
+    } else if (b.type === 'fuel') {
+      add(new T.BoxGeometry(28, 4.5, 8), M(0xf2f2f2), cx, 2.25, b.z + 9);
+      add(new T.BoxGeometry(28.2, 1, 8.2), M(0xd32f2f), cx, 4.2, b.z + 9);
+      const sg = textPlane("⛽ YOQILG'I", 10, 1.6, '#d32f2f', '#fff'); sg.position.set(cx, 3.3, b.z + 13.06); scene.add(sg);
+      add(new T.BoxGeometry(26, 0.8, 14), M(0xffffff), cx, 5.8, cz + 5);
+      add(new T.BoxGeometry(26.2, 0.5, 14.2), M(0xd32f2f), cx, 5.3, cz + 5);
+      for (const t of b.trees) {
+        if (t.pillar) add(new T.BoxGeometry(0.6, 5.4, 0.6), M(0xdddddd), t.x, 2.7, t.z);
+        if (t.pump) { add(new T.BoxGeometry(1, 1.8, 0.7), M(0x2b3442), t.x, 0.9, t.z); add(new T.BoxGeometry(0.8, 0.5, 0.05), M(0x111111, {emissive: 0x4fc3ff, emissiveIntensity: 0.6}), t.x, 1.4, t.z + 0.38, false); }
+      }
+    } else if (b.type === 'paint') {
+      add(new T.BoxGeometry(32, 8, 13), M(0x5b6b8c), cx, 4, b.z + 10.5);
+      add(new T.BoxGeometry(10, 6, 0.3), M(0x1b1f27), cx, 3, b.z + 17.1, false);
+      const sg = textPlane("🎨 BO'YASH", 12, 2, '#1f6fe0', '#fff'); sg.position.set(cx, 7, b.z + 17.07); scene.add(sg);
+      for (let k = 0; k < 5; k++) add(new T.BoxGeometry(2, 0.3, 0.2), M([0xe53935, 0xf5c542, 0x43a047, 0x1e88e5, 0x8e24aa][k]), cx - 13 + k * 2.4, 6.2, b.z + 17.1, false);
+    }
+  }
+}
+
+// ── svetoforlar (hamma chorrahada bir xil fazada) ──
+const lampMats = {x: {}, z: {}};
+function lightState(axis, t) {
+  const p = t % 16;
+  if (axis === 'x') return p < 7 ? 'g' : p < 8.5 ? 'y' : 'r';
+  return p >= 8.5 && p < 15 ? 'g' : p >= 15 ? 'y' : 'r';
+}
+function buildLights() {
+  const heads = [];
+  for (const [key, list] of Object.entries(poles)) list.forEach((p, idx) => heads.push({p, axis: idx === 0 ? 'x' : 'z'}));
+  const housing = new T.InstancedMesh(new T.BoxGeometry(0.42, 1.25, 0.42), new T.MeshLambertMaterial({color: 0x22262c}), heads.length);
+  const o = new T.Object3D();
+  heads.forEach((h, i) => { o.position.set(h.p.x, 4.4, h.p.z); o.rotation.set(0, 0, 0); o.updateMatrix(); housing.setMatrixAt(i, o.matrix); });
+  scene.add(housing);
+  const COL = {r: 0xff2a2a, y: 0xffc21a, g: 0x2aff6a}, OFF = {r: 0x3a1010, y: 0x3a3010, g: 0x103a18};
+  for (const axis of ['x', 'z']) {
+    const hs = heads.filter(h => h.axis === axis);
+    ['r', 'y', 'g'].forEach((c, ci) => {
+      const g = axis === 'x' ? merge([bx(0.06, 0.26, 0.26, 0.22, 0, 0, 0xffffff), bx(0.06, 0.26, 0.26, -0.22, 0, 0, 0xffffff)])
+                             : merge([bx(0.26, 0.26, 0.06, 0, 0, 0.22, 0xffffff), bx(0.26, 0.26, 0.06, 0, 0, -0.22, 0xffffff)]);
+      const mat = new T.MeshBasicMaterial({color: OFF[c]}); mat.userData = {on: COL[c], off: OFF[c]};
+      const im = new T.InstancedMesh(g, mat, hs.length);
+      hs.forEach((h, i) => { o.position.set(h.p.x, 4.8 - ci * 0.38, h.p.z); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
+      scene.add(im); lampMats[axis][c] = mat;
+    });
+  }
+}
+function updateLights(t) {
+  for (const axis of ['x', 'z']) {
+    const st = lightState(axis, t);
+    for (const c of ['r', 'y', 'g']) { const m = lampMats[axis][c]; if (m) m.color.setHex(c === st ? m.userData.on : m.userData.off); }
+  }
 }
 
 function buildProps() {
   const trees = [];
-  for (const b of blocks) for (const t of b.trees) if (!t.fountain) trees.push(t);
+  for (const b of blocks) for (const t of b.trees) if (!t.fountain && !t.tower && !t.pillar && !t.pump && t.r === 0.5) trees.push(t);
   const tg = new T.CylinderGeometry(0.2, 0.3, 2.4, 6); tg.translate(0, 1.2, 0);
   const trunk = new T.InstancedMesh(tg, new T.MeshLambertMaterial({color: 0x6b4a2b}), trees.length);
   const crown = new T.InstancedMesh(new T.IcosahedronGeometry(2, 0), new T.MeshLambertMaterial({color: 0xffffff}), trees.length);
@@ -290,12 +446,26 @@ const VT = {
   sport: {L: 4.5, W: 1.95, bh: 0.5, ch: 0.44, cl: 1.9, co: -0.3},
   super: {L: 4.6, W: 2.0, bh: 0.46, ch: 0.42, cl: 1.7, co: -0.2},
   van: {L: 5.2, W: 2.05, bh: 0.95, ch: 1.0, cl: 3.8, co: -0.5},
+  bus: {L: 10.5, W: 2.5, bh: 2.5, ch: 0, cl: 0, co: 0, bus: true},
 };
 const carGeoCache = {};
 function carGeometry(type, color) {
   const key = type + ':' + color;
   if (carGeoCache[key]) return carGeoCache[key];
   const v = VT[type], y0 = 0.32, p = [];
+  if (v.bus) {
+    p.push(bx(v.W, v.bh, v.L, 0, y0 + 0.2 + v.bh / 2, 0, color));
+    p.push(bx(v.W + 0.04, 0.85, v.L - 1.6, 0, y0 + 0.2 + v.bh * 0.66, -0.4, GLASS));
+    p.push(bx(v.W * 0.92, 1.3, 0.06, 0, y0 + 0.2 + v.bh * 0.62, v.L / 2 + 0.01, GLASS));
+    p.push(bx(v.W + 0.02, 0.25, v.L, 0, y0 + 0.35, 0, 0x2a2a2a));
+    p.push(bx(v.W * 0.7, 0.3, 0.06, 0, y0 + 0.2 + v.bh - 0.25, v.L / 2 + 0.02, 0xffb300));
+    p.push(bx(v.W * 0.8, 0.25, v.L * 0.6, 0, y0 + 0.2 + v.bh + 0.12, -0.5, 0xdddddd));
+    for (const sx of [-1, 1]) {
+      p.push(bx(0.42, 0.2, 0.06, sx * (v.W / 2 - 0.35), y0 + 0.75, v.L / 2 + 0.02, 0xfff3c4), bx(0.42, 0.25, 0.06, sx * (v.W / 2 - 0.35), y0 + 0.8, -v.L / 2 - 0.02, 0xd8161b));
+      for (const t of [-1, 1]) { p.push(cy(0.5, 0.36, sx * (v.W / 2 - 0.15), 0.5, t * (v.L / 2 - 1.8), TIRE)); p.push(cy(0.26, 0.38, sx * (v.W / 2 - 0.15), 0.5, t * (v.L / 2 - 1.8), 0xa8acb2, 8)); }
+    }
+    return (carGeoCache[key] = merge(p));
+  }
   p.push(bx(v.W, v.bh, v.L, 0, y0 + v.bh / 2, 0, color));
   p.push(bx(v.W * 0.9, v.ch, v.cl, 0, y0 + v.bh + v.ch / 2, v.co, GLASS));
   p.push(bx(v.W * 0.92, 0.07, v.cl * 0.86, 0, y0 + v.bh + v.ch + 0.035, v.co, color));
@@ -334,10 +504,11 @@ function personGeo(shirt, pants, skin, hair) {
 const vehicles = [], peds = [], police = [];
 let player = null, cur = null; // cur — hozir boshqarilayotgan mashina (yoki null)
 function specFor(type, own) {
-  const key = type === 'van' ? 'sedan' : type === 'police' ? 'sport' : type;
+  const key = type === 'van' || type === 'bus' ? 'sedan' : type === 'police' ? 'sport' : type;
   const S = CAR_STATS[key] || CAR_STATS.sedan, u = (P && P.up) || {}, vb = P && P.vip ? 1.15 : 1;
   let max = S.max * 0.1167, acc = S.acc / 30, turn = S.turn * 0.72;
   if (type === 'van') { max *= 0.85; acc *= 0.8; turn *= 0.85; }
+  if (type === 'bus') { max *= 0.72; acc *= 0.5; turn *= 0.62; }
   let cap = 1.5, re = 0.15;
   if (own) {
     max *= (1 + 0.06 * (u.engine || 0)) * vb; acc *= (1 + 0.06 * (u.engine || 0)) * vb; turn *= 1 + 0.05 * (u.handling || 0);
@@ -374,6 +545,11 @@ function spawnTraffic() {
     const type = pick(TTYPES), v = makeVehicle(type, type === 'taxi' ? 0xf2c200 : pick(TCOL), 0, 0, 0, 'traffic');
     v.ax = Math.random() < 0.5 ? 'x' : 'z'; v.k = Math.floor(Math.random() * (N + 1)); v.dir = Math.random() < 0.5 ? 1 : -1;
     v.along = rr(20, WORLD - 20); v.sp = rr(8, 13); v.cv = 0; v.lastNode = -1;
+    const l = laneOf(v); v.x = l.x; v.z = l.z; v.yaw = l.yaw;
+  }
+  for (let i = 0; i < 4; i++) {
+    const v = makeVehicle('bus', [0x1e88e5, 0x43a047, 0xe53935, 0xfb8c00][i], 0, 0, 0, 'traffic');
+    v.ax = i % 2 ? 'x' : 'z'; v.k = 1 + i * 2; v.dir = i < 2 ? 1 : -1; v.along = rr(40, WORLD - 40); v.sp = rr(7, 8.5); v.cv = 0; v.lastNode = -1;
     const l = laneOf(v); v.x = l.x; v.z = l.z; v.yaw = l.yaw;
   }
 }
@@ -493,6 +669,7 @@ function buildMarkers() {
   arrow = new T.Mesh(ag, new T.MeshBasicMaterial({color: 0x34c759, depthTest: false, transparent: true, opacity: 0.85, side: T.DoubleSide}));
   arrow.renderOrder = 11; scene.add(arrow); arrow.visible = false;
 }
+const PAINTS = [0x3a7bd5, 0xd32f2f, 0x2e7d4f, 0xf2c200, 0x161616, 0xf4f4f4, 0x8e24aa, 0xff6f00, 0x00acc1, 0xe91e63, 0x6d4c41, 0x546e7a, 0xd4af37, 0xcfd8dc];
 const COINS = 60;
 function buildCoins() {
   const g = new T.CylinderGeometry(0.55, 0.55, 0.14, 16); g.rotateX(Math.PI / 2);
@@ -516,7 +693,7 @@ function setup() {
   Object.assign(sun.shadow.camera, {left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 320}); sun.shadow.bias = -0.0006;
   scene.add(sun, sun.target);
   vehMat = new T.MeshLambertMaterial({vertexColors: true});
-  buildGround(); buildBuildings(); buildProps(); buildMarkers(); buildCoins();
+  buildGround(); buildBuildings(); buildLandmarks(); buildLights(); buildProps(); buildMarkers(); buildCoins();
   spawnTraffic(); spawnParked(); spawnPeds();
   player = makePlayer(LOOK0); player.g.visible = false;
   headL = new T.SpotLight(0xfff2cc, 0, 70, 0.6, 0.5, 1); scene.add(headL, headL.target);
@@ -537,7 +714,8 @@ function updateDay(dt, fx, fz) {
   sun.target.position.set(fx, 0, fz);
   sun.intensity = 0.1 + 0.95 * day; sun.color.setHex(dusk > 0.3 ? 0xffc9a0 : 0xfff1dc);
   hemi.intensity = 0.28 + 0.45 * day;
-  bldMat.emissiveIntensity = night * 1.1; bulbMat.emissiveIntensity = night * 1.6;
+  bldMat.emissiveIntensity = night * 1.1; bulbMat.emissiveIntensity = night * 1.6; signMat.emissiveIntensity = 0.15 + night * 0.9;
+  if (towerLamp) towerLamp.visible = ((tNow * 1.2) | 0) % 2 === 0;
 }
 function clockText() {
   const m = Math.floor(((dayT * 24 + 6) % 24) * 60);
@@ -563,10 +741,10 @@ function drive(v, dt, thr, steer, hand, boost) {
   return carCollide(v);
 }
 function carCollide(v) {
-  const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), off = v.L * 0.27, r = v.W * 0.55;
+  const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), r = v.W * 0.55;
   let impact = 0;
-  for (const sgn of [1, -1]) {
-    const p = {x: v.x + fx * off * sgn, z: v.z + fz * off * sgn}, ox = p.x, oz = p.z;
+  for (const off of v.L > 6 ? [v.L * 0.36, 0, -v.L * 0.36] : [v.L * 0.27, -v.L * 0.27]) {
+    const p = {x: v.x + fx * off, z: v.z + fz * off}, ox = p.x, oz = p.z;
     const hit = collide(p, r);
     if (hit) {
       v.x += p.x - ox; v.z += p.z - oz;
@@ -605,7 +783,8 @@ function start() {
   for (const v of vehicles.filter(v => v.own)) removeVehicle(v);
   for (const v of police.slice()) removeVehicle(v);
   const type = CAR_STATS[P.car] ? P.car : 'sedan';
-  const col = {sedan: 0x3a7bd5, taxi: 0xf2c200, suv: 0x2e7d4f, sport: 0xd32f2f, super: 0xd4af37}[type];
+  const pi = P.paint && P.paint[type];
+  const col = (pi != null && PAINTS[pi] != null) ? PAINTS[pi] : {sedan: 0x3a7bd5, taxi: 0xf2c200, suv: 0x2e7d4f, sport: 0xd32f2f, super: 0xd4af37}[type];
   const mine = makeVehicle(type, col, roadC(4) + RD / 2 - 1.5, sz - 2.5, Math.PI, 'parked');
   mine.own = true; mine.spec = specFor(type, true); mine.nitro = mine.spec.cap;
   for (let i = 0; i < 3; i++) G.givers.push(newGiver());
@@ -668,7 +847,13 @@ function updateTraffic(dt) {
     if (v.stun > 0) v.stun -= dt;
     let want = v.stun > 0 ? 0 : v.sp;
     const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
-    const ahead = o => { const dx = o.x - v.x, dz = o.z - v.z, f = dx * fx + dz * fz, l = Math.abs(dx * fz - dz * fx); return f > 0 && f < 10 && l < 2.4; };
+    const reach = v.L / 2 + 7;
+    const ahead = o => { const dx = o.x - v.x, dz = o.z - v.z, f = dx * fx + dz * fz, l = Math.abs(dx * fz - dz * fx); return f > 0 && f < reach && l < 2.4; };
+    const mA = v.dir > 0 ? Math.ceil((v.along - RD / 2) / CELL) : Math.floor((v.along - RD / 2) / CELL);
+    if (mA >= 0 && mA <= N && lightState(v.ax, tNow) !== 'g') {
+      const dStop = (roadC(mA) - v.along) * v.dir - RD / 2 - v.L / 2 - 0.6;
+      if (dStop > -0.5 && dStop < 9) want = Math.min(want, Math.max(0, dStop * 1.4));
+    }
     if (me && ahead(me)) want = 0;
     else for (const o of vehicles) if (o !== v && Math.abs(o.x - v.x) < 11 && Math.abs(o.z - v.z) < 11 && ahead(o)) { want = Math.min(want, (o.cv || 0) * 0.8); break; }
     for (const p of peds) if (!p.down && Math.abs(p.x - v.x) < 8 && Math.abs(p.z - v.z) < 8 && ahead(p)) { want = 0; break; }
@@ -781,6 +966,17 @@ function updateCar(dt) {
       }
     }
   }
+  // yoqilg'i shoxobchasi va bo'yash ustaxonasi
+  if (inZone(ZONES.fuel, v)) {
+    if (!G.inFuel) { G.inFuel = true; v.nitro = v.spec.cap; toast('⛽ Nitro to\'ldirildi!', 'Yoqilg\'i shoxobchasi'); sfx(520, 0.1, 'triangle', 0.05); setTimeout(() => sfx(780, 0.15, 'triangle', 0.05), 120); }
+  } else G.inFuel = false;
+  if (inZone(ZONES.paint, v)) {
+    if (!G.inPaint && Math.abs(v.vF || 0) < 4) {
+      G.inPaint = true;
+      if (v.own) { v.vx = v.vz = 0; if (window.onPaintShop) window.onPaintShop(v.type); }
+      else toast('🎨 Bo\'yash ustaxonasi', 'Faqat o\'z mashinangizni bo\'yatish mumkin');
+    }
+  } else G.inPaint = false;
   for (const r of remotes.values()) {
     if (!r.carT || Math.abs(r.x - v.x) > 7 || Math.abs(r.z - v.z) > 7) continue;
     const rel = vehPush(v, {x: r.x, z: r.z, L: 4.4, W: 1.9, ai: 'traffic', vx: 0, vz: 0});
@@ -953,6 +1149,12 @@ function drawMinimap(tgt) {
   if (G.mission) { const p = G.mission.pts[G.mission.idx]; dot(p.x, p.z, '#34c759', 5); } else for (const q of G.givers) dot(q.x, q.z, '#f5c542', 4.5);
   for (const v of police) dot(v.x, v.z, (tNow * 6 | 0) % 2 ? '#ff3b30' : '#3b6bff', 4);
   for (const v of vehicles) if (v.own && v !== cur) dot(v.x, v.z, '#4fc3ff', 3.5);
+  g.font = `${14 / sc}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
+    const b = blocks[sj * N + si];
+    g.save(); g.translate((b.x + BL / 2) * k, (b.z + BL / 2) * k); g.rotate(-rot);
+    g.fillText({dome: '🕌', tower: '📡', fuel: '⛽', paint: '🎨'}[type], 0, 0); g.restore();
+  }
   g.restore();
   // o'yinchi strelkasi
   const yaw = cur ? cur.yaw : player.yaw, a = rot + Math.atan2(Math.cos(yaw), Math.sin(yaw));
@@ -971,6 +1173,8 @@ function hud(tgt) {
   $('stars').innerHTML = '<b>' + '★'.repeat(G.wanted) + '</b>' + '★'.repeat(5 - G.wanted);
   $('h-speed').textContent = cur ? Math.round(Math.abs(cur.vF || 0) * 3.6) + ' km/soat' : '🚶 piyoda';
   $('h-clock').textContent = (night > 0.5 ? '🌙 ' : '☀️ ') + clockText();
+  const me0 = pos(), dn = districtAt(me0.x, me0.z);
+  if (dn !== G.district) { G.district = dn; $('h-dist').textContent = '📍 ' + dn; }
   const mEl = $('mission');
   if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>⏱ ${Math.ceil(G.mission.time)} s · ${Math.round(dxz(pos(), G.mission.pts[G.mission.idx]))} m</small>`;
   else mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>';
@@ -1125,6 +1329,8 @@ const API = {
     return API.ok;
   },
   start() { lastCtx = ''; API.active = true; start(); },
+  paints: PAINTS,
+  repaint(type, idx) { const v = vehicles.find(q => q.own); if (!v || v.type !== type) return; v.color = PAINTS[idx]; v.mesh.geometry = carGeometry(v.type, v.color); toast('🎨 Mashina bo\'yaldi!', ''); },
   phrases: PHRASES, preview, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
   stop() { API.active = false; stop(); },
@@ -1139,7 +1345,7 @@ const API = {
       else { const v = nearestCar(); if (v) enterCar(v); }
     }
     if (cur) updateCar(dt); else { updatePlayerFoot(dt); if (eng) eng.g.gain.value = 0; headL.intensity = 0; }
-    updateTraffic(dt); updatePeds(dt); updateParked(dt); updatePolice(dt);
+    updateLights(tNow); updateTraffic(dt); updatePeds(dt); updateParked(dt); updatePolice(dt);
     const tgt = updateWorldObjs(dt);
     const me = pos(); updateDay(dt, me.x, me.z);
     updateCamera(dt, false);
@@ -1149,11 +1355,11 @@ const API = {
   render(menu, dt) {
     if (!API.ok) return;
     if (menu) {
-      tNow += dt; updateTraffic(dt); updatePeds(dt); updateDay(dt * 0.5, WORLD / 2, WORLD / 2); updateCamera(dt, true);
+      tNow += dt; updateLights(tNow); updateTraffic(dt); updatePeds(dt); updateDay(dt * 0.5, WORLD / 2, WORLD / 2); updateCamera(dt, true);
     }
     renderer.render(scene, camera);
   },
 };
-API._dbg = {day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
+API._dbg = {cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
 window.City3D = API;
 })();
