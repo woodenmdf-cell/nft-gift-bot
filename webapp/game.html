@@ -166,7 +166,7 @@
   <div class="row">
     <button class="tile" id="m-sound" onclick="toggleSound()"><span>🔊</span>Ovoz</button>
     <button class="tile" id="m-q" onclick="City3D.setQuality(City3D.quality() > 0 ? 0 : 1)"><span>✨</span>Grafika</button>
-    <button class="tile" onclick="location.href='/'"><span>🎁</span>NFT Bozor</button>
+    <button class="tile" onclick="openTopup()"><span>💳</span>Balans</button>
   </div>
 </div>
 
@@ -546,6 +546,29 @@ async function claimDaily() {
   if (r.ok) { P = r.profile; sfx(880, 0.1); sfx(1320, 0.2, 'triangle'); haptic('heavy'); alertMsg(`🎁 ${r.day}-kun: +${fmt(r.coins)} tanga!` + (r.day < 7 ? `\nErtaga ham kiring — bonus oshadi 🔥` : '')); renderMenu(); }
   else alertMsg(r.error);
 }
+// ═════════════ BALANSNI TO'LDIRISH ═════════════
+let CFG = null;
+async function openTopup(need) {
+  if (GUEST) return alertMsg('Balansni to\'ldirish uchun o\'yinni Telegram botdan oching.');
+  if (!CFG) { try { CFG = await (await fetch('/api/config')).json(); } catch (e) { CFG = {min_topup: 5000}; } }
+  const min = CFG.min_topup || 5000, start = Math.max(min, Math.ceil((need || 0) / 1000) * 1000);
+  const quick = [10000, 25000, 50000, 100000];
+  sheet(`<h3>💳 Balansni to'ldirish <button onclick="closeSheet()">✕</button></h3>
+    <div style="color:var(--hint);font-size:13px;margin-bottom:10px">Balans: <b style="color:var(--text)">${fmt(P.balance)} so'm</b>. Balansdan VIP va tanga sotib olinadi.${CFG.cashback ? ` Har to'ldirishga <b style="color:var(--gold)">+${CFG.cashback}% cashback</b>.` : ''}</div>
+    <input id="tp-sum" type="number" inputmode="numeric" min="${min}" step="1000" value="${start}" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:13px;font-size:18px;font-weight:800">
+    <div class="opts" style="margin-top:8px">${quick.map(q => `<button class="opt" onclick="$('tp-sum').value=${q}">${fmt(q)}</button>`).join('')}</div>
+    <div style="color:var(--hint);font-size:12px;margin-top:10px">1. «Davom etish» ni bosing — botga karta raqami keladi.<br>2. Kartaga pul o'tkazing.<br>3. Chek skrinshotini botga yuboring — admin tasdiqlagach balans to'ldiriladi (odatda 5–15 daqiqa).</div>
+    <button class="big" onclick="doTopup()">Davom etish</button>`);
+}
+async function doTopup() {
+  const amount = Math.round(+$('tp-sum').value || 0), min = (CFG && CFG.min_topup) || 5000;
+  if (amount < min) return alertMsg(`Eng kam summa: ${fmt(min)} so'm`);
+  const r = await api('../topup', {amount});
+  if (!r.ok) return alertMsg(r.error || 'Xato');
+  closeSheet(); haptic('medium');
+  alertMsg(`✅ Botga to'lov ma'lumotlari yuborildi (${fmt(amount)} so'm).\nKartaga o'tkazib, chek skrinshotini botga yuboring.`);
+}
+
 // ═════════════ TANGA DO'KONI (donat) ═════════════
 function openCoins() {
   if (!SHOP || !SHOP.packs) return alertMsg('Yuklanmoqda…');
@@ -562,13 +585,13 @@ function openCoins() {
       <button class="buy${P.balance >= p.price ? '' : ' g'}" onclick="buyCoins(${i})">${fmt(p.price)} so'm</button></div>`;
   });
   if (GUEST) h += '<div class="warn">Xarid uchun o\'yinni Telegram botdan oching.</div>';
-  else h += `<button class="big s" onclick="location.href='/#topup'">💳 Balansni to'ldirish</button>`;
+  else h += `<button class="big s" onclick="openTopup()">💳 Balansni to'ldirish</button>`;
   sheet(h);
 }
 async function buyCoins(i) {
   const p = SHOP.packs[i];
   if (P.balance < p.price) {
-    if (await confirmMsg(`Balans yetarli emas (kerak ${fmt(p.price)} so'm, sizda ${fmt(P.balance)} so'm). Balansni to'ldirasizmi?`)) location.href = '/#topup';
+    if (await confirmMsg(`Balans yetarli emas (kerak ${fmt(p.price)} so'm, sizda ${fmt(P.balance)} so'm). Balansni to'ldirasizmi?`)) openTopup(p.price - P.balance);
     return;
   }
   if (!await confirmMsg(`${fmt(p.price)} so'm balansdan yechiladi. Tasdiqlaysizmi?`)) return;
@@ -631,12 +654,12 @@ function openVip() {
   else {
     h += `<div style="text-align:center;color:var(--hint);font-size:13px;margin-top:6px">Bot balansingiz: <b style="color:var(--text)">${fmt(P.balance)} so'm</b></div>
       <button class="big" onclick="buyVip()">${P.vip ? '➕ Yana 1 oyga uzaytirish' : '👑 VIP olish'}</button>`;
-    if (P.balance < SHOP.vip_price) h += `<button class="big s" onclick="location.href='/'">💳 Balansni to'ldirish</button>`;
+    if (P.balance < SHOP.vip_price) h += `<button class="big s" onclick="openTopup(SHOP.vip_price - P.balance)">💳 Balansni to'ldirish</button>`;
   }
   sheet(h);
 }
 async function buyVip() {
-  if (P.balance < SHOP.vip_price) return alertMsg('Balans yetarli emas. Avval NFT Bozor → Profil → «Balansni to\'ldirish» orqali balansni to\'ldiring.');
+  if (P.balance < SHOP.vip_price) { if (await confirmMsg('Balans yetarli emas. Balansni to\'ldirasizmi?')) openTopup(SHOP.vip_price - P.balance); return; }
   if (!await confirmMsg(`VIP obuna: ${fmt(SHOP.vip_price)} so'm balansdan yechiladi. Tasdiqlaysizmi?`)) return;
   const r = await api('vip');
   if (r.ok) { P = r.profile; haptic('heavy'); sfx(660, 0.1); setTimeout(() => sfx(990, 0.25, 'triangle'), 120); openVip(); alertMsg('👑 VIP faollashtirildi! Omad!'); }
