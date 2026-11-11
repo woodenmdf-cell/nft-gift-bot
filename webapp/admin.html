@@ -115,7 +115,28 @@ V.dash = async () => {
     card('👥 Foydalanuvchilar', s.users) + card('🎮 O\'yinchilar', s.players) + card('📅 Bugun bonus olganlar', s.active_day) + card('👑 Faol VIP', s.vip_active) +
     card('💰 O\'yin daromadi', som(s.game_revenue)) + card('👑 VIP daromadi', som(s.vip_revenue)) + card('🪙 Tanga sotuvi', som(s.coin_revenue)) +
     card('💳 Jami to\'ldirilgan', som(s.topped)) + card('👛 Foydalanuvchi balanslari', som(s.balances)) + card('🔎 Chek tekshiruvi', s.topups_checking) +
-    '</div>';
+    '</div>' +
+    `<h2 style="margin-top:22px">🪙 Bugungi tanga hisob-kitobi</h2><div class="stats">` +
+    card('➕ Topilgan', '🪙 ' + fmt(s.today.earned)) + card('➖ Sarflangan', '🪙 ' + fmt(s.today.spent)) +
+    card('= Farq', '🪙 ' + fmt(s.today.earned - s.today.spent)) + '</div>' +
+    (s.today.kinds.length ? `<table style="margin-top:12px"><thead><tr><th>Turi</th><th>Topilgan</th><th>Sarflangan</th><th>Soni</th></tr></thead><tbody>` +
+      s.today.kinds.map(k => `<tr><td>${KIND[k.kind] || esc(k.kind)}</td><td>🪙 ${fmt(k.earned)}</td><td>🪙 ${fmt(k.spent)}</td><td>${k.n}</td></tr>`).join('') + '</tbody></table>' : '') +
+    `<h2 style="margin-top:22px">💾 Baza</h2><div class="stat" style="max-width:640px">` +
+    (s.storage.persistent ? `✅ <b>Baza doimiy diskda</b> (volume ulangan) — yangilanishlarda ma'lumotlar saqlanadi.`
+      : `<b style="color:var(--bad)">⚠️ Baza doimiy diskda EMAS!</b> Har yangilanishda tangalar va balanslar o'chishi mumkin. Railway → nft-gift-bot → Settings → Volumes → <b>Add Volume</b>, Mount path: <code>/data</code>.`) +
+    `<div class="muted" style="margin-top:8px">Fayl: ${esc(s.storage.db_path)} · ${(s.storage.db_size / 1024).toFixed(0)} KB · Zaxiralar: ${s.storage.backups}` +
+    (s.storage.last_backup ? ` · oxirgisi ${dt(s.storage.last_backup)}` : '') + ` · har soatda adminlarga Telegram'da yuboriladi</div></div>`;
+};
+const fmt = n => String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const KIND = {game: '🏙 O\'yin (topshiriq/tanga)', daily: '🎁 Kunlik bonus', race: '🏁 Onlayn poyga', buy: '💳 Tanga xaridi', refund: '↩️ Qaytarish',
+  admin: '👮 Admin', opening: '📥 Boshlang\'ich qoldiq', upgrade: '⚡️ Yaxshilash', car: '🚗 Mashina', look: '🧍 Personaj', paint: '🎨 Bo\'yash', other: 'Boshqa'};
+async function ledger(id, name) {
+  const r = await api(`users/${id}/ledger`);
+  modal(`<h3>📜 ${esc(name)} — tanga tarixi</h3><div class="muted">Hozirgi qoldiq: <b style="color:var(--text)">🪙 ${fmt(r.coins)}</b></div>` +
+    (r.rows.length ? `<table><thead><tr><th>Vaqt</th><th>Turi</th><th>O'zgarish</th><th>Qoldiq</th></tr></thead><tbody>` +
+      r.rows.map(x => `<tr><td class="muted">${dt(x.created)}</td><td>${KIND[x.kind] || esc(x.kind)}<div class="muted">${esc(x.note || '')}</div></td>
+        <td style="color:${x.delta > 0 ? 'var(--ok)' : 'var(--bad)'};font-weight:700">${x.delta > 0 ? '+' : ''}${fmt(x.delta)}</td><td>🪙 ${fmt(x.coins_after)}</td></tr>`).join('') + '</tbody></table>'
+      : '<div class="empty">Hali harakat yo\'q</div>') + `<button class="btn g" onclick="closeM()">Yopish</button>`);
 };
 V.topups = async () => {
   const rows = await api('topups');
@@ -148,7 +169,7 @@ V.users = async () => {
     h += `<tr data-s="${esc((u.full_name || '') + ' ' + (u.username || '') + ' ' + u.id).toLowerCase()}"><td>${u.id}</td>
       <td>${esc(u.full_name || '')} <span class="muted">@${esc(u.username || '-')}</span></td><td>${som(u.balance)}</td><td>🪙 ${u.coins || 0}</td>
       <td>${u.vip_until > now ? '👑 ' + new Date(u.vip_until * 1000).toLocaleDateString('ru-RU') : '—'}</td><td>${som(u.spent)}</td><td><div class="acts">
-      <button class="btn g s" onclick="bal(${u.id})">💰 Balans</button><button class="btn g s" onclick="coins(${u.id})">🪙 Tanga</button>
+      <button class="btn g s" onclick="ledger(${u.id}, '${esc(u.full_name || u.username || u.id).replace(/'/g, '')}')">📜 Tarix</button><button class="btn g s" onclick="bal(${u.id})">💰 Balans</button><button class="btn g s" onclick="coins(${u.id})">🪙 Tanga</button>
       <button class="btn ${u.banned ? 'ok' : 'bad'} s" onclick="ban(${u.id},${u.banned ? 0 : 1})">${u.banned ? 'Blokdan chiqarish' : 'Bloklash'}</button></div></td></tr>`;
   }
   return h + '</tbody></table>';
