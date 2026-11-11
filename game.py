@@ -25,13 +25,20 @@ UPGRADES = {
     "handling": ("Boshqaruv", 5, 120),
 }
 CARS = {
-    # kalit: (nomi, narxi tangada, faqat VIP)
-    "sedan": ("Shahar sedani", 0, False),
-    "taxi":  ("Taksi", 800, False),
-    "suv":   ("Yo'ltanlamas", 1500, False),
-    "sport": ("Sport kupe", 3000, False),
-    "super": ("Oltin superkar", 0, True),
+    # kalit: (marka va model, narxi tangada, VIP uchun bepul). Markalar o'ylab topilgan (haqiqiy brendlar emas).
+    "scooter": ("⚡ Volt elektr skuteri", 0, False),       # har bir yangi o'yinchiga
+    "hatch":   ("Turon Mini", 1500, False),
+    "sedan":   ("Afrosiyob Sedan", 3000, False),
+    "taxi":    ("Afrosiyob Taksi", 3500, False),
+    "van":     ("Ipak Yo'li Van", 4500, False),
+    "suv":     ("Pomir 4x4", 7000, False),
+    "suvlux":  ("Registon Luxe", 12000, False),
+    "sport":   ("Samarqand GT", 22000, False),
+    "super":   ("Oltin Burgut Superkar", 60000, True),
 }
+# Bu vaqtdan oldin o'ynay boshlaganlar oldin bepul berilgan sedanni saqlab qoladi
+CARS_CUTOFF = 1794371218
+STARTER_CAR = "scooter"
 # Personaj: har bir qism uchun variantlar narxi (0 = bepul, "vip" = faqat VIP uchun)
 LOOK = {
     # Kenney personajlari (city3d.js dagi CHAR_FILES tartibida): 6 erkak, 6 ayol
@@ -53,7 +60,7 @@ LEVEL_BONUS = 0.03           # har daraja uchun +3% tanga (maks. +60%)
 # Kunlik bonus seriyasi: ketma-ket kunlar (48 soat ichida qaytsangiz seriya davom etadi)
 DAILY_STREAK = [100, 150, 200, 250, 300, 400, 600]
 # Donat: (narx so'mda, tanga). Birinchi xaridga +50%, VIP'ga +10%
-COIN_PACKS = [(5000, 1000), (10000, 2200), (25000, 6000), (50000, 13000), (100000, 30000)]
+COIN_PACKS = [(10000, 2200), (25000, 6000), (50000, 13000), (100000, 30000)]
 FIRST_BUY_BONUS = 0.5
 VIP_COIN_BONUS = 0.1
 VIP_MULT = 2                 # VIP tanga ko'paytiruvchisi
@@ -82,8 +89,11 @@ def _data(p):
     except ValueError:
         d = {}
     d.setdefault("up", {})
-    d.setdefault("cars", ["sedan"])
-    d.setdefault("car", "sedan")
+    old = (p.get("created") or 0) < CARS_CUTOFF
+    d.setdefault("cars", [STARTER_CAR] + (["sedan"] if old else []))
+    if STARTER_CAR not in d["cars"]:
+        d["cars"].insert(0, STARTER_CAR)
+    d.setdefault("car", "sedan" if old else STARTER_CAR)
     d.setdefault("owned", [])
     d.setdefault("paint", {})
     d["look"] = {**LOOK_DEFAULT, **{k: v for k, v in (d.get("look") or {}).items() if k in LOOK}}
@@ -122,7 +132,7 @@ def view(uid):
     p, d = migrate_look(uid, p, d)
     vip = is_vip(p)
     if d["car"] not in d["cars"] and not (d["car"] == "super" and vip):
-        d["car"] = "sedan"
+        d["car"] = STARTER_CAR
     now = int(time.time())
     return {
         "coins": p["coins"], "xp": p["xp"], "level": level(p["xp"]),
@@ -263,13 +273,8 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
             return err("Noma'lum mashina")
         p = db.game_profile(user["id"])
         d = _data(p)
-        name, price, vip_only = CARS[key]
-        if vip_only:
-            if not is_vip(p):
-                return err("Bu mashina faqat VIP uchun")
-            d["car"] = key
-            db.game_save(user["id"], data=json.dumps(d))
-        elif key in d["cars"]:
+        name, price, vip_free = CARS[key]
+        if key in d["cars"] or (vip_free and is_vip(p)):
             d["car"] = key
             db.game_save(user["id"], data=json.dumps(d))
         else:
@@ -383,7 +388,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
 # yuboradi, server esa xonadagi hamma holatlarni 10 marta/soniya tarqatadi.
 ROOM_MAX = 25
 WORLD = 14 * 60 + 14          # 854 m — city3d.js dagi N=14 bilan bir xil
-CAR_TYPES = {"", "sedan", "taxi", "suv", "sport", "super", "van", "bus", "police", "hatch", "suvlux", "delivery", "truck", "ambulance"}
+CAR_TYPES = {"", "scooter", "sedan", "taxi", "suv", "sport", "super", "van", "bus", "police", "hatch", "suvlux", "delivery", "truck", "ambulance"}
 CHAT = 8                     # tayyor iboralar soni (mijozda)
 _rooms = []                  # [{cid: Client}]
 _by_uid = {}
