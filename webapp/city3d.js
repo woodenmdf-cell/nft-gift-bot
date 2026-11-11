@@ -1453,8 +1453,9 @@ function updateWorldObjs(dt) {
     } else if (ms.time <= 0) { G.mission = null; toast('⌛ Vaqt tugadi', 'Topshiriq bajarilmadi'); sfx(160, 0.3, 'triangle', 0.06); }
   }
   // yo'nalish strelkasi
-  const tgt = G.mission ? G.mission.pts[G.mission.idx] : G.givers.reduce((a, b) => dxz(a, me) < dxz(b, me) ? a : b);
-  arrow.material.color.setHex(G.mission ? 0x34c759 : 0xf5c542);
+  if (NAV && !G.mission && dxz(NAV, me) < 14) { toast('🏁 Yetib keldingiz', NAV.name || ''); NAV = null; }
+  const tgt = G.mission ? G.mission.pts[G.mission.idx] : NAV ? NAV : G.givers.reduce((a, b) => dxz(a, me) < dxz(b, me) ? a : b);
+  arrow.material.color.setHex(G.mission ? 0x34c759 : NAV ? 0x4fc3ff : 0xf5c542);
   const aa = Math.atan2(tgt.x - me.x, tgt.z - me.z), ar = (cur ? 4.2 : 2.2) + Math.sin(tNow * 5) * 0.15;
   arrow.position.set(me.x + Math.sin(aa) * ar, 0.12, me.z + Math.cos(aa) * ar);
   arrow.rotation.y = aa; arrow.scale.setScalar(cur ? 1.3 : 0.5);
@@ -1515,6 +1516,7 @@ function drawMinimap(tgt) {
   const dot = (x, z, col, r) => { g.fillStyle = col; g.beginPath(); g.arc(x * k, z * k, r / sc, 0, 7); g.fill(); };
   if (G.race) { const p = G.race.pts[Math.min(G.race.idx, G.race.pts.length - 1)]; dot(p[0], p[1], '#b388ff', 6); }
   else if (G.mission) { const p = G.mission.pts[G.mission.idx]; dot(p.x, p.z, '#34c759', 5); } else for (const q of G.givers) dot(q.x, q.z, '#f5c542', 4.5);
+  if (NAV && !G.mission && !G.race) dot(NAV.x, NAV.z, '#4fc3ff', 6);
   for (const v of police) dot(v.x, v.z, (tNow * 6 | 0) % 2 ? '#ff3b30' : '#3b6bff', 4);
   for (const v of vehicles) if (v.own && v !== cur) dot(v.x, v.z, '#4fc3ff', 3.5);
   for (const [pid, o] of Object.entries(PSTATE.owned)) if (o[1] && PROPS[pid]) { const p = PROPS[pid]; g.fillStyle = '#f5c542'; g.fillRect(p.x * k, p.z * k, Math.max(p.w * k, 3 / sc), Math.max(p.d * k, 3 / sc)); }
@@ -1533,7 +1535,7 @@ function drawMinimap(tgt) {
   // shimol yo'nalishi chetga
   if (tgt && dxz(tgt, me) > R) {
     const ta = rot + Math.atan2(tgt.z - me.z, tgt.x - me.x);
-    g.fillStyle = G.race ? '#b388ff' : G.mission ? '#34c759' : '#f5c542'; g.beginPath(); g.arc(S / 2 + Math.cos(ta) * (S / 2 - 7), S / 2 + Math.sin(ta) * (S / 2 - 7), 5, 0, 7); g.fill();
+    g.fillStyle = G.race ? '#b388ff' : G.mission ? '#34c759' : NAV ? '#4fc3ff' : '#f5c542'; g.beginPath(); g.arc(S / 2 + Math.cos(ta) * (S / 2 - 7), S / 2 + Math.sin(ta) * (S / 2 - 7), 5, 0, 7); g.fill();
   }
 }
 let lastCtx = '';
@@ -1543,10 +1545,40 @@ const propLabels = [], labelTex = new Map();
 function propText(pid) {
   const o = PSTATE.owned[pid], c = PCAT[pid];
   if (!c) return '';
-  if (o && o[1]) return `⭐ Sizniki · +${c[1]}/soat`;
-  if (o && o[2]) return `🏷 Sotuvda: ${o[2]} 🪙`;
-  if (o) return `🏢 ${o[0]}`;
-  return `💲 ${c[0]} 🪙 · +${c[1]}/soat`;
+  if (o && o[1]) return `⭐ ${c[2]} · +${c[1]}/soat`;
+  if (o && o[2]) return `🏷 ${o[2]} 🪙 · ${c[2]}`;
+  if (o) return `🏢 ${c[2]}`;
+  return `💲 ${c[0]} 🪙 · ${c[2]}`;
+}
+let NAV = null, roofT = 0;
+const roofSigns = [], roofTex = new Map();
+function roofTexture(name, mine) {
+  const key = (mine ? '1' : '0') + name;
+  if (!roofTex.has(key)) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
+    g.fillStyle = mine ? '#d4a017' : '#1f6fe0'; g.beginPath(); g.roundRect ? g.roundRect(8, 8, 496, 112, 26) : g.rect(8, 8, 496, 112); g.fill();
+    g.lineWidth = 8; g.strokeStyle = '#ffffff'; g.stroke();
+    g.fillStyle = '#fff'; g.font = 'bold 58px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText((mine ? '⭐ ' : '👑 ') + name, 256, 68, 470);
+    roofTex.set(key, canvasTex(c));
+  }
+  return roofTex.get(key);
+}
+// Egasi bor binolar tomida egasining ismi (yaqin 150 m dagi 40 tagacha bino)
+function updateRoofSigns(dt, cx, cz) {
+  roofT -= dt; if (roofT > 0) return; roofT = 1.2;
+  const list = Object.entries(PSTATE.owned).map(([pid, o]) => [pid, o, PROPS[pid]]).filter(x => x[2] && Math.abs(x[2].cx - cx) < 150 && Math.abs(x[2].cz - cz) < 150)
+    .sort((a, b) => Math.hypot(a[2].cx - cx, a[2].cz - cz) - Math.hypot(b[2].cx - cx, b[2].cz - cz)).slice(0, 40);
+  while (roofSigns.length < list.length) {
+    const sp = new T.Sprite(new T.SpriteMaterial({transparent: true, depthWrite: false})); sp.renderOrder = 8; scene.add(sp); roofSigns.push(sp);
+  }
+  roofSigns.forEach((sp, i) => {
+    const it = list[i];
+    if (!it) { sp.visible = false; return; }
+    const [, o, p] = it, w = Math.max(13, Math.min(20, p.w * 1.2));
+    sp.material.map = roofTexture(o[0], !!o[1]); sp.material.needsUpdate = true;
+    sp.scale.set(w, w / 4, 1); sp.position.set(p.cx, p.h + w / 8 + 1.2, p.cz); sp.visible = true;
+  });
 }
 function propSprite(text) {
   if (!labelTex.has(text)) {
@@ -1574,6 +1606,7 @@ function updateProps(dt) {
     }
     nearProp = best;
   } else nearProp = null;
+  updateRoofSigns(dt, me.x, me.z);
   if (propT > 0) return;
   propT = 0.4;
   if (!propLabels.length) for (let i = 0; i < 6; i++) {
@@ -1599,6 +1632,7 @@ function hud(tgt) {
   if (dn !== G.district) { G.district = dn; $('h-dist').textContent = '📍 ' + dn; }
   const mEl = $('mission');
   if (G.race) mEl.innerHTML = `🏁 Poyga: ${Math.min(G.race.idx + 1, G.race.pts.length)}/${G.race.pts.length}<small>vs ${esc(G.race.vs)} — ${G.race.opp}/${G.race.pts.length}</small>`;
+  else if (NAV && !G.mission) mEl.innerHTML = `🧭 ${esc(NAV.name || 'Bino')}<small>${Math.round(dxz(pos(), NAV))} m · ko'k ko'rsatkich bo'ylab boring</small>`;
   else if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>⏱ ${Math.ceil(G.mission.time)} s · ${Math.round(dxz(pos(), G.mission.pts[G.mission.idx]))} m</small>`;
   else mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>';
   // tugmalar
@@ -1793,10 +1827,14 @@ const API = {
   raceAccept(id) { if (!cur) return toast('Avval mashinaga o\'tiring', 'Keyin qabul qiling'); if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'ra', to: id})); },
   racing() { return !!(G && G.race); }, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
-  stop() { API.active = false; stop(); for (const sp of propLabels) sp.visible = false; nearProp = null; },
+  stop() { API.active = false; stop(); for (const sp of propLabels) sp.visible = false; for (const sp of roofSigns) sp.visible = false; nearProp = null; },
   layoutHash, propIds: () => Object.keys(PROPS),
   setProps(state, cat) { if (state) PSTATE = state; if (cat) PCAT = cat; propT = 0; },
   nearProp: () => nearProp,
+  setNav(pid, name) { const p = PROPS[pid]; NAV = p ? {x: p.cx, z: p.cz, name} : null; },
+  propRect: pid => PROPS[pid] || null,
+  mapImage: () => API.mapImg,
+  worldSize: () => WORLD,
   propPos: pid => PROPS[pid] ? {x: PROPS[pid].cx, z: PROPS[pid].cz} : null,
   stats() { return {missions: G ? Object.assign({}, G.mBy) : {}, total: G ? G.missions : 0, pickups: G ? G.pickups : 0}; },
   coins: sessionCoins,
@@ -1820,7 +1858,7 @@ const API = {
   render(menu, dt) {
     if (!API.ok) return;
     if (menu) {
-      tNow += dt; updateLights(tNow); updateTraffic(dt); updatePeds(dt); updateDay(dt * 0.5, WORLD / 2, WORLD / 2); updateCamera(dt, true);
+      tNow += dt; updateLights(tNow); updateTraffic(dt); updatePeds(dt); updateRoofSigns(dt, WORLD / 2, WORLD / 2); updateDay(dt * 0.5, WORLD / 2, WORLD / 2); updateCamera(dt, true);
     }
     const cx = camera.position.x, cz = camera.position.z, D = QUALITY > 0 ? 180 : 130;
     updateLod(menu ? WORLD / 2 : cx, menu ? WORLD / 2 : cz);
@@ -1829,6 +1867,6 @@ const API = {
     renderer.render(scene, camera);
   },
 };
-API._dbg = {props: () => PROPS, info: () => ({calls: renderer.info.render.calls, tris: renderer.info.render.triangles}), scene: () => scene, cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
+API._dbg = {roof: () => ({n: roofSigns.length, vis: roofSigns.filter(x => x.visible).length, owned: Object.keys(PSTATE.owned || {}).length}), props: () => PROPS, info: () => ({calls: renderer.info.render.calls, tris: renderer.info.render.triangles}), scene: () => scene, cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
 window.City3D = API;
 })();

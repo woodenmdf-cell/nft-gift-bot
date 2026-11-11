@@ -23,6 +23,42 @@ SW = 2.6
 SEED = 90210
 KB_H = [0.95, 1.25, 1.75, 1.25, 0.55]                 # Kenney binolari balandligi (model birligida)
 KB_NAME = ["Kichik uy", "Do'kon", "Ofis binosi", "Turar-joy", "Garaj"]
+# Bino turlari (Kenney modeli bo'yicha) — har biriga bir nechta biznes turi, nomi tasodifiy emas, id dan hisoblanadi
+KB_KINDS = [["Kafe", "Novvoyxona", "Gul do'koni", "Choyxona", "Somsaxona", "Qahvaxona"],
+            ["Do'kon", "Dorixona", "Minimarket", "Kiyim do'koni", "Telefon do'koni", "Kitob do'koni"],
+            ["Mehmonxona", "Ofis markazi", "Bank filiali", "Klinika", "O'quv markazi"],
+            ["Turar-joy", "Oshxona", "Sartaroshxona", "Fitnes zal", "Restoran"],
+            ["Avtoservis", "Garaj", "Avtoyuvish", "Ombor", "Shinomontaj"]]
+BRANDS = ["Navro'z", "Bahor", "Lola", "Gulshan", "Zarafshon", "Humo", "Shirin", "Baraka", "Do'stlik", "Ipak", "Sevinch",
+          "Orzu", "Quyosh", "Yulduz", "Bulbul", "Chinor", "Anor", "Bodom", "Tulpor", "Samo", "Nur", "Oydin", "Asal",
+          "Lazzat", "Marjon", "Durdona", "Feruza", "Kamalak", "Oqtosh", "Sharq"]
+TOWERS = ["Turon", "Afrosiyob", "Registon", "Ipak Yo'li", "Zarafshon", "Navro'z", "Humo", "Oltin Vodiy", "Sharq", "Bulut",
+          "Samarqand", "Buxoro", "Xorazm", "Tumaris", "Mirzo"]
+# Ko'chalar: gorizontal (z bo'yicha) va vertikal (x bo'yicha) yo'llar
+H_STREETS = ["Amir Temur", "Navoiy", "Bobur", "Mustaqillik", "Ulug'bek", "Beruniy", "Farobiy", "Ibn Sino", "Cho'lpon",
+             "Qodiriy", "Oybek", "Furqat", "Muqimiy", "Ogahiy", "Lutfiy"]
+V_STREETS = ["Bunyodkor", "Shota Rustaveli", "Nukus", "Samarqand", "Buxoro", "Xiva", "Farg'ona", "Andijon", "Namangan",
+             "Termiz", "Qarshi", "Navro'z", "Bog'ishamol", "Chimyon", "Zarafshon"]
+
+
+def _pick(lst, *n):
+    h = 7
+    for v in n:
+        h = (h * 131 + v * 7919 + 17) % 1000003
+    return lst[h % len(lst)]
+
+
+def address(cx, cz):
+    """Eng yaqin ko'cha va uy raqami (ko'cha bo'ylab har 12 m — keyingi raqam, juft/toq tomon)."""
+    roads = []
+    for k in range(N + 1):
+        c = k * CELL + RD / 2
+        roads.append((abs(cz - c), "h", k, cx, 0 if cz > c else 1))
+        roads.append((abs(cx - c), "v", k, cz, 0 if cx > c else 1))
+    _, axis, k, along, side = min(roads)
+    street = (H_STREETS if axis == "h" else V_STREETS)[k % 15]
+    num = int(along / 12) * 2 + 1 + side
+    return f"{street} ko'chasi, {num}-uy"
 KB_PRICE = [1200, 1800, 3000, 1800, 600]
 SPECIAL_BLOCKS = {(6, 6), (10, 3), (4, 9), (9, 9), (11, 11)}
 DISTRICTS = [["Olmazor", "Shayxontohur", "Yunusobod", "Qoraqamish"], ["Chilonzor", "Markaz", "Mirzo Ulug'bek", "Yashnobod"],
@@ -86,7 +122,9 @@ def build_catalog():
                         f, h = tile * 0.8, KB_H[mi] * tile
                         cx, cz = x + m + tile * (a + 0.5), z + m + tile * (c + 0.5)
                         base = KB_PRICE[mi]
-                        solids.append((KB_NAME[mi], cx - f / 2, cz - f / 2, f, f, h, base * (1 + 0.5 * df)))
+                        k = len(solids)
+                        nm = f"{_pick(KB_KINDS[mi], i, j, k)} «{_pick(BRANDS, j, k, i, mi)}»"
+                        solids.append((nm, cx - f / 2, cz - f / 2, f, f, h, base * (1 + 0.5 * df), mi))
             elif typ == "build":
                 m, g = SW + 0.8, 3
                 S = BL - 2 * m
@@ -98,18 +136,23 @@ def build_catalog():
                 for q in rects:
                     h = 7 + rnd() * 12 + df * df * rnd() * 75
                     rnd()                                             # rang (PAL)
-                    name = "Osmono'par" if h > 45 else "Biznes markaz" if h > 22 else "Ofis binosi"
+                    k = len(solids)
+                    tw = _pick(TOWERS, i, j, k)
+                    name = f"{tw} Tower" if h > 45 else f"{tw} Plaza" if h > 22 else f"Ofis «{_pick(BRANDS, i, k, j)}»"
                     area = q[2] * q[3] / (S * S)
-                    solids.append((name, x + m + q[0], z + m + q[1], q[2], q[3], h, (1500 + h * 110) * (0.6 + area) * (1 + 0.5 * df)))
+                    solids.append((name, x + m + q[0], z + m + q[1], q[2], q[3], h, (1500 + h * 110) * (0.6 + area) * (1 + 0.5 * df),
+                                   "tower" if h > 45 else "plaza" if h > 22 else "office"))
             elif typ == "park":
                 for _ in range(9):
                     rnd(); rnd()
             if (i, j) in SPECIAL_BLOCKS:
                 continue
-            for k, (name, sx, sz, w, d, h, price) in enumerate(solids):
+            for k, (name, sx, sz, w, d, h, price, kind) in enumerate(solids):
                 _raw[f"{i}-{j}-{k}"] = (sx + w / 2, sz + d / 2, h)
                 price = _r50(price)
-                cat[f"{i}-{j}-{k}"] = {"name": name, "price": price, "income": max(5, round(price * INCOME_RATE)),
+                kind = {0: "shop", 1: "shop", 2: "office", 3: "home", 4: "garage"}.get(kind, kind)
+                cat[f"{i}-{j}-{k}"] = {"name": name, "kind": kind, "address": address(sx + w / 2, sz + d / 2),
+                                       "price": price, "income": max(5, round(price * INCOME_RATE)),
                                        "x": round(sx + w / 2, 1), "z": round(sz + d / 2, 1), "w": round(w, 1), "d": round(d, 1),
                                        "h": round(h, 1), "district": district(sx + w / 2, sz + d / 2)}
     # noyob binolar
@@ -119,7 +162,7 @@ def build_catalog():
             ("S-paint", "🎨 Bo'yash ustaxonasi", (9, 9), 25000, (7, 4, 32, 13)),
             ("S-tower", "📡 Teleminora", (10, 3), 60000, (BL / 2 - 5, BL / 2 - 5, 10, 10))]:
         bx, bz = bi * CELL + RD, bj * CELL + RD
-        cat[pid] = {"name": name, "price": price, "income": round(price * INCOME_RATE * 1.25),
+        cat[pid] = {"name": name, "kind": "special", "address": address(bx + ox + w / 2, bz + oz + d / 2), "price": price, "income": round(price * INCOME_RATE * 1.25),
                     "x": bx + ox + w / 2, "z": bz + oz + d / 2, "w": w, "d": d, "h": 8, "district": district(bx + ox, bz + oz),
                     "special": True}
     return cat
@@ -199,7 +242,8 @@ def setup(r, auth, ok, err, notify=None):
     init()
 
     async def catalog(request):
-        return web.json_response({"props": {k: [v["price"], v["income"], v["name"], v["district"]] for k, v in CATALOG.items()},
+        return web.json_response({"props": {k: [v["price"], v["income"], v["name"], v["district"], v["address"], v["kind"]]
+                                            for k, v in CATALOG.items()},
                                   "rate": INCOME_RATE, "cap_h": INCOME_CAP_H, "vip_bonus": VIP_INCOME,
                                   "max_owned": MAX_OWNED, "layout": LAYOUT, "fee": FEE, "min_k": MIN_K, "max_k": MAX_K})
 
