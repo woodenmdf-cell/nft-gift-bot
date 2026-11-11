@@ -1581,6 +1581,7 @@ function updateProps(dt) {
   if (!cur) {
     let best = null, bd = 3.6;
     for (const [pid, p] of Object.entries(PROPS)) {
+      if (!PCAT[pid]) continue;                       // faqat sotuvdagi 20 ta bino
       if (Math.abs(p.cx - me.x) > 30 || Math.abs(p.cz - me.z) > 30) continue;
       const dx = Math.max(p.x - me.x, 0, me.x - (p.x + p.w)), dz = Math.max(p.z - me.z, 0, me.z - (p.z + p.d)), d = Math.hypot(dx, dz);
       if (d < bd) { bd = d; best = pid; }

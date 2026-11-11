@@ -19,7 +19,7 @@ o'yin bot domenining o'zida (`/`) ochiladi.
 - **Xavfsiz savdo (escrow):** egasi binoni ochiq bozorga yoki aniq bir o'yinchiga (@username / ID) sotuvga qo'yadi;
   xarid bitta SQLite tranzaksiyasida: tanga yechiladi, sotuvchiga (−5% komissiya) o'tadi, egalik o'zgaradi. Narx
   o'zgarsa, e'lon bekor qilinsa yoki bino boshqa qo'lga o'tsa — eski e'lon bilan sotib bo'lmaydi; bir vaqtdagi
-  xaridlardan faqat bittasi o'tadi. Sotuvchiga va shaxsiy taklif egasiga botda xabar keladi. Bir o'yinchida eng ko'pi 30 ta bino.
+  xaridlardan faqat bittasi o'tadi. Sotuvchiga va shaxsiy taklif egasiga botda xabar keladi. Sotuvda jami 20 ta bino (4 ta noyob + har tumandan eng zo'r bittasi), bir o'yinchida eng ko'pi 3 ta.
 - Har bir binoning **nomi va manzili** bor (masalan, *Kafe «Navro'z» — Amir Temur ko'chasi, 12-uy, Chilonzor*):
   biznes turi, nom va eng yaqin ko'cha bo'yicha uy raqami id dan hisoblanadi (15 gorizontal + 15 vertikal ko'cha).
 - Bino oynasida **xarita** (bino qizil, boshqa egali binolar sariq/ko'k) va **🧭 Yo'l ko'rsatish** — o'yinda ko'k
