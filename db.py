@@ -19,6 +19,12 @@ CREATE TABLE IF NOT EXISTS game_profiles(
   vip_until INTEGER DEFAULT 0, last_daily INTEGER DEFAULT 0,
   games INTEGER DEFAULT 0, wins INTEGER DEFAULT 0, created INTEGER
 );
+CREATE TABLE IF NOT EXISTS game_ledger(           -- har bir tanga harakati (hisob-kitob tarixi)
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, delta INTEGER, coins_after INTEGER,
+  kind TEXT, note TEXT, created INTEGER
+);
+CREATE INDEX IF NOT EXISTS ix_ledger_user ON game_ledger(user_id, id);
+CREATE INDEX IF NOT EXISTS ix_ledger_time ON game_ledger(created);
 CREATE TABLE IF NOT EXISTS game_payments(
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount INTEGER, days INTEGER, created INTEGER
 );
@@ -45,6 +51,11 @@ def init():
             cols = [r["name"] for r in c.execute(f"PRAGMA table_info({table})")]
             if col not in cols:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+        # tarix yozilishidan oldin to'plangan tangalar — boshlang'ich qoldiq sifatida bir marta yoziladi
+        c.execute("INSERT INTO game_ledger(user_id,delta,coins_after,kind,note,created) "
+                  "SELECT user_id, coins, coins, 'opening', 'boshlang''ich qoldiq', ? FROM game_profiles g "
+                  "WHERE coins<>0 AND NOT EXISTS(SELECT 1 FROM game_ledger l WHERE l.user_id=g.user_id)",
+                  (int(time.time()),))
 
 
 def _all(sql, args=()):
@@ -159,18 +170,44 @@ def game_save(uid, **f):
     _exec(f"UPDATE game_profiles SET {', '.join(k + '=?' for k in f)} WHERE user_id=?", (*f.values(), uid))
 
 
-def game_add(uid, coins=0, xp=0, games=0, wins=0):
-    _exec("UPDATE game_profiles SET coins=coins+?, xp=xp+?, games=games+?, wins=wins+? WHERE user_id=?",
-          (coins, xp, games, wins, uid))
+def _ledger(c, uid, delta, kind, note=""):
+    """Tanga harakatini yozish (o'sha tranzaksiya ichida, yangi qoldiq bilan)."""
+    if not delta:
+        return
+    row = c.execute("SELECT coins FROM game_profiles WHERE user_id=?", (uid,)).fetchone()
+    c.execute("INSERT INTO game_ledger(user_id,delta,coins_after,kind,note,created) VALUES(?,?,?,?,?,?)",
+              (uid, delta, row["coins"] if row else 0, kind, note, int(time.time())))
 
 
-def game_spend(uid, coins, data_json):
+def game_add(uid, coins=0, xp=0, games=0, wins=0, kind="other", note=""):
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        c.execute("UPDATE game_profiles SET coins=coins+?, xp=xp+?, games=games+?, wins=wins+? WHERE user_id=?",
+                  (coins, xp, games, wins, uid))
+        _ledger(c, uid, coins, kind, note)
+
+
+def game_spend(uid, coins, data_json, kind="other", note=""):
     """Tangani yechib, data ni saqlaydi. Yetmasa False."""
     with conn() as c:
         c.execute("BEGIN IMMEDIATE")
         cur = c.execute("UPDATE game_profiles SET coins=coins-?, data=? WHERE user_id=? AND coins>=?",
                         (coins, data_json, uid, coins))
+        if cur.rowcount == 1:
+            _ledger(c, uid, -coins, kind, note)
         return cur.rowcount == 1
+
+
+def game_ledger(uid, limit=200):
+    return _all("SELECT * FROM game_ledger WHERE user_id=? ORDER BY id DESC LIMIT ?", (uid, limit))
+
+
+def ledger_summary(since):
+    """Berilgan vaqtdan beri: jami topilgan / sarflangan tanga va turlar bo'yicha."""
+    rows = _all("SELECT kind, SUM(CASE WHEN delta>0 THEN delta ELSE 0 END) earned, "
+                "SUM(CASE WHEN delta<0 THEN -delta ELSE 0 END) spent, COUNT(*) n "
+                "FROM game_ledger WHERE created>=? AND kind<>'opening' GROUP BY kind ORDER BY earned+spent DESC", (since,))
+    return {"earned": sum(r["earned"] or 0 for r in rows), "spent": sum(r["spent"] or 0 for r in rows), "kinds": rows}
 
 
 def game_buy_vip(uid, price, days):
@@ -208,6 +245,7 @@ def game_buy_coins(uid, price, coins):
         c.execute("UPDATE game_profiles SET coins=coins+? WHERE user_id=?", (coins, uid))
         c.execute("INSERT INTO game_payments(user_id,amount,days,kind,coins,created) VALUES(?,?,0,'coins',?,?)",
                   (uid, price, coins, now))
+        _ledger(c, uid, coins, "buy", f"{price} so'm")
         return c.execute("SELECT coins FROM game_profiles WHERE user_id=?", (uid,)).fetchone()["coins"], None
 
 

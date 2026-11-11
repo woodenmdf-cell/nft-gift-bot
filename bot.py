@@ -262,8 +262,29 @@ async def admin_logout(request):
     return r
 
 
+def storage_info():
+    """Baza doimiy diskda (Railway volume) turibdimi."""
+    persistent = os.path.ismount("/data") if str(DATA_DIR).startswith("/data") else True
+    try:
+        size = os.path.getsize(DB_PATH)
+    except OSError:
+        size = 0
+    backups = sorted(BACKUP_DIR.glob("*.db"), key=lambda p: p.stat().st_mtime) if BACKUP_DIR.exists() else []
+    return {"persistent": persistent, "db_path": str(DB_PATH), "db_size": size,
+            "last_backup": int(backups[-1].stat().st_mtime) if backups else 0, "backups": len(backups)}
+
+
 async def a_stats(request):
-    return web.json_response(db.stats())
+    day = int(time.time()) - int(time.time()) % 86400 - 5 * 3600     # bugun 00:00 (Toshkent, UTC+5)
+    if day + 86400 <= time.time():
+        day += 86400
+    return web.json_response({**db.stats(), "today": db.ledger_summary(day), "storage": storage_info()})
+
+
+async def a_ledger(request):
+    uid = int(request.match_info["id"])
+    p = db.game_profile(uid)
+    return web.json_response({"coins": p["coins"], "rows": db.game_ledger(uid, 300)})
 
 
 async def a_topups(request):
@@ -312,7 +333,7 @@ async def a_coins(request):
     if not delta:
         return err("Sonni kiriting")
     db.game_profile(uid)
-    db.game_add(uid, coins=delta)
+    db.game_add(uid, coins=delta, kind="admin", note="admin panel")
     await S.send(bot, uid, f"🪙 Tanga hisobingiz {delta:+} ga o'zgartirildi.")
     return ok(msg="Bajarildi")
 
@@ -463,6 +484,7 @@ def make_app():
     r.add_post("/admin/api/users/{id:\\d+}/ban", a_ban)
     r.add_post("/admin/api/users/{id:\\d+}/balance", a_balance)
     r.add_post("/admin/api/users/{id:\\d+}/coins", a_coins)
+    r.add_get("/admin/api/users/{id:\\d+}/ledger", a_ledger)
     r.add_post("/admin/api/broadcast", a_broadcast)
     r.add_get("/admin/api/file/{fid}", a_file)
     r.add_get("/admin/api/backup", a_backup)

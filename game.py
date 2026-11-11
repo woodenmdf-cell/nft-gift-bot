@@ -111,7 +111,7 @@ def migrate_look(uid, p, d):
     d["look_v"] = 2
     db.game_save(uid, data=json.dumps(d))
     if refund:
-        db.game_add(uid, coins=refund)
+        db.game_add(uid, coins=refund, kind="refund", note="eski garderob")
         p = db.game_profile(uid)
     return p, d
 
@@ -223,7 +223,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
         p = db.game_profile(user["id"])
         coins, xp, win = calc_reward(s[1], body, elapsed, is_vip(p), p["xp"])
         old_lvl = level(p["xp"])
-        db.game_add(user["id"], coins=coins, xp=xp, games=1, wins=win)
+        db.game_add(user["id"], coins=coins, xp=xp, games=1, wins=win, kind="game", note=f"{win} topshiriq, {int(elapsed)} s")
         v = view(user["id"])
         return ok(coins=coins, xp=xp, win=win, level_up=v["level"] > old_lvl, profile=v)
 
@@ -237,7 +237,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
         day, amount = daily_next(d, p, is_vip(p), now)
         d["streak"] = day
         db.game_save(user["id"], last_daily=now, data=json.dumps(d))
-        db.game_add(user["id"], coins=amount)
+        db.game_add(user["id"], coins=amount, kind="daily", note=f"{day}-kun")
         return ok(coins=amount, day=day, profile=view(user["id"]))
 
     async def upgrade(request):
@@ -252,7 +252,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
             return err("Maksimal daraja")
         cost = upgrade_cost(key, lvl)
         d["up"][key] = lvl + 1
-        if not db.game_spend(user["id"], cost, json.dumps(d)):
+        if not db.game_spend(user["id"], cost, json.dumps(d), "upgrade", f"{key} {lvl + 1}-daraja"):
             return err("Tanga yetarli emas")
         return ok(profile=view(user["id"]))
 
@@ -275,7 +275,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
         else:
             d["cars"].append(key)
             d["car"] = key
-            if not db.game_spend(user["id"], price, json.dumps(d)):
+            if not db.game_spend(user["id"], price, json.dumps(d), "car", key):
                 return err("Tanga yetarli emas")
         return ok(profile=view(user["id"]))
 
@@ -309,7 +309,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
         d["look"] = look_
         d["owned"] += buy
         if cost:
-            if not db.game_spend(user["id"], cost, json.dumps(d)):
+            if not db.game_spend(user["id"], cost, json.dumps(d), "look", ",".join(buy)):
                 return err("Tanga yetarli emas")
         else:
             db.game_save(user["id"], data=json.dumps(d))
@@ -330,7 +330,7 @@ def setup(r, auth, ok, err, on_vip=None, verify=None, on_coins=None):
         d["paint"][car] = color
         cost = 0 if color in PAINT_VIP else PAINT_PRICE
         if cost:
-            if not db.game_spend(user["id"], cost, json.dumps(d)):
+            if not db.game_spend(user["id"], cost, json.dumps(d), "paint", f"{car} #{color}"):
                 return err("Tanga yetarli emas")
         else:
             db.game_save(user["id"], data=json.dumps(d))
@@ -441,7 +441,7 @@ async def _race_end(race, winner=None, reason=""):
         if len(wins) < RACE_DAILY:
             p = db.game_profile(winner.uid)
             coins = RACE_COINS * (VIP_MULT if is_vip(p) else 1)
-            db.game_add(winner.uid, coins=coins, xp=RACE_XP)
+            db.game_add(winner.uid, coins=coins, xp=RACE_XP, kind="race", note="onlayn poyga g'alabasi")
             wins.append(now)
         _race_wins[winner.uid] = wins
     msg = json.dumps({"t": "re", "winner": winner.id if winner else None, "name": winner.name if winner else "",
