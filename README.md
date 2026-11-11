@@ -4,8 +4,8 @@ Telegram Mini App ichidagi bepul **3D ochiq shahar** o'yini. Bot `/start` da «�
 o'yin bot domenining o'zida (`/`) ochiladi.
 
 ## O'yinda nimalar bor
-- 🏙 **3D shahar** (14×14 kvartal, ~850 m, 16 tuman): piyoda yurish, yugurish, sakrash; istalgan mashinaga o'tirish
-  (yo'ldagisini olsangiz — politsiya qidiradi); transport, piyodalar, svetoforlar, avtobuslar, kun/tun.
+- 🏙 **3D shahar** (14×14 kvartal, ~850 m, 16 tuman): piyoda yurish, yugurish, sakrash; faqat o'z mashinangizga o'tirish
+  (yangi o'yinchiga ⚡ elektr skuter, qolganlari tangaga — 🛠 garaj; uzoqda qolsa «📲 Chaqirish»); transport, piyodalar, svetoforlar, avtobuslar, kun/tun.
 - 🕌 Toshkent uslubi: tumanlar nomi, do'kon peshtaxtalari, madrasa, teleminora; ⛽ yoqilg'i (nitro), 🎨 bo'yash ustaxonasi.
 - 📦 Topshiriqlar: yetkazish (50), taksi (70), poyga (90 tanga) + daraja bonusi; yo'lda tangalar; ⭐ politsiya ta'qibi.
 - 👥 **Onlayn**: `/ws/city` — 25 kishilik xonalar, chat, 🏁 server hakamlik qiladigan onlayn poyga (g'olibga 150 tanga).
@@ -25,11 +25,17 @@ o'yin bot domenining o'zida (`/`) ochiladi.
 - Binolar ro'yxati server (`props.py`) va o'yin (`city3d.js`) da bir xil generator bilan quriladi; mos kelishi nazorat
   summasi (`layout`) bilan tekshiriladi.
 
+## 🚗 Mashinalar (o'ylab topilgan markalar)
+Yangi o'yinchi **⚡ Volt elektr skuteri** bilan boshlaydi; boshqa mashinalar tangaga: Turon Mini 1 500, Afrosiyob Sedan 3 000,
+Afrosiyob Taksi 3 500, Ipak Yo'li Van 4 500, Pomir 4x4 7 000, Registon Luxe 12 000, Samarqand GT 22 000,
+Oltin Burgut Superkar 60 000 (VIP'ga bepul). Faqat o'z mashinangizga o'tirasiz — yo'ldagi va boshqalarning mashinasini minib
+bo'lmaydi. Oldin o'ynaganlarga avval bepul berilgan sedan saqlanadi.
+
 ## Pul tizimi
-- **Balans** (so'm): o'yin → 💳 Balans → summa → botga karta raqami keladi → chek skrinshoti botga →
+- **Balans** (so'm, eng kami `MIN_TOPUP` = 10 000): o'yin → 💳 Balans → summa → botga karta raqami keladi → chek skrinshoti botga →
   admin tasdiqlaydi (bot xabaridagi tugma yoki admin panel) → balans + `CASHBACK` %.
 - 👑 **VIP** (`GAME_VIP_PRICE` / `GAME_VIP_DAYS`): ×2 tanga, +15% kuch, oltin superkar, VIP kiyimlar, kunlik bonus ×2.
-- 🪙 **Tanga do'koni**: 5 000 → 1 000 ... 100 000 so'm → 30 000 tanga; birinchi xarid +50%, VIP +10%.
+- 🪙 **Tanga do'koni**: 10 000 → 2 200, 25 000 → 6 000, 50 000 → 13 000, 100 000 so'm → 30 000 tanga; birinchi xarid +50%, VIP +10%.
 - 🎁 Kunlik bonus seriyasi: 100 → 150 → 200 → 250 → 300 → 400 → 600 tanga.
 - Mukofot vaqti serverda o'lchanadi, soxta natija kesiladi; poyga nuqtalarini server tekshiradi (teleportga qarshi).
 

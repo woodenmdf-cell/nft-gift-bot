@@ -159,7 +159,7 @@
   <div class="logo">SHAHAR <span>ARENA</span></div>
   <div class="sub">3D shahar · Mashinalar · Politsiya · Onlayn</div>
   <div class="modes">
-    <button class="mode m-city" onclick="startGame()"><div class="ico">🏙</div><b>▶ O'YNASH</b><p>3D ochiq shahar: piyoda yur, istalgan mashinaga o'tir, topshiriqlar bajar, politsiyadan qoch, do'stlar bilan birga o'yna</p></button>
+    <button class="mode m-city" onclick="startGame()"><div class="ico">🏙</div><b>▶ O'YNASH</b><p>3D ochiq shahar: skuterdan superkargacha mashina ol, binolar sotib ol, topshiriqlar bajar, do'stlar bilan o'yna</p></button>
   </div>
   <button class="daily" id="m-daily" onclick="claimDaily()">🎁 Kunlik bonus</button>
   <div class="row" style="grid-template-columns:repeat(5,1fr)">
@@ -352,10 +352,14 @@ function getMove() {
 
 // ═════════════ SHAHAR (3D — city3d.js) ═════════════
 const CAR_STATS = {
-  sedan: {max: 250, acc: 230, turn: 2.7, color: '#4a90e2', ico: '🚗'},
-  taxi:  {max: 272, acc: 260, turn: 2.9, color: '#f5c518', ico: '🚕'},
-  suv:   {max: 265, acc: 245, turn: 2.5, color: '#2e7d4f', ico: '🚙', heavy: true},
-  sport: {max: 325, acc: 335, turn: 3.1, color: '#e53935', ico: '🏎'},
+  scooter: {max: 165, acc: 260, turn: 3.5, color: '#4fc3ff', ico: '🛴'},
+  hatch: {max: 240, acc: 240, turn: 3.0, color: '#ff8a65', ico: '🚗'},
+  sedan: {max: 250, acc: 230, turn: 2.7, color: '#4a90e2', ico: '🚘'},
+  taxi:  {max: 262, acc: 250, turn: 2.9, color: '#f5c518', ico: '🚕'},
+  van:   {max: 235, acc: 215, turn: 2.4, color: '#90a4ae', ico: '🚐', heavy: true},
+  suv:   {max: 268, acc: 250, turn: 2.5, color: '#2e7d4f', ico: '🚙', heavy: true},
+  suvlux: {max: 295, acc: 290, turn: 2.7, color: '#37474f', ico: '🚙', heavy: true},
+  sport: {max: 330, acc: 340, turn: 3.1, color: '#e53935', ico: '🏎'},
   super: {max: 375, acc: 410, turn: 3.35, color: '#d4af37', ico: '👑'},
 };
 const PICKUP_COINS = 3;
@@ -743,11 +747,11 @@ function openGarage(tab) {
     for (const [k, c] of Object.entries(SHOP.cars)) {
       const S = CAR_STATS[k], own = P.cars.includes(k), sel = P.car === k;
       const btn = sel ? '<span class="buy ok">✓ Tanlangan</span>'
-        : c.vip && !P.vip ? `<button class="buy gold" onclick="openVip()">👑 VIP</button>`
-        : own ? `<button class="buy g" style="color:var(--text)" onclick="pickCar('${k}')">Tanlash</button>`
-        : `<button class="buy" onclick="pickCar('${k}')">🪙 ${fmt(c.price)}</button>`;
+        : own || (c.vip && P.vip) ? `<button class="buy g" style="color:var(--text)" onclick="pickCar('${k}')">Tanlash</button>`
+        : `<button class="buy" onclick="buyCar('${k}')">🪙 ${fmt(c.price)}</button>`;
+      const vipNote = c.vip && !P.vip ? ' · <span style="color:var(--gold)">👑 VIP\'ga bepul</span>' : '';
       h += `<div class="it"><div class="ic" style="background:${S.color}33">${S.ico}</div><div class="tx"><b>${esc(c.name)}</b>
-        <small>Tezlik ${Math.round(S.max * 0.42)} · Tezlanish ${S.acc} · Burilish ${S.turn}${S.heavy ? ' · og\'ir' : ''}</small></div>${btn}</div>`;
+        <small>Tezlik ${Math.round(S.max * 0.42)} km/soat · Tezlanish ${S.acc}${S.heavy ? ' · og\'ir' : ''}${vipNote}</small></div>${btn}</div>`;
     }
   } else {
     const IC = {engine: '⚙️', nitro: '🔥', handling: '🎯'};
@@ -761,6 +765,11 @@ function openGarage(tab) {
   }
   if (GUEST) h += '<div class="warn">Xarid qilish uchun o\'yinni Telegram botdan oching.</div>';
   sheet(h);
+}
+async function buyCar(k) {
+  const c = SHOP.cars[k];
+  if (P.coins < c.price) return needCoins('Tanga yetarli emas');
+  if (await confirmMsg(`${c.name} — ${fmt(c.price)} tanga yechiladi. Sotib olasizmi?`)) pickCar(k);
 }
 async function pickCar(k) { const r = await api('car', {key: k}); if (r.ok) { P = r.profile; sfx(700, 0.1); openGarage(); } else needCoins(r.error); }
 async function buyUp(k) { const r = await api('upgrade', {key: k}); if (r.ok) { P = r.profile; sfx(990, 0.12, 'triangle'); haptic('medium'); openGarage(); } else needCoins(r.error); }

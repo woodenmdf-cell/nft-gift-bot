@@ -35,7 +35,7 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = os.environ.get("DB_PATH", str(DATA_DIR / "giftxona.db"))
 CASHBACK = float(os.environ.get("CASHBACK", "2"))           # balans to'ldirishda bonus %
-MIN_TOPUP = int(os.environ.get("MIN_TOPUP", "5000"))      # eng kam to'ldirish (so'm)
+MIN_TOPUP = int(os.environ.get("MIN_TOPUP", "10000"))      # eng kam to'ldirish (so'm)
 
 # ── O'yin (Shahar Arena) ──
 GAME_VIP_PRICE = int(os.environ.get("GAME_VIP_PRICE", "19000"))   # oylik VIP narxi (so'm)

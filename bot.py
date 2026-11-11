@@ -54,7 +54,7 @@ async def start(m: Message):
     await m.answer(
         f"Assalomu alaykum, <b>{m.from_user.first_name}</b>! 👋\n\n"
         "🎮 <b>Shahar Arena</b> — 3D ochiq shahar o'yini\n\n"
-        "🏙 Piyoda yuring, istalgan mashinaga o'tiring, topshiriqlar bajaring\n"
+        "🛴 Elektr skuterda boshlang, tanga yig'ib Samarqand GT gacha mashina sotib oling\n🏢 Binolar sotib oling — har soatda daromad keltiradi\n"
         "🚓 Politsiyadan qoching, 🏁 do'stlaringiz bilan onlayn poyga qiling\n"
         "🧍 Personaj tanlang, 🛠 mashina va yaxshilashlar sotib oling\n\n"
         "O'yin <b>bepul</b>. 👑 <b>VIP</b> (ixtiyoriy, "

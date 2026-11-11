@@ -575,6 +575,7 @@ const VT = {
   super: {L: 4.6, W: 2.0, bh: 0.46, ch: 0.42, cl: 1.7, co: -0.2},
   van: {L: 5.2, W: 2.05, bh: 0.95, ch: 1.0, cl: 3.8, co: -0.5},
   bus: {L: 10.5, W: 2.5, bh: 2.5, ch: 0, cl: 0, co: 0, bus: true},
+  scooter: {L: 1.6, W: 0.8, bh: 0.2, ch: 0, cl: 0, co: 0, scooter: true, top: 1.3},
 };
 Object.assign(VT, {hatch: {...VT.sedan, L: 4.1}, suvlux: {...VT.suv, L: 4.8}, delivery: {...VT.van, L: 5.6}, truck: {...VT.van, L: 5.6}, ambulance: {...VT.van, L: 5.8}});
 const KEEP_COLOR = {police: 1, ambulance: 1};
@@ -606,6 +607,18 @@ const carGeoCache = {};
 function carGeometry(type, color) {
   const key = type + ':' + color;
   if (carGeoCache[key]) return carGeoCache[key];
+  if (type === 'scooter') {
+    const c = color != null ? color : 0x4fc3ff, p = [];
+    p.push(bx(0.42, 0.08, 1.15, 0, 0.26, -0.05, c));                     // taxta
+    p.push(bx(0.36, 0.1, 0.7, 0, 0.18, -0.05, 0x263238));                  // batareya
+    p.push(bx(0.07, 1.05, 0.07, 0, 0.72, 0.55, 0x37474f));                 // ustun
+    p.push(bx(0.62, 0.06, 0.06, 0, 1.24, 0.55, 0x263238));                 // rul
+    for (const sx of [-1, 1]) p.push(bx(0.09, 0.09, 0.12, sx * 0.31, 1.24, 0.55, 0x111111));
+    p.push(bx(0.16, 0.08, 0.04, 0, 0.95, 0.6, 0xfff3c4));                   // fara
+    for (const z of [-0.58, 0.55]) { p.push(cy(0.18, 0.1, 0, 0.18, z, TIRE, 12)); p.push(cy(0.09, 0.11, 0, 0.18, z, 0xa8acb2, 8)); }
+    p.push(bx(0.1, 0.05, 0.2, 0, 0.42, -0.62, 0xd8161b));                   // orqa chiroq
+    return (carGeoCache[key] = merge(p));
+  }
   const mg = modelCarGeometry(type, color);
   if (mg) return (carGeoCache[key] = mg);
   const v = VT[type], y0 = 0.32, p = [];
@@ -1007,10 +1020,11 @@ function start() {
   player.g.visible = true; cur = null;
   for (const v of vehicles.filter(v => v.own)) removeVehicle(v);
   for (const v of police.slice()) removeVehicle(v);
-  const type = CAR_STATS[P.car] ? P.car : 'sedan';
+  const type = CAR_STATS[P.car] ? P.car : 'scooter';
   const pi = P.paint && P.paint[type];
-  const col = (pi != null && PAINTS[pi] != null) ? PAINTS[pi] : {sedan: 0x3a7bd5, taxi: 0xf2c200, suv: 0x2e7d4f, sport: 0xd32f2f, super: 0xd4af37}[type];
-  const mine = makeVehicle(type, col, roadC(mid) + RD / 2 - 1.5, sz - 2.5, Math.PI, 'parked');
+  const col = (pi != null && PAINTS[pi] != null) ? PAINTS[pi] : {scooter: 0x29b6f6, hatch: 0xff7043, sedan: 0x3a7bd5, taxi: 0xf2c200, van: 0x90a4ae, suv: 0x2e7d4f, suvlux: 0x263238, sport: 0xd32f2f, super: 0xd4af37}[type];
+  const mine = type === 'scooter' ? makeVehicle(type, col, sx - 0.4, sz - 1.8, Math.PI, 'parked')
+    : makeVehicle(type, col, roadC(mid) + RD / 2 - 1.5, sz - 2.5, Math.PI, 'parked');
   mine.own = true; mine.spec = specFor(type, true); mine.nitro = mine.spec.cap;
   for (let i = 0; i < 3; i++) G.givers.push(newGiver());
   for (let i = 0; i < COINS; i++) G.coins.push(Object.assign(roadPoint(), {ph: Math.random() * 6}));
@@ -1254,18 +1268,21 @@ function updatePlayerFoot(dt) {
   animChar(player, player.sp, player.ph, player.y > 0, dt);
   player.g.position.set(player.x, player.y, player.z); player.g.rotation.y = player.yaw;
 }
+// Faqat o'z (sotib olingan) mashinasiga o'tiriladi — boshqalarning mashinasini minib bo'lmaydi
+const ownCar = () => vehicles.find(v => v.own);
 function nearestCar() {
-  let best = null, bd = 4.2;
-  for (const v of vehicles) { if (v.ai === 'police') continue; const d = dxz(v, player); if (d < bd) { bd = d; best = v; } }
-  return best;
+  const v = ownCar();
+  return v && dxz(v, player) < (v.type === 'scooter' ? 3.2 : 4.2) ? v : null;
+}
+function summonCar() {
+  const v = ownCar(); if (!v) return;
+  const yaw = player.yaw, rx = -Math.cos(yaw), rz = Math.sin(yaw);
+  v.x = player.x + rx * 2.6 + Math.sin(yaw) * 1.5; v.z = player.z + rz * 2.6 + Math.cos(yaw) * 1.5; v.yaw = yaw; v.vx = v.vz = 0;
+  carCollide(v); v.mesh.position.set(v.x, 0, v.z); v.mesh.rotation.set(0, v.yaw, 0);
+  toast(v.type === 'scooter' ? '🛴 Skuteringiz keldi' : '🚗 Mashinangiz keldi', ''); sfx(520, 0.1, 'triangle', 0.05);
 }
 function enterCar(v) {
-  if (v.ai === 'traffic') {
-    addWanted(1, 'Mashina o\'g\'irlandi!');
-    const p = peds.find(q => !q.down && dxz(q, v) > 40) || peds[0];
-    p.ox = v.x - pedPath(p.b, p.s)[0] + 2; p.oz = v.z - pedPath(p.b, p.s)[1]; p.flee = 2; p.jx = rr(-6, 6); p.jz = rr(-6, 6);
-  }
-  v.ai = 'player'; v.vF = 0; cur = v; player.g.visible = false;
+  v.ai = 'player'; v.vF = 0; cur = v; player.g.visible = v.type === 'scooter';
   camDrag = 0; sfx(200, 0.15, 'triangle', 0.05); haptic('medium');
 }
 function exitCar() {
@@ -1313,6 +1330,11 @@ function updateCar(dt) {
     if (rel > 6 && G.crashCd <= 0) { G.crashCd = 1; G.shake = 0.4; sfx(80, 0.2, 'sawtooth', 0.07); haptic('heavy'); }
   }
   v.mesh.position.set(v.x, 0, v.z); v.mesh.rotation.set(0, v.yaw, 0);
+  if (v.type === 'scooter') {
+    player.x = v.x; player.z = v.z; player.yaw = v.yaw; player.sp = 0;
+    player.g.position.set(v.x - Math.sin(v.yaw) * 0.15, 0.3, v.z - Math.cos(v.yaw) * 0.15); player.g.rotation.y = v.yaw;
+    animChar(player, 0, 0, false, dt);
+  }
   // kuzov qiyshayishi
   const lat = (v.vx * -Math.cos(v.yaw) + v.vz * Math.sin(v.yaw));
   v.mesh.rotation.z = cl(lat * 0.012, -0.06, 0.06);
@@ -1580,12 +1602,15 @@ function hud(tgt) {
   else if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>⏱ ${Math.ceil(G.mission.time)} s · ${Math.round(dxz(pos(), G.mission.pts[G.mission.idx]))} m</small>`;
   else mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>';
   // tugmalar
-  const near = !cur ? nearestCar() : null;
-  const ctxKey = cur ? 'car' : near ? 'near' : 'foot';
+  const near = !cur ? nearestCar() : null, oc = ownCar();
+  const far = !cur && !near && oc && dxz(oc, player) > 25;
+  const ctxKey = cur ? 'car' : near ? 'near' : far ? 'far' : 'foot';
   if (ctxKey !== lastCtx) {
     lastCtx = ctxKey;
     $('bE').classList.toggle('hide', ctxKey === 'foot');
-    $('bE').querySelector('span').textContent = cur ? '🚶' : '🚗'; $('lE').textContent = cur ? 'TUSHISH' : 'O\'TIRISH';
+    const sc = oc && oc.type === 'scooter';
+    $('bE').querySelector('span').textContent = cur ? '🚶' : far ? '📲' : sc ? '🛴' : '🚗';
+    $('lE').textContent = cur ? 'TUSHISH' : far ? 'CHAQIRISH' : sc ? 'MINISH' : 'O\'TIRISH';
     $('bA').querySelector('span').textContent = cur ? '🔥' : '🏃'; $('lA').textContent = cur ? 'NITRO' : 'YUGURISH';
     $('bB').querySelector('span').textContent = cur ? '🛑' : '⤴️'; $('lB').textContent = cur ? 'TORMOZ' : 'SAKRASH';
   }
@@ -1699,7 +1724,11 @@ function updateNet(dt) {
       if (ct && VT[ct]) { r.car = new T.Mesh(carGeometry(ct, cc), vehMat); r.car.castShadow = QUALITY > 0; scene.add(r.car); }
     }
     const far = Math.hypot(r.x - me.x, r.z - me.z) > 160;
-    if (r.car) { r.car.visible = !far; r.car.position.set(r.x, 0, r.z); r.car.rotation.y = r.cyaw; r.g.visible = false; }
+    if (r.car) {
+      r.car.visible = !far; r.car.position.set(r.x, 0, r.z); r.car.rotation.y = r.cyaw;
+      r.g.visible = !far && r.carT === 'scooter';
+      if (r.g.visible) { r.g.position.set(r.x, 0.3, r.z); r.g.rotation.y = r.cyaw; animChar(r, 0, 0, false, dt); }
+    }
     else { r.g.visible = !far; r.g.position.set(r.x, r.y, r.z); r.g.rotation.y = r.yaw; r.ph += sp * dt * 2.3; animChar(r, sp, r.ph, r.y > 0.05, dt); }
     const ly = r.car ? 2.9 : 2.45 + r.y;
     r.label.visible = Math.hypot(r.x - me.x, r.z - me.z) < 70; r.label.position.set(r.x, ly, r.z);
@@ -1777,7 +1806,7 @@ const API = {
     tNow += dt; G.time += dt; G.crashCd -= dt; G.hitPedCd -= dt;
     if (input.eHit) {
       if (cur) { if (Math.abs(cur.vF || 0) < 6) exitCar(); else toast('Avval sekinlang', ''); }
-      else { const v = nearestCar(); if (v) enterCar(v); }
+      else { const v = nearestCar(); if (v) enterCar(v); else summonCar(); }
     }
     if (cur) updateCar(dt); else { updatePlayerFoot(dt); if (eng) eng.g.gain.value = 0; headL.intensity = 0; }
     updateLights(tNow); updateTraffic(dt); updatePeds(dt); updateParked(dt); updatePolice(dt);
