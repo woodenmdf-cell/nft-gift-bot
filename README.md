@@ -12,6 +12,19 @@ o'yin bot domenining o'zida (`/`) ochiladi.
 - 🧍 12 ta personaj + aksessuarlar, 🛠 garaj (mashinalar, yaxshilashlar), 📻 radio, signal, sirena.
 - 🎨 Grafika: Kenney (kenney.nl, CC0) modellari — `webapp/assets/`, LOD bilan telefonda tez ishlaydi.
 
+## 🏢 Ko'chmas mulk (`props.py`)
+- Shahardagi **979 ta bino** sotiladi (kichik uylar, do'konlar, ofislar, osmono'parlar + noyob: 2 ta yoqilg'i shoxobchasi,
+  bo'yash ustaxonasi, teleminora). Narx bino turi, balandligi va markazga yaqinligiga qarab: 600 … 60 000 tanga.
+- Har bir bino **soatiga narxining ~1.2%** tanga olib keladi (VIP +20%), 12 soatgacha yig'iladi — «Yig'ish» tugmasi.
+- **Xavfsiz savdo (escrow):** egasi binoni ochiq bozorga yoki aniq bir o'yinchiga (@username / ID) sotuvga qo'yadi;
+  xarid bitta SQLite tranzaksiyasida: tanga yechiladi, sotuvchiga (−5% komissiya) o'tadi, egalik o'zgaradi. Narx
+  o'zgarsa, e'lon bekor qilinsa yoki bino boshqa qo'lga o'tsa — eski e'lon bilan sotib bo'lmaydi; bir vaqtdagi
+  xaridlardan faqat bittasi o'tadi. Sotuvchiga va shaxsiy taklif egasiga botda xabar keladi. Bir o'yinchida eng ko'pi 30 ta bino.
+- Ko'rinishi: menyuda «🏢 Mulklarim» paneli (daromad, yig'ish), bo'limlar: Mulklarim / Bozor / Shahar;
+  shaharda yaqin binolar ustida narx yoki egasi, bino yonida **🏢 BINO** tugmasi, mini-xaritada o'z binolaringiz.
+- Binolar ro'yxati server (`props.py`) va o'yin (`city3d.js`) da bir xil generator bilan quriladi; mos kelishi nazorat
+  summasi (`layout`) bilan tekshiriladi.
+
 ## Pul tizimi
 - **Balans** (so'm): o'yin → 💳 Balans → summa → botga karta raqami keladi → chek skrinshoti botga →
   admin tasdiqlaydi (bot xabaridagi tugma yoki admin panel) → balans + `CASHBACK` %.

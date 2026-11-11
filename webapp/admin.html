@@ -114,7 +114,7 @@ V.dash = async () => {
   return head('📊 Boshqaruv') + '</h2><div class="stats">' +
     card('👥 Foydalanuvchilar', s.users) + card('🎮 O\'yinchilar', s.players) + card('📅 Bugun bonus olganlar', s.active_day) + card('👑 Faol VIP', s.vip_active) +
     card('💰 O\'yin daromadi', som(s.game_revenue)) + card('👑 VIP daromadi', som(s.vip_revenue)) + card('🪙 Tanga sotuvi', som(s.coin_revenue)) +
-    card('💳 Jami to\'ldirilgan', som(s.topped)) + card('👛 Foydalanuvchi balanslari', som(s.balances)) + card('🔎 Chek tekshiruvi', s.topups_checking) +
+    card('💳 Jami to\'ldirilgan', som(s.topped)) + card('👛 Foydalanuvchi balanslari', som(s.balances)) + card('🔎 Chek tekshiruvi', s.topups_checking) + card('🏢 Sotilgan binolar', s.props_owned || 0) +
     '</div>' +
     `<h2 style="margin-top:22px">🪙 Bugungi tanga hisob-kitobi</h2><div class="stats">` +
     card('➕ Topilgan', '🪙 ' + fmt(s.today.earned)) + card('➖ Sarflangan', '🪙 ' + fmt(s.today.spent)) +
@@ -129,7 +129,7 @@ V.dash = async () => {
 };
 const fmt = n => String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const KIND = {game: '🏙 O\'yin (topshiriq/tanga)', daily: '🎁 Kunlik bonus', race: '🏁 Onlayn poyga', buy: '💳 Tanga xaridi', refund: '↩️ Qaytarish',
-  admin: '👮 Admin', opening: '📥 Boshlang\'ich qoldiq', upgrade: '⚡️ Yaxshilash', car: '🚗 Mashina', look: '🧍 Personaj', paint: '🎨 Bo\'yash', other: 'Boshqa'};
+  admin: '👮 Admin', opening: '📥 Boshlang\'ich qoldiq', upgrade: '⚡️ Yaxshilash', car: '🚗 Mashina', look: '🧍 Personaj', paint: '🎨 Bo\'yash', prop_buy: '🏢 Bino sotib olish', prop_sell: '🏢 Bino sotuvi', prop_income: '📈 Bino daromadi', other: 'Boshqa'};
 async function ledger(id, name) {
   const r = await api(`users/${id}/ledger`);
   modal(`<h3>📜 ${esc(name)} — tanga tarixi</h3><div class="muted">Hozirgi qoldiq: <b style="color:var(--text)">🪙 ${fmt(r.coins)}</b></div>` +
