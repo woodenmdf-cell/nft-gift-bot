@@ -29,13 +29,11 @@ if WEBAPP_URL and not WEBAPP_URL.startswith("https://"):
 
 CARD_NUMBER = os.environ.get("CARD_NUMBER", "8600 0000 0000 0000")
 CARD_OWNER = os.environ.get("CARD_OWNER", "Ism Familiya")
-SHOP_ACCOUNT = os.environ.get("SHOP_ACCOUNT", "@admin")   # sovg'alar qaytariladigan akkaunt
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = os.environ.get("DB_PATH", str(DATA_DIR / "giftxona.db"))
-COMMISSION = float(os.environ.get("COMMISSION", "5"))     # foydalanuvchi sovg'alaridan %
 CASHBACK = float(os.environ.get("CASHBACK", "2"))           # balans to'ldirishda bonus %
 MIN_TOPUP = int(os.environ.get("MIN_TOPUP", "5000"))      # eng kam to'ldirish (so'm)
 

@@ -7,26 +7,6 @@ CREATE TABLE IF NOT EXISTS users(
   id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, created INTEGER,
   banned INTEGER DEFAULT 0, balance INTEGER DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS gifts(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL, number TEXT, link TEXT, image TEXT,
-  for_sale INTEGER DEFAULT 1, price INTEGER DEFAULT 0,        -- sotuv narxi (so'm)
-  for_rent INTEGER DEFAULT 0, rent_price INTEGER DEFAULT 0,   -- 1 kunlik ijara narxi
-  deposit INTEGER DEFAULT 0,                                  -- (eski, ishlatilmaydi)
-  seller_id INTEGER, seller_card TEXT,                        -- NULL = do'kon sovg'asi
-  status TEXT DEFAULT 'pending',  -- pending | active | reserved | rented | sold | rejected
-  created INTEGER
-);
-CREATE TABLE IF NOT EXISTS orders(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  kind TEXT DEFAULT 'buy',          -- buy | rent
-  gift_id INTEGER, buyer_id INTEGER,
-  price INTEGER, days INTEGER DEFAULT 0, deposit INTEGER DEFAULT 0, card TEXT,
-  status TEXT DEFAULT 'paid',
-  -- buy:  paid -> delivered | cancelled
-  -- rent: need_link -> linking -> rented -> ended | cancelled
-  tc_link TEXT, receipt_file TEXT, ends_at INTEGER, reminded INTEGER DEFAULT 0, created INTEGER
-);
 CREATE TABLE IF NOT EXISTS topups(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER, amount INTEGER, bonus INTEGER DEFAULT 0,
@@ -47,7 +27,6 @@ CREATE TABLE IF NOT EXISTS game_payments(
 # Eski bazaga yangi ustunlar qo'shish
 MIGRATIONS = [
     ("users", "balance", "INTEGER DEFAULT 0"),
-    ("orders", "tc_link", "TEXT"),
     ("game_payments", "kind", "TEXT DEFAULT 'vip'"),
     ("game_payments", "coins", "INTEGER DEFAULT 0"),
 ]
@@ -110,8 +89,9 @@ def set_balance(uid, amount):
 
 
 def list_users(limit=1000):
-    return _all("SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.buyer_id=u.id) AS orders "
-                "FROM users u ORDER BY created DESC LIMIT ?", (limit,))
+    return _all("SELECT u.*, g.coins, g.xp, g.vip_until, "
+                "(SELECT COALESCE(SUM(amount),0) FROM game_payments p WHERE p.user_id=u.id) AS spent "
+                "FROM users u LEFT JOIN game_profiles g ON g.user_id=u.id ORDER BY u.created DESC LIMIT ?", (limit,))
 
 
 def all_user_ids():
@@ -120,110 +100,6 @@ def all_user_ids():
 
 def set_banned(uid, v):
     _exec("UPDATE users SET banned=? WHERE id=?", (1 if v else 0, uid))
-
-
-def top_users(limit=50):
-    return _all("SELECT u.id, u.username, u.full_name, COUNT(o.id) AS cnt, COALESCE(SUM(o.price),0) AS total "
-                "FROM orders o JOIN users u ON u.id=o.buyer_id "
-                "WHERE o.status NOT IN ('cancelled') GROUP BY u.id ORDER BY total DESC LIMIT ?", (limit,))
-
-
-# ── gifts ──
-GIFT_FIELDS = ("title", "number", "link", "image", "for_sale", "price", "for_rent",
-               "rent_price", "deposit", "seller_id", "seller_card", "status")
-
-
-def add_gift(**f):
-    f.setdefault("status", "active")
-    keys = [k for k in GIFT_FIELDS if k in f]
-    gid, _ = _exec(f"INSERT INTO gifts({','.join(keys)},created) VALUES({','.join('?' * len(keys))},?)",
-                   (*[f[k] for k in keys], int(time.time())))
-    return gid
-
-
-def update_gift(gid, **f):
-    f = {k: v for k, v in f.items() if k in GIFT_FIELDS}
-    if f:
-        _exec(f"UPDATE gifts SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), gid))
-
-
-def get_gift(gid):
-    return _one("SELECT * FROM gifts WHERE id=?", (gid,))
-
-
-def list_gifts(q="", sort="new", mode="all", statuses=("active",)):
-    order = {"cheap": "price ASC", "expensive": "price DESC",
-             "rent_cheap": "rent_price ASC"}.get(sort, "id DESC")
-    cond = {"sale": "AND for_sale=1", "rent": "AND for_rent=1"}.get(mode, "")
-    ph = ",".join("?" * len(statuses))
-    return _all(f"SELECT * FROM gifts WHERE status IN ({ph}) {cond} "
-                f"AND (title LIKE ? OR number LIKE ?) ORDER BY {order} LIMIT 1000",
-                (*statuses, f"%{q}%", f"%{q}%"))
-
-
-# ── orders (balansdan to'lanadi) ──
-def pay_order(kind, gid, buyer_id, price, days=0):
-    """Balansdan yechib, sovg'ani band qiladi. (order_id, xato) qaytaradi."""
-    with conn() as c:
-        c.execute("BEGIN IMMEDIATE")
-        g = c.execute("SELECT * FROM gifts WHERE id=? AND status='active'", (gid,)).fetchone()
-        if not g or (kind == "buy" and not g["for_sale"]) or (kind == "rent" and not g["for_rent"]):
-            return None, "Bu sovg'a hozir band"
-        bal = c.execute("SELECT balance FROM users WHERE id=?", (buyer_id,)).fetchone()
-        if not bal or bal["balance"] < price:
-            return None, "Balans yetarli emas"
-        c.execute("UPDATE users SET balance=balance-? WHERE id=?", (price, buyer_id))
-        c.execute("UPDATE gifts SET status=? WHERE id=?", ("reserved" if kind == "buy" else "rented", gid))
-        status = "paid" if kind == "buy" else "need_link"
-        cur = c.execute("INSERT INTO orders(kind,gift_id,buyer_id,price,days,status,created) VALUES(?,?,?,?,?,?,?)",
-                        (kind, gid, buyer_id, price, days, status, int(time.time())))
-        return cur.lastrowid, None
-
-
-def get_order(oid):
-    return _one("SELECT * FROM orders WHERE id=?", (oid,))
-
-
-def set_order(oid, **f):
-    _exec(f"UPDATE orders SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), oid))
-
-
-def user_order_needing_link(uid):
-    return _one("SELECT * FROM orders WHERE buyer_id=? AND kind='rent' AND status='need_link' "
-                "ORDER BY id DESC LIMIT 1", (uid,))
-
-
-ORDER_JOIN = ("SELECT o.*, g.title, g.number, g.image, g.link, g.seller_id, g.seller_card, "
-              "u.username, u.full_name FROM orders o JOIN gifts g ON g.id=o.gift_id "
-              "LEFT JOIN users u ON u.id=o.buyer_id ")
-
-
-def user_orders(uid):
-    return _all(ORDER_JOIN + "WHERE o.buyer_id=? ORDER BY o.id DESC LIMIT 100", (uid,))
-
-
-def list_orders(kind=None, status=None, limit=500):
-    where, args = [], []
-    if kind:
-        where.append("o.kind=?"); args.append(kind)
-    if status:
-        where.append("o.status=?"); args.append(status)
-    w = ("WHERE " + " AND ".join(where)) if where else ""
-    return _all(ORDER_JOIN + f"{w} ORDER BY o.id DESC LIMIT ?", (*args, limit))
-
-
-def rentals_ending(within_sec):
-    return _all("SELECT * FROM orders WHERE status='rented' AND reminded=0 AND ends_at<?",
-                (int(time.time()) + within_sec,))
-
-
-def rentals_expired():
-    return _all("SELECT * FROM orders WHERE status='rented' AND ends_at<?", (int(time.time()),))
-
-
-def stale_need_link(max_age):
-    return _all("SELECT * FROM orders WHERE status='need_link' AND reminded=0 AND created<?",
-                (int(time.time()) - max_age,))
 
 
 # ── topups ──
@@ -257,22 +133,19 @@ def expired_topups(max_age):
 
 
 def stats():
-    one = lambda s: _one(s)["v"]
+    one = lambda q: _one(q)["v"]
+    now = int(time.time())
     return {
         "users": one("SELECT COUNT(*) v FROM users"),
-        "active": one("SELECT COUNT(*) v FROM gifts WHERE status='active'"),
-        "sold": one("SELECT COUNT(*) v FROM gifts WHERE status='sold'"),
-        "rented": one("SELECT COUNT(*) v FROM orders WHERE status='rented'"),
-        "pending_gifts": one("SELECT COUNT(*) v FROM gifts WHERE status='pending'"),
-        "topups_checking": one("SELECT COUNT(*) v FROM topups WHERE status='checking'"),
-        "to_deliver": one("SELECT COUNT(*) v FROM orders WHERE status='paid'"),
-        "to_link": one("SELECT COUNT(*) v FROM orders WHERE status='linking'"),
-        "balances": one("SELECT COALESCE(SUM(balance),0) v FROM users"),
-        "topped": one("SELECT COALESCE(SUM(amount),0) v FROM topups WHERE status='ok'"),
-        "revenue": one("SELECT COALESCE(SUM(price),0) v FROM orders WHERE status NOT IN ('cancelled')"),
         "players": one("SELECT COUNT(*) v FROM game_profiles"),
-        "vip_active": one(f"SELECT COUNT(*) v FROM game_profiles WHERE vip_until>{int(time.time())}"),
+        "active_day": one(f"SELECT COUNT(*) v FROM game_profiles WHERE last_daily>{now - 86400}"),
+        "vip_active": one(f"SELECT COUNT(*) v FROM game_profiles WHERE vip_until>{now}"),
+        "topups_checking": one("SELECT COUNT(*) v FROM topups WHERE status='checking'"),
+        "topped": one("SELECT COALESCE(SUM(amount),0) v FROM topups WHERE status='ok'"),
+        "balances": one("SELECT COALESCE(SUM(balance),0) v FROM users"),
         "game_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments"),
+        "vip_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments WHERE kind='vip'"),
+        "coin_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments WHERE kind='coins'"),
     }
 
 

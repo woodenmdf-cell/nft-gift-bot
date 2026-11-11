@@ -1,121 +1,31 @@
-# NFT Bozor — Telegram bot + Mini App + Admin panel
+# 🎮 Shahar Arena — Telegram o'yin boti
 
-## Nimalar bor
-**Foydalanuvchi uchun (Mini App):**
-- 🛍 Bozor: qidiruv, saralash, «Hammasi / Sotuv / Ijara» filtri
-- 🛒 Sotib olish — so'mda, karta orqali, chek botga yuboriladi
-- 🔑 Ijaraga olish — 1–30 kun, kunlik narx + garov (sovg'a qaytarilgach garov qaytariladi)
-- 💸 E'lon berish — o'z sovg'asini sotish va/yoki ijaraga berish (komissiya bilan)
-- 🧾 Buyurtmalarim — holat va ijara tugash vaqti
+Telegram Mini App ichidagi bepul **3D ochiq shahar** o'yini. Bot `/start` da «🎮 O'ynash» tugmasini beradi,
+o'yin bot domenining o'zida (`/`) ochiladi.
 
-**Admin panel (`https://domeningiz/admin`):**
-- 📊 Statistika va daromad
-- 🛒 Xaridlar / 🔑 Ijaralar — chekni ko'rish, tasdiqlash, «Yetkazildi», «Qaytarildi»
-- 🎁 Sovg'alar — qo'shish (faqat NFT havola + narx), tahrirlash, yashirish
-- 📥 E'lonlar — foydalanuvchi sovg'alarini qabul/rad qilish
-- 👥 Foydalanuvchilar — bloklash
-- 📢 Hammaga xabar yuborish
+## O'yinda nimalar bor
+- 🏙 **3D shahar** (14×14 kvartal, ~850 m, 16 tuman): piyoda yurish, yugurish, sakrash; istalgan mashinaga o'tirish
+  (yo'ldagisini olsangiz — politsiya qidiradi); transport, piyodalar, svetoforlar, avtobuslar, kun/tun.
+- 🕌 Toshkent uslubi: tumanlar nomi, do'kon peshtaxtalari, madrasa, teleminora; ⛽ yoqilg'i (nitro), 🎨 bo'yash ustaxonasi.
+- 📦 Topshiriqlar: yetkazish (50), taksi (70), poyga (90 tanga) + daraja bonusi; yo'lda tangalar; ⭐ politsiya ta'qibi.
+- 👥 **Onlayn**: `/ws/city` — 25 kishilik xonalar, chat, 🏁 server hakamlik qiladigan onlayn poyga (g'olibga 150 tanga).
+- 🧍 12 ta personaj + aksessuarlar, 🛠 garaj (mashinalar, yaxshilashlar), 📻 radio, signal, sirena.
+- 🎨 Grafika: Kenney (kenney.nl, CC0) modellari — `webapp/assets/`, LOD bilan telefonda tez ishlaydi.
 
-Barcha amallarni bot ichidagi tugmalar orqali ham qilish mumkin.
+## Pul tizimi
+- **Balans** (so'm): o'yin → 💳 Balans → summa → botga karta raqami keladi → chek skrinshoti botga →
+  admin tasdiqlaydi (bot xabaridagi tugma yoki admin panel) → balans + `CASHBACK` %.
+- 👑 **VIP** (`GAME_VIP_PRICE` / `GAME_VIP_DAYS`): ×2 tanga, +15% kuch, oltin superkar, VIP kiyimlar, kunlik bonus ×2.
+- 🪙 **Tanga do'koni**: 5 000 → 1 000 ... 100 000 so'm → 30 000 tanga; birinchi xarid +50%, VIP +10%.
+- 🎁 Kunlik bonus seriyasi: 100 → 150 → 200 → 250 → 300 → 400 → 600 tanga.
+- Mukofot vaqti serverda o'lchanadi, soxta natija kesiladi; poyga nuqtalarini server tekshiradi (teleportga qarshi).
 
-**Avtomatik:**
-- To'lanmagan buyurtma 30 daqiqadan keyin bekor bo'ladi
-- Ijara tugashiga 24 soat qolganda eslatma
-- Muddatdan 12 soat o'tsa — «Muddati o'tgan», adminga xabar
+## Admin panel (`https://domeningiz/admin`, botda `/admin`)
+📊 o'yin statistikasi va daromad · 💳 balans to'ldirish (chek, tasdiqlash) · 👥 foydalanuvchilar (balans, tanga, VIP,
+bloklash) · 📢 hammaga xabar · 💾 zaxira nusxa. Har soatda zaxira adminlarga yuboriladi, `/restore` bilan tiklanadi.
 
-## 🎮 Shahar Arena — o'yin (`/game`, botda `/oyin`)
-Mini App ichidagi bepul 3D shahar o'yini:
-- 🏙 **Shahar (3D)** — ochiq 3D shahar (three.js, `webapp/city3d.js`): piyoda yurish, yugurish, sakrash;
-  istalgan mashinaga o'tirish (yo'ldagisini olsangiz — politsiya qidiradi), o'z garaj mashinangiz yoningizda turadi.
-  Transport oqimi, piyodalar, kun/tun (tunda derazalar, ko'cha chiroqlari va faralar yonadi), mini-xarita,
-  yetkazib berish / taksi / poyga topshiriqlari, tangalar, ⭐ qidiruv darajasi va politsiya ta'qibi.
-  Boshqaruv: chap tomonda joystik, o'ng tomonni surib kamerani aylantirish; menyuda «Grafika: yuqori/tezkor»
-  (kuchsiz telefonlar uchun soyalar o'chadi).
-- 🎨 **Grafika** — Kenney (kenney.nl, CC0) modellari: 12 xil animatsiyali personaj, 12 xil mashina, shahar chetidagi
-  binolar (`webapp/assets/`, `LICENSE-KENNEY.txt`). Markazdagi osmono'parlar pastel uslubda protsedural. Uzoqdagi binolar
-  soddalashtirilgan (LOD) — telefonda tez ishlashi uchun. Modellar yuklanmasa o'yin oddiy grafikada ishlayveradi.
-- 🧍 **Personaj** — 12 ta Kenney personaji (4 bepul, 6 tangaga, 2 VIP) va aksessuarlar (ko'zoynak, qora ko'zoynak,
-  toj va oltin zanjir — VIP). Eski garderobda sotib olingan soch/kiyim tangasi avtomatik qaytariladi.
-- 🕌 **Toshkent uslubi** — tumanlar (Chilonzor, Yunusobod, Mirobod...), do'kon peshtaxtalari (Choyxona, Somsa, Non...),
-  ko'k gumbazli madrasa, teleminora, svetoforlar (transport qizilda to'xtaydi), avtobuslar.
-- ⛽ **Yoqilg'i shoxobchasi** — nitroni to'ldiradi; 🎨 **bo'yash ustaxonasi** — o'z mashinangizni 150 tangaga bo'yatish
-  (oltin va xrom — faqat VIP).
-- 📻 **Tovushlar** — mashina radiosi (Shahar FM, Chill FM, Bazm FM — musiqa o'yinda yaratiladi), signal 📯, politsiya sirenasi.
-- 🏁 **Onlayn poyga** — 💬 → «Poygaga chaqirish» (60 m ichidagi o'yinchi, ikkalasi ham mashinada). 5 ta nazorat nuqtasini
-  server tanlaydi va o'zi tekshiradi (teleport hisobga o'tmaydi). G'olib 150 tanga (VIP — 300), sutkada 20 tagacha.
-- 👥 **Onlayn shahar** — `/ws/city` WebSocket: bir xonada 25 tagacha o'yinchi bir-birini real vaqtda ko'radi
-  (yurish, mashinada haydash, ism yorlig'i, 👑 VIP belgisi), tayyor iboralar bilan chat. Transport, piyodalar va
-  politsiya har o'yinchida o'ziniki. Xonalar server xotirasida — bitta server jarayoni bilan ishlaydi.
-
-Tangalarga garajda mashinalar (Taksi, Yo'ltanlamas, Sport kupe) va yaxshilashlar
-(dvigatel, nitro, boshqaruv) sotib olinadi. Kunlik bonus, XP/daraja, reyting bor.
-
-**👑 VIP obuna — ixtiyoriy** (`GAME_VIP_PRICE` so'm / `GAME_VIP_DAYS` kun, bot balansidan to'lanadi):
-×2 tanga, +15% kuch, oltin superkar, VIP kiyimlar, tezroq nitro, kunlik bonus 300 tanga.
-VIP sotib olinganda adminga xabar keladi; admin panelda o'yinchilar soni, faol VIP va VIP daromadi ko'rinadi.
-
-Mukofot vaqti serverda o'lchanadi (`/api/game/start` → `/api/game/reward`), shuning uchun soxta natija bilan
-cheksiz tanga yig'ib bo'lmaydi. Telegram'dan tashqarida ochilsa — mehmon rejimi (natija saqlanmaydi).
-
-## Balans
-Foydalanuvchi Mini App → Profil → «Balansni to'ldirish» → summa → bot karta raqamini yuboradi →
-chek rasmini botga jo'natadi → admin tasdiqlaydi → balans + cashback (`CASHBACK`, standart 2%).
-Xarid va ijara balansdan bir zumda to'lanadi.
-
-## Garovsiz ijara (GiftXona uslubida)
-Narx: kunlik narx × kun, chegirma bilan: 3 kun -3%, 1 hafta -17%, 2 hafta -23%, 1 oy -29%, 2 oy -35%, 3 oy -38%.
-
-**Sovg'a sizning TON hamyoningizda qoladi** — ijarachi uni o'tkaza yoki sota olmaydi, shuning uchun garov kerak emas.
-
-### Bir martalik tayyorgarlik (admin)
-1. Ijaraga beriladigan sovg'ani TON blokcheynga chiqaring (Telegram: sovg'a → Transfer → Send via blockchain → Fragment).
-2. https://marketapp.ws da hamyoningizni ulang → sovg'a → **Rent out** → eng kichik narx (masalan 0.01 TON/kun),
-   «avtomatik qayta qo'yish» ni yoqing.
-3. Ijaraga olish uchun Marketapp'da **ikkinchi hamyon** kerak (unda ozgina TON: har ijara ~0.2 TON + ijara haqi o'zingizga qaytadi).
-4. Admin panel → Sovg'alar → sovg'ani qo'shing, «🔑 Ijarada» + kunlik narx (so'm).
-
-### Har bir ijara
-1. Mijoz balansdan to'laydi → bot unga ko'rsatma yuboradi: fragment.com → Connect TON → `tc://…` havolani yuborish.
-2. Sizga havola keladi → Marketapp (2-hamyon) → sovg'ani mijoz tanlagan muddatga ijaraga oling →
-   Rented → **Assign to Telegram** → havolani qo'ying → botda **✅ Ulandi**.
-3. Mijoz fragment.com → My Assets → **Display in Telegram** — sovg'a profilida chiqadi.
-4. Muddat tugaganda Marketapp sovg'ani qaytaradi, bot mijozga va sizga xabar beradi.
-
-Havola eskirgan bo'lsa — **🔁 Yangi havola** tugmasi. Bekor qilinsa pul mijoz balansiga qaytadi.
-Eslatma: Fragment bir sovg'ani kuniga ulash sonini cheklaydi.
-
-## Serverga joylash (Railway — eng oson yo'l)
-1. https://github.com da ro'yxatdan o'ting → **New repository** → shu papkadagi fayllarni yuklang
-   (`Add file → Upload files`).
-2. https://railway.com → GitHub bilan kiring → **New Project → Deploy from GitHub repo** → repongizni tanlang.
-3. Loyiha → **Variables** bo'limiga quyidagilarni qo'shing:
-   | Nomi | Qiymat |
-   |---|---|
-   | `BOT_TOKEN` | @BotFather bergan token |
-   | `ADMIN_IDS` | Telegram ID'ingiz (@userinfobot dan bilib olasiz) |
-   | `ADMIN_PASSWORD` | admin panel paroli |
-   | `CARD_NUMBER` | to'lov qabul qilinadigan karta |
-   | `CARD_OWNER` | karta egasi ismi |
-   | `SHOP_ACCOUNT` | sovg'alar qaytariladigan akkaunt, masalan `@giftshop_admin` |
-   | `COMMISSION` | komissiya foizi, masalan `5` |
-   | `CASHBACK` | balans to'ldirishda bonus %, masalan `2` |
-4. **Settings → Networking → Generate Domain** (domen avtomatik ulanadi).
-5. **Settings → Volumes → Add Volume**, mount path: `/data` (ma'lumotlar o'chib ketmasligi uchun).
-6. @BotFather → `/mybots` → botingiz → **Bot Settings → Configure Mini App** → Railway domenini kiriting.
-
-Tayyor: botga `/start` yozing. Admin panel: `https://<domen>/admin`.
-
-## O'z kompyuteringizda / VPS'da
-```bash
-pip install -r requirements.txt
-cp .env.example .env   # to'ldiring, WEBAPP_URL ni ham yozing (HTTPS)
-python bot.py
-```
-
-## Avtomatik narxlash
-Bot har 6 soatda bozor narxlarini yangilaydi:
-- Kolleksiya floor narxlari (GRAM): *Telegram gifts floor prices, Baltic Assets* — https://balticassets.eu (CC BY 4.0)
-- GRAM → USD: o'sha to'plam yoki CoinGecko; USD → so'm: O'zbekiston Markaziy banki (cbu.uz)
-
-`BUY_PCT` (standart 55, ya'ni bozordan 45% arzon) — foydalanuvchidan sovg'ani floor narxning necha foiziga sotib olishni taklif qilish.
-Floor — eng arzon *sotuvga qo'yilgan* narx, sotilgan narx emas; noyob model/raqamlar qimmatroq turadi.
+## O'rnatish (Railway)
+1. @BotFather → `/newbot` → token.
+2. Railway → Variables: `BOT_TOKEN`, `ADMIN_IDS`, `ADMIN_PASSWORD`, `CARD_NUMBER`, `CARD_OWNER` (qolganlari — `.env.example`).
+3. Settings → Networking → **Generate Domain** (port 8080).
+4. **Volume** qo'shing, Mount path: `/data` — aks holda har yangilanishda ma'lumotlar o'chadi.
