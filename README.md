@@ -20,6 +20,12 @@ o'yin bot domenining o'zida (`/`) ochiladi.
   xarid bitta SQLite tranzaksiyasida: tanga yechiladi, sotuvchiga (−5% komissiya) o'tadi, egalik o'zgaradi. Narx
   o'zgarsa, e'lon bekor qilinsa yoki bino boshqa qo'lga o'tsa — eski e'lon bilan sotib bo'lmaydi; bir vaqtdagi
   xaridlardan faqat bittasi o'tadi. Sotuvchiga va shaxsiy taklif egasiga botda xabar keladi. Bir o'yinchida eng ko'pi 30 ta bino.
+- Har bir binoning **nomi va manzili** bor (masalan, *Kafe «Navro'z» — Amir Temur ko'chasi, 12-uy, Chilonzor*):
+  biznes turi, nom va eng yaqin ko'cha bo'yicha uy raqami id dan hisoblanadi (15 gorizontal + 15 vertikal ko'cha).
+- Bino oynasida **xarita** (bino qizil, boshqa egali binolar sariq/ko'k) va **🧭 Yo'l ko'rsatish** — o'yinda ko'k
+  ko'rsatkich va mini-xarita binoga olib boradi. Egasi bor binolar **tomida egasining ismi** (o'ziniki — sariq ⭐,
+  boshqalarniki — ko'k 👑), menyu ortidagi shahar manzarasida ham.
+- «Shahar» bo'limida turi (do'kon, uy, ofis, garaj, plaza, tower, noyob), tuman va narx/daromad bo'yicha saralash.
 - Ko'rinishi: menyuda «🏢 Mulklarim» paneli (daromad, yig'ish), bo'limlar: Mulklarim / Bozor / Shahar;
   shaharda yaqin binolar ustida narx yoki egasi, bino yonida **🏢 BINO** tugmasi, mini-xaritada o'z binolaringiz.
 - Binolar ro'yxati server (`props.py`) va o'yin (`city3d.js`) da bir xil generator bilan quriladi; mos kelishi nazorat

@@ -607,11 +607,13 @@ async function loadProps() {
   PST = r; City3D.setProps({owned: r.owned}, null);
   if (mode === 'menu') renderPropBar();
 }
-const pInfo = pid => { const c = PCAT && PCAT.props[pid]; return c ? {price: c[0], income: c[1], name: c[2], district: c[3]} : null; };
+const pInfo = pid => { const c = PCAT && PCAT.props[pid]; return c ? {price: c[0], income: c[1], name: c[2], district: c[3], address: c[4] || '', kind: c[5] || ''} : null; };
+const KIND_ICO = {garage: '🔧', shop: '🏪', home: '🏠', office: '🏢', plaza: '🏬', tower: '🏙', special: '⭐'};
+let pFilter = {kind: '', district: '', sort: 'price', limit: 40};
 function propRow(pid, right, sub) {
   const i = pInfo(pid); if (!i) return '';
-  return `<div class="prow"><div style="font-size:26px">${pid.startsWith('S-') ? '⭐' : i.price >= 8000 ? '🏙' : i.price >= 2500 ? '🏢' : '🏠'}</div>
-    <div class="tx"><b>${esc(i.name)}</b><small>📍 ${esc(i.district)} · <span class="inc">+${fmt(i.income)}/soat</span>${sub ? ' · ' + sub : ''}</small></div>${right}</div>`;
+  return `<div class="prow" onclick="if(event.target.tagName!=='BUTTON')openProp('${pid}')" style="cursor:pointer"><div style="font-size:26px">${KIND_ICO[i.kind] || '🏢'}</div>
+    <div class="tx"><b>${esc(i.name)}</b><small>📍 ${esc(i.address)}, ${esc(i.district)}</small><small><span class="inc">+${fmt(i.income)}/soat</span>${sub ? ' · ' + sub : ''}</small></div>${right}</div>`;
 }
 function openProps(tab) {
   if (tab) pTab = tab;
@@ -640,11 +642,20 @@ function openProps(tab) {
         `${l.for_me ? '<span class="tag2">🔔 sizga taklif</span> ' : ''}sotuvchi: ${esc(l.seller)}`);
     }
   } else {
-    h += `<div style="color:var(--hint);font-size:13px;margin-bottom:8px">Hali hech kimga tegishli bo'lmagan binolar (eng arzonidan). Shaharda yurganda ham binolar tepasida narxi ko'rinadi.</div>`;
-    const free = Object.keys(PCAT.props).filter(pid => !PST.owned[pid]).sort((a, b) => PCAT.props[a][0] - PCAT.props[b][0]);
-    const pick = [...free.filter(p => p.startsWith('S-')), ...free.filter(p => !p.startsWith('S-')).slice(0, 40)];
-    for (const pid of pick) { const i = pInfo(pid); h += propRow(pid, `<button class="buy${P.coins >= i.price ? '' : ' g'}" onclick="buyProp('${pid}')">🪙 ${fmt(i.price)}</button>`, pid.startsWith('S-') ? '<span class="tag2">noyob</span>' : ''); }
-    h += `<div style="color:var(--hint);font-size:12px;text-align:center;margin-top:6px">Jami ${fmt(free.length)} ta bo'sh bino bor</div>`;
+    const kinds = [['', 'Hammasi'], ['shop', '🏪 Do\'kon'], ['home', '🏠 Uy'], ['office', '🏢 Ofis'], ['garage', '🔧 Garaj'], ['plaza', '🏬 Plaza'], ['tower', '🏙 Tower'], ['special', '⭐ Noyob']];
+    const dists = [...new Set(Object.values(PCAT.props).map(c => c[3]))].sort();
+    h += `<div class="opts" style="margin-bottom:8px">${kinds.map(([k, t]) => `<button class="opt${pFilter.kind === k ? ' on' : ''}" onclick="pFilter.kind='${k}';pFilter.limit=40;openProps('city')">${t}</button>`).join('')}</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <select class="fld" style="margin:0" onchange="pFilter.district=this.value;pFilter.limit=40;openProps('city')"><option value="">📍 Barcha tumanlar</option>${dists.map(d => `<option${pFilter.district === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select>
+        <select class="fld" style="margin:0" onchange="pFilter.sort=this.value;openProps('city')"><option value="price"${pFilter.sort === 'price' ? ' selected' : ''}>Arzonidan</option><option value="-price"${pFilter.sort === '-price' ? ' selected' : ''}>Qimmatidan</option><option value="income"${pFilter.sort === 'income' ? ' selected' : ''}>Daromadi ko'p</option></select>
+      </div>`;
+    const free = Object.keys(PCAT.props).filter(pid => !PST.owned[pid]).filter(pid => {
+      const c = PCAT.props[pid]; return (!pFilter.kind || c[5] === pFilter.kind) && (!pFilter.district || c[3] === pFilter.district);
+    }).sort((a, b) => { const A = PCAT.props[a], B = PCAT.props[b]; return pFilter.sort === 'price' ? A[0] - B[0] : pFilter.sort === '-price' ? B[0] - A[0] : B[1] - A[1]; });
+    for (const pid of free.slice(0, pFilter.limit)) { const i = pInfo(pid); h += propRow(pid, `<button class="buy${P.coins >= i.price ? '' : ' g'}" onclick="buyProp('${pid}')">🪙 ${fmt(i.price)}</button>`, i.kind === 'special' ? '<span class="tag2">noyob</span>' : ''); }
+    if (!free.length) h += `<div style="color:var(--hint);text-align:center;padding:20px">Bu filtr bo'yicha bo'sh bino yo'q</div>`;
+    if (free.length > pFilter.limit) h += `<button class="big s" onclick="pFilter.limit+=40;const y=$('sh').scrollTop;openProps('city');$('sh').scrollTop=y">Yana ko'rsatish (${fmt(free.length - pFilter.limit)})</button>`;
+    h += `<div style="color:var(--hint);font-size:12px;text-align:center;margin-top:6px">Topildi: ${fmt(free.length)} ta bo'sh bino</div>`;
   }
   sheet(h);
 }
@@ -653,9 +664,11 @@ function openProp(pid) {
   if (GUEST) return alertMsg('Ko\'chmas mulk uchun o\'yinni Telegram botdan oching.');
   if (mode === 'city') paused = true;
   const i = pInfo(pid), o = PST.owned[pid], mine = PST.mine.find(m => m.id === pid);
-  let h = `<h3>${pid.startsWith('S-') ? '⭐' : '🏢'} ${esc(i.name)} <button onclick="closeSheet()">✕</button></h3>
+  let h = `<h3>${KIND_ICO[i.kind] || '🏢'} ${esc(i.name)} <button onclick="closeSheet()">✕</button></h3>
+    <canvas id="pmap" width="600" height="360" style="position:static;width:100%;border-radius:14px;display:block;background:#20262f;margin-bottom:8px"></canvas>
+    <button class="big s" style="margin:0 0 10px" onclick="navTo('${pid}')">🧭 Yo'l ko'rsatish</button>
     <div class="tbl" style="background:var(--bg);border-radius:14px;padding:4px 12px;margin-bottom:10px;font-size:14px">
-      <div class="perk"><span>📍</span><div>${esc(i.district)}</div></div>
+      <div class="perk"><span>📍</span><div>${esc(i.address)}<br><small style="color:var(--hint)">${esc(i.district)} tumani</small></div></div>
       <div class="perk"><span>🪙</span><div>Asosiy narx: <b>${fmt(i.price)}</b></div></div>
       <div class="perk"><span>📈</span><div>Daromad: <b style="color:var(--ok)">+${fmt(i.income)} tanga/soat</b>${P.vip ? ` (VIP +${Math.round(PCAT.vip_bonus * 100)}%)` : ''} · ${PCAT.cap_h} soatgacha yig'iladi</div></div>
       <div class="perk" style="border:0"><span>👤</span><div>Egasi: <b>${mine ? 'Siz ⭐' : o ? esc(o[0]) : 'yo\'q — sotuvda'}</b></div></div></div>`;
@@ -677,7 +690,28 @@ function openProp(pid) {
     if (l) h += `<button class="big" onclick="buyListing(${l.id}, ${l.price}, '${pid}')">🪙 ${fmt(l.price)} tangaga sotib olish</button>`;
     else h += `<div style="color:var(--hint);font-size:13px;text-align:center;margin-top:8px">Bu bino sotuvda emas. Egasi sotuvga qo'ysa, «Bozor» bo'limida chiqadi.</div>`;
   }
-  sheet(h);
+  sheet(h); drawPropMap(pid);
+}
+function drawPropMap(pid) {
+  const c = $('pmap'), img = City3D.mapImage && City3D.mapImage(), r = City3D.propRect(pid);
+  if (!c || !img || !r) { if (c) c.style.display = 'none'; return; }
+  const g = c.getContext('2d'), W2 = City3D.worldSize(), k = img.width / W2, VIEW = 260;   // 260 m atrof
+  // ko'rinish oynasi shahar chegarasidan chiqmaydi (chetdagi binolarda bo'sh joy bo'lmasin)
+  const ox = clamp(r.cx - VIEW / 2, 0, W2 - VIEW), oz = clamp(r.cz - VIEW * 0.3, 0, W2 - VIEW * 0.6);
+  g.fillStyle = '#20262f'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(img, ox * k, oz * k, VIEW * k, VIEW * 0.6 * k, 0, 0, c.width, c.height);
+  const m = c.width / VIEW, x = (r.x - ox) * m, y = (r.z - oz) * m;
+  for (const [pid2, o] of Object.entries(PST.owned)) {        // boshqa egali binolar
+    const q = City3D.propRect(pid2); if (!q || pid2 === pid) continue;
+    g.fillStyle = o[1] ? '#f5c542cc' : '#1f6fe0aa'; g.fillRect((q.x - ox) * m, (q.z - oz) * m, q.w * m, q.d * m);
+  }
+  g.fillStyle = '#ff3b30'; g.strokeStyle = '#fff'; g.lineWidth = 4; g.fillRect(x, y, r.w * m, r.d * m); g.strokeRect(x, y, r.w * m, r.d * m);
+  g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.fillText('📍', x + r.w * m / 2, y - 6);
+}
+function navTo(pid) {
+  City3D.setNav(pid, pInfo(pid).name);
+  closeSheet();
+  if (mode !== 'city') startGame(); else toast('🧭 Yo\'l ko\'rsatilmoqda', pInfo(pid).name);
 }
 async function propAct(path, body, ok) {
   const r = await api('props/' + path, body);
