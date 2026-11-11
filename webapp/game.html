@@ -65,6 +65,14 @@
   .row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
   .tile{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600}
   .tile span{font-size:24px}
+  .propbar{margin-top:12px;border-radius:16px;padding:12px 14px;background:linear-gradient(90deg,#0f2a3a,#14202c);border:1px solid #3fa9f555;display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer}
+  .propbar b{color:#7cc7ff}.propbar .pc{margin-left:auto;background:var(--gold);color:#000;border-radius:10px;padding:6px 10px;font-weight:800;white-space:nowrap}
+  .btn.pb{position:absolute;left:16px;bottom:calc(200px + var(--sb));width:70px;height:70px;pointer-events:auto;background:#3fa9f588;border-color:#8fd0ff}
+  .prow{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px}
+  .prow .tx{flex:1;min-width:0}.prow b{display:block;font-size:14px}.prow small{color:var(--hint);font-size:12px;display:block}
+  .prow .inc{color:var(--ok);font-weight:800;font-size:12px}
+  .tag2{display:inline-block;border-radius:7px;padding:1px 6px;font-size:10px;font-weight:800;background:#34c75933;color:var(--ok);margin-left:4px}
+  .fld{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:16px;margin-top:6px}
   .tile.coint{border-color:#f5c54266;background:linear-gradient(180deg,#2b2412,#161a22)}
   .pack{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:8px;position:relative}
   .pack .ic{font-size:30px;width:46px;text-align:center}.pack b{font-size:18px;color:var(--gold)}.pack small{display:block;color:var(--hint);font-size:12px}
@@ -161,6 +169,7 @@
     <button class="tile" onclick="openTop()"><span>🏆</span>Reyting</button>
     <button class="tile coint" onclick="openCoins()"><span>🪙</span>Tanga</button>
   </div>
+  <div class="propbar" id="m-props" onclick="openProps('mine')"></div>
   <div class="vipbar" id="m-vipbar" onclick="openVip()"></div>
   <div class="warn hide" id="m-guest">Mehmon rejimi: natijalar saqlanmaydi. Tanga yig'ish uchun o'yinni Telegram botdan oching.</div>
   <div class="row">
@@ -188,6 +197,7 @@
   <button class="x chatb hide" id="h-chat" onclick="toggleChat()">💬</button>
   <button class="x radiob hide" id="h-radio" onclick="City3D.radioNext()">📻</button>
   <button class="btn hb hide" id="bH"><div><span>📯</span></div></button>
+  <button class="btn pb hide" id="bP" onclick="openProp(City3D.nearProp())"><div><span>🏢</span><em>BINO</em></div></button>
   <div id="chatpick" class="hide"></div>
   <div id="chatfeed"></div>
   <div id="count" class="hide"></div>
@@ -369,7 +379,7 @@ async function startGame() {
   $('h-chat').classList.toggle('hide', GUEST); $('chatpick').classList.add('hide'); $('h-online').classList.add('hide');
   $('mission').classList.remove('hide');
   $('bE').classList.add('hide'); $('nitro').classList.add('hide'); $('bust').classList.add('hide'); $('count').classList.add('hide'); $('raceinv').classList.add('hide');
-  City3D.start();
+  City3D.start(); loadProps();
   setTimeout(() => $('h-hint').classList.add('hide'), 7000);
   try { tg.BackButton.show(); } catch (e) {}
 }
@@ -522,7 +532,14 @@ async function saveLook() {
 }
 
 // ═════════════ MENYU / DO'KON ═════════════
+function renderPropBar() {
+  const el = $('m-props'); if (!el) return;
+  const n = PST.mine.length, pend = PST.mine.reduce((a, p) => a + p.pending, 0);
+  el.innerHTML = n ? `🏢 <div><b>Mulklarim: ${n} ta</b> · +${fmt(PST.income_h)} 🪙/soat</div>${pend ? `<span class="pc">Yig'ish +${fmt(pend)}</span>` : '<span style="margin-left:auto">›</span>'}`
+    : `🏢 <div><b>Ko'chmas mulk</b> — bino sotib oling, har soatda tanga olib keladi</div><span style="margin-left:auto">›</span>`;
+}
 function renderMenu() {
+  renderPropBar();
   const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
   $('m-name').textContent = (u && (u.first_name || u.username)) || 'Mehmon';
   $('m-lvl').textContent = P.level; $('m-lvl').classList.toggle('vip', !!P.vip);
@@ -567,6 +584,113 @@ async function doTopup() {
   if (!r.ok) return alertMsg(r.error || 'Xato');
   closeSheet(); haptic('medium');
   alertMsg(`✅ Botga to'lov ma'lumotlari yuborildi (${fmt(amount)} so'm).\nKartaga o'tkazib, chek skrinshotini botga yuboring.`);
+}
+
+// ═════════════ KO'CHMAS MULK ═════════════
+let PCAT = null, PST = {owned: {}, mine: [], listings: [], income_h: 0}, pTab = 'mine';
+async function loadPropsCatalog() {
+  try { PCAT = await (await fetch('/api/game/props/catalog')).json(); } catch (e) { PCAT = null; return; }
+  if (City3D.layoutHash && PCAT.layout !== City3D.layoutHash()) {
+    console.warn('Binolar ro\'yxati server bilan mos emas', PCAT.layout, City3D.layoutHash());
+    PCAT.mismatch = true;
+  }
+  City3D.setProps(null, PCAT.props);
+}
+async function loadProps() {
+  if (GUEST || !PCAT) return;
+  const r = await api('props/state');
+  if (!r.ok) return;
+  PST = r; City3D.setProps({owned: r.owned}, null);
+  if (mode === 'menu') renderPropBar();
+}
+const pInfo = pid => { const c = PCAT && PCAT.props[pid]; return c ? {price: c[0], income: c[1], name: c[2], district: c[3]} : null; };
+function propRow(pid, right, sub) {
+  const i = pInfo(pid); if (!i) return '';
+  return `<div class="prow"><div style="font-size:26px">${pid.startsWith('S-') ? '⭐' : i.price >= 8000 ? '🏙' : i.price >= 2500 ? '🏢' : '🏠'}</div>
+    <div class="tx"><b>${esc(i.name)}</b><small>📍 ${esc(i.district)} · <span class="inc">+${fmt(i.income)}/soat</span>${sub ? ' · ' + sub : ''}</small></div>${right}</div>`;
+}
+function openProps(tab) {
+  if (tab) pTab = tab;
+  if (!PCAT) return alertMsg('Yuklanmoqda…');
+  if (GUEST) return alertMsg('Ko\'chmas mulk uchun o\'yinni Telegram botdan oching.');
+  const pend = PST.mine.reduce((a, p) => a + p.pending, 0);
+  let h = `<h3>🏢 Ko'chmas mulk <button onclick="closeSheet()">✕</button></h3>
+    <div class="tabs"><button class="${pTab === 'mine' ? 'on' : ''}" onclick="openProps('mine')">Mulklarim</button><button class="${pTab === 'market' ? 'on' : ''}" onclick="openProps('market')">Bozor${PST.listings.some(l => l.for_me) ? ' 🔔' : ''}</button><button class="${pTab === 'city' ? 'on' : ''}" onclick="openProps('city')">Shahar</button></div>`;
+  if (pTab === 'mine') {
+    h += `<div style="color:var(--hint);font-size:13px;margin-bottom:8px">Binolar har soatda tanga olib keladi (eng ko'pi ${PCAT.cap_h} soatlik yig'iladi — tez-tez kirib yig'ib turing).${P.vip ? ` 👑 VIP: +${Math.round(PCAT.vip_bonus * 100)}%` : ''}</div>`;
+    if (!PST.mine.length) h += `<div class="warn" style="color:var(--hint);background:var(--bg);border-color:var(--line)">Hali binoyingiz yo'q. «Shahar» bo'limidan yoki shaharda bino yonida <b>🏢 BINO</b> tugmasi orqali sotib oling.</div>`;
+    else {
+      h += `<button class="big" onclick="collectProps()" ${pend ? '' : 'disabled style="opacity:.5"'}>🪙 Daromadni yig'ish: +${fmt(pend)}</button><div style="height:10px"></div>`;
+      for (const m of PST.mine) {
+        const lst = m.listing ? `<span class="tag2">🏷 ${fmt(m.listing.price)}${m.listing.to ? ' · shaxsiy' : ''}</span>` : '';
+        h += propRow(m.id, `<button class="buy g" style="color:var(--text)" onclick="openProp('${m.id}')">Boshqarish</button>`, `yig'ilgan: ${fmt(m.pending)}${lst}`);
+      }
+    }
+  } else if (pTab === 'market') {
+    h += `<div style="color:var(--hint);font-size:13px;margin-bottom:8px">O'yinchilar sotayotgan binolar. Bitimni server o'zi bajaradi: tanga va bino bir vaqtda almashadi — hech kim aldolmaydi.</div>`;
+    const ls = PST.listings.slice().sort((a, b) => b.for_me - a.for_me);
+    if (!ls.length) h += `<div style="color:var(--hint);text-align:center;padding:20px">Hozircha e'lonlar yo'q</div>`;
+    for (const l of ls) {
+      const i = pInfo(l.prop); if (!i) continue;
+      h += propRow(l.prop, `<button class="buy${P.coins >= l.price ? '' : ' g'}" onclick="buyListing(${l.id}, ${l.price}, '${l.prop}')">🪙 ${fmt(l.price)}</button>`,
+        `${l.for_me ? '<span class="tag2">🔔 sizga taklif</span> ' : ''}sotuvchi: ${esc(l.seller)}`);
+    }
+  } else {
+    h += `<div style="color:var(--hint);font-size:13px;margin-bottom:8px">Hali hech kimga tegishli bo'lmagan binolar (eng arzonidan). Shaharda yurganda ham binolar tepasida narxi ko'rinadi.</div>`;
+    const free = Object.keys(PCAT.props).filter(pid => !PST.owned[pid]).sort((a, b) => PCAT.props[a][0] - PCAT.props[b][0]);
+    const pick = [...free.filter(p => p.startsWith('S-')), ...free.filter(p => !p.startsWith('S-')).slice(0, 40)];
+    for (const pid of pick) { const i = pInfo(pid); h += propRow(pid, `<button class="buy${P.coins >= i.price ? '' : ' g'}" onclick="buyProp('${pid}')">🪙 ${fmt(i.price)}</button>`, pid.startsWith('S-') ? '<span class="tag2">noyob</span>' : ''); }
+    h += `<div style="color:var(--hint);font-size:12px;text-align:center;margin-top:6px">Jami ${fmt(free.length)} ta bo'sh bino bor</div>`;
+  }
+  sheet(h);
+}
+function openProp(pid) {
+  if (!pid || !PCAT) return;
+  if (GUEST) return alertMsg('Ko\'chmas mulk uchun o\'yinni Telegram botdan oching.');
+  if (mode === 'city') paused = true;
+  const i = pInfo(pid), o = PST.owned[pid], mine = PST.mine.find(m => m.id === pid);
+  let h = `<h3>${pid.startsWith('S-') ? '⭐' : '🏢'} ${esc(i.name)} <button onclick="closeSheet()">✕</button></h3>
+    <div class="tbl" style="background:var(--bg);border-radius:14px;padding:4px 12px;margin-bottom:10px;font-size:14px">
+      <div class="perk"><span>📍</span><div>${esc(i.district)}</div></div>
+      <div class="perk"><span>🪙</span><div>Asosiy narx: <b>${fmt(i.price)}</b></div></div>
+      <div class="perk"><span>📈</span><div>Daromad: <b style="color:var(--ok)">+${fmt(i.income)} tanga/soat</b>${P.vip ? ` (VIP +${Math.round(PCAT.vip_bonus * 100)}%)` : ''} · ${PCAT.cap_h} soatgacha yig'iladi</div></div>
+      <div class="perk" style="border:0"><span>👤</span><div>Egasi: <b>${mine ? 'Siz ⭐' : o ? esc(o[0]) : 'yo\'q — sotuvda'}</b></div></div></div>`;
+  if (mine) {
+    h += `<div style="color:var(--hint);font-size:13px">Yig'ilgan daromad: <b style="color:var(--gold)">${fmt(mine.pending)}</b> tanga</div>`;
+    if (mine.listing) h += `<div class="ups" style="margin-top:8px">🏷 Sotuvda: <b>${fmt(mine.listing.price)}</b> tanga${mine.listing.to ? ' (shaxsiy taklif)' : ''}</div>
+      <button class="big s" onclick="cancelListing(${mine.listing.id})">E'lonni bekor qilish</button>`;
+    const lo = Math.round(i.price * PCAT.min_k / 50) * 50, hi = Math.round(i.price * PCAT.max_k / 50) * 50;
+    h += `<div style="margin-top:12px;font-weight:700">🏷 Sotish</div>
+      <input class="fld" id="sp-price" type="number" inputmode="numeric" placeholder="Narx (${fmt(lo)} … ${fmt(hi)})" value="${mine.listing ? mine.listing.price : i.price}">
+      <input class="fld" id="sp-to" placeholder="Kimga (ixtiyoriy): @username yoki ID">
+      <div style="color:var(--hint);font-size:12px;margin-top:6px">Bo'sh qoldirsangiz — ochiq bozorga chiqadi. Kelishgan odamni yozsangiz — faqat u sotib ola oladi. Sotilganda ${Math.round(PCAT.fee * 100)}% komissiya olinadi, yig'ilmagan daromad o'zingizga qoladi.</div>
+      <button class="big" onclick="listProp('${pid}')">🏷 Sotuvga qo'yish</button>`;
+  } else if (!o) {
+    h += `<button class="big" onclick="buyProp('${pid}')">🪙 ${fmt(i.price)} tangaga sotib olish</button>`;
+    if (P.coins < i.price) h += `<div style="color:var(--hint);font-size:12px;text-align:center;margin-top:6px">Sizda ${fmt(P.coins)} tanga. Yetmasa — o'ynab yig'ing yoki 🪙 Tanga do'konidan oling.</div>`;
+  } else {
+    const l = PST.listings.find(x => x.prop === pid);
+    if (l) h += `<button class="big" onclick="buyListing(${l.id}, ${l.price}, '${pid}')">🪙 ${fmt(l.price)} tangaga sotib olish</button>`;
+    else h += `<div style="color:var(--hint);font-size:13px;text-align:center;margin-top:8px">Bu bino sotuvda emas. Egasi sotuvga qo'ysa, «Bozor» bo'limida chiqadi.</div>`;
+  }
+  sheet(h);
+}
+async function propAct(path, body, ok) {
+  const r = await api('props/' + path, body);
+  if (!r.ok) return needCoins(r.error);
+  haptic('heavy'); sfx(880, 0.1); setTimeout(() => sfx(1320, 0.2, 'triangle'), 120);
+  const me = await api('me'); if (me.ok) P = me.profile;
+  await loadProps();
+  if (ok) ok(r);
+}
+const buyProp = pid => confirmMsg(`${pInfo(pid).name} — ${fmt(pInfo(pid).price)} tanga yechiladi. Sotib olasizmi?`).then(y => y && propAct('buy', {id: pid}, r => { alertMsg(r.msg); openProp(pid); }));
+const buyListing = (id, price, pid) => confirmMsg(`${pInfo(pid).name} — ${fmt(price)} tanga yechiladi. Sotib olasizmi?`).then(y => y && propAct('buy_listing', {listing: id, price}, r => { alertMsg(r.msg); openProp(pid); }));
+const collectProps = () => propAct('collect', {}, r => { alertMsg(`🪙 +${fmt(r.coins)} tanga yig'ildi!`); openProps('mine'); });
+const cancelListing = id => propAct('cancel', {listing: id}, r => { alertMsg(r.msg); openProps('mine'); });
+function listProp(pid) {
+  const price = Math.round(+$('sp-price').value || 0), to = $('sp-to').value.trim();
+  confirmMsg(`${pInfo(pid).name}ni ${fmt(price)} tangaga ${to ? to + ' ga' : 'ochiq bozorga'} sotuvga qo'yasizmi?`)
+    .then(y => y && propAct('list', {id: pid, price, to}, r => { alertMsg(r.msg); openProp(pid); }));
 }
 
 // ═════════════ TANGA DO'KONI (donat) ═════════════
@@ -679,8 +803,10 @@ async function openTop() {
   try { SHOP = await (await fetch('/api/game/shop')).json(); } catch (e) {}
   if (!GUEST) { const r = await api('me'); if (r.ok) { P = r.profile; SHOP = r.shop; } }
   await City3D.init(p => { $('loading').textContent = 'Yuklanmoqda… ' + Math.round(p * 100) + '%'; }); $('gl').style.display = 'block';
+  await loadPropsCatalog(); await loadProps();
   renderMenu(); $('loading').classList.add('hide');
   requestAnimationFrame(frame);
+  setInterval(() => { if (mode === 'city' && !document.hidden) loadProps(); }, 30000);
 })();
 </script>
 </body>

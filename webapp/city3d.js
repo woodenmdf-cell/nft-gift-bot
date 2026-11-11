@@ -41,7 +41,7 @@ const KB = [['building-small-a', 0.95], ['building-small-b', 1.25], ['building-s
         // old tomoni ko'chaga qaraydi
         const rot = c === 2 ? 0 : c === 0 ? Math.PI : a === 0 ? -Math.PI / 2 : Math.PI / 2;
         const f = tile * 0.8, h = KB[mi][1] * tile;
-        b.solids.push({x: cx - f / 2, z: cz - f / 2, w: f, d: f, h, top: h, c: PAL[Math.floor(srnd() * PAL.length)], kenney: mi, cx, cz, rot, tile});
+        b.solids.push({x: cx - f / 2, z: cz - f / 2, w: f, d: f, h, top: h, c: PAL[Math.floor(srnd() * PAL.length)], kenney: mi, cx, cz, rot, tile, pid: `${i}-${j}-${b.solids.length}`});
       }
     } else if (b.type === 'build') {
       const m = SW + 0.8, g = 3, S = BL - 2 * m, sp = Math.floor(srnd() * 4), Hh = (S - g) / 2;
@@ -49,7 +49,7 @@ const KB = [['building-small-a', 0.95], ['building-small-b', 1.25], ['building-s
         : [[0, 0, Hh, Hh], [Hh + g, 0, Hh, Hh], [0, Hh + g, Hh, Hh], [Hh + g, Hh + g, Hh, Hh]];
       for (const q of rects) {
         const h = 7 + srnd() * 12 + df * df * srnd() * 75;
-        b.solids.push({x: x + m + q[0], z: z + m + q[1], w: q[2], d: q[3], h, top: h, c: PAL[Math.floor(srnd() * PAL.length)]});
+        b.solids.push({x: x + m + q[0], z: z + m + q[1], w: q[2], d: q[3], h, top: h, c: PAL[Math.floor(srnd() * PAL.length)], pid: `${i}-${j}-${b.solids.length}`});
       }
     } else if (b.type === 'park') {
       for (let k = 0; k < 9; k++) b.trees.push({x: x + 6 + srnd() * (BL - 12), z: z + 6 + srnd() * (BL - 12), r: 0.5});
@@ -64,6 +64,7 @@ const KB = [['building-small-a', 0.95], ['building-small-b', 1.25], ['building-s
 })();
 // Toshkent uslubidagi maxsus joylar (barcha mijozlarda bir xil joyda)
 const SPECIAL = {dome: [6, 6], tower: [10, 3], fuel: [4, 9], paint: [9, 9], fuel2: [11, 11]};
+const SPECIAL_KEYS = new Set(Object.values(SPECIAL).map(([a, b]) => a + ',' + b));
 const ZONES = {};
 for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
   const b = blocks[sj * N + si], cx = b.x + BL / 2, cz = b.z + BL / 2;
@@ -87,6 +88,23 @@ for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
   }
 }
 const inZone = (z, p) => z && p.x > z.x && p.x < z.x + z.w && p.z > z.z && p.z < z.z + z.d;
+// ── ko'chmas mulk: har bir sotiladigan bino (id serverdagi props.py bilan bir xil) ──
+const PROPS = {};
+for (const b of blocks) {
+  if (SPECIAL_KEYS.has(b.i + ',' + b.j)) continue;
+  for (const s of b.solids) if (s.pid) PROPS[s.pid] = {x: s.x, z: s.z, w: s.w, d: s.d, h: s.h, cx: s.x + s.w / 2, cz: s.z + s.d / 2};
+}
+// nazorat summasi (props.py dagi layout_hash bilan bir xil formula)
+function layoutHash() {
+  const ks = Object.keys(PROPS).filter(k => !k.startsWith('S-')).sort();
+  let acc = 0;
+  for (const k of ks) { const p = PROPS[k]; acc = (acc * 31 + Math.floor(p.cx * 10) + Math.floor(p.cz * 10) * 7 + Math.floor(p.h * 10) * 13) % 1000000007; }
+  return ks.length + ':' + acc;
+}
+for (const [pid, [bi, bj], ox, oz, w, d] of [['S-fuel', [4, 9], 9, 5, 28, 8], ['S-fuel2', [11, 11], 9, 5, 28, 8], ['S-paint', [9, 9], 7, 4, 32, 13], ['S-tower', [10, 3], BL / 2 - 5, BL / 2 - 5, 10, 10]]) {
+  const x = bi * CELL + RD + ox, z = bj * CELL + RD + oz;
+  PROPS[pid] = {x, z, w, d, h: 8, cx: x + w / 2, cz: z + d / 2};
+}
 const DISTRICTS = [['Olmazor', 'Shayxontohur', 'Yunusobod', 'Qoraqamish'], ['Chilonzor', 'Markaz', 'Mirzo Ulug\'bek', 'Yashnobod'],
                    ['Uchtepa', 'Yakkasaroy', 'Mirobod', 'Bektemir'], ['Sergeli', 'Chorsu', 'Beshyog\'och', 'Qo\'yliq']];
 function districtAt(x, z) {
@@ -1477,6 +1495,7 @@ function drawMinimap(tgt) {
   else if (G.mission) { const p = G.mission.pts[G.mission.idx]; dot(p.x, p.z, '#34c759', 5); } else for (const q of G.givers) dot(q.x, q.z, '#f5c542', 4.5);
   for (const v of police) dot(v.x, v.z, (tNow * 6 | 0) % 2 ? '#ff3b30' : '#3b6bff', 4);
   for (const v of vehicles) if (v.own && v !== cur) dot(v.x, v.z, '#4fc3ff', 3.5);
+  for (const [pid, o] of Object.entries(PSTATE.owned)) if (o[1] && PROPS[pid]) { const p = PROPS[pid]; g.fillStyle = '#f5c542'; g.fillRect(p.x * k, p.z * k, Math.max(p.w * k, 3 / sc), Math.max(p.d * k, 3 / sc)); }
   g.font = `${14 / sc}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
   for (const [type, [si, sj]] of Object.entries(SPECIAL)) {
     const b = blocks[sj * N + si];
@@ -1496,6 +1515,59 @@ function drawMinimap(tgt) {
   }
 }
 let lastCtx = '';
+// ═════════════ KO'CHMAS MULK (shaharda) ═════════════
+let PSTATE = {owned: {}}, PCAT = {}, propT = 0, nearProp = null;
+const propLabels = [], labelTex = new Map();
+function propText(pid) {
+  const o = PSTATE.owned[pid], c = PCAT[pid];
+  if (!c) return '';
+  if (o && o[1]) return `⭐ Sizniki · +${c[1]}/soat`;
+  if (o && o[2]) return `🏷 Sotuvda: ${o[2]} 🪙`;
+  if (o) return `🏢 ${o[0]}`;
+  return `💲 ${c[0]} 🪙 · +${c[1]}/soat`;
+}
+function propSprite(text) {
+  if (!labelTex.has(text)) {
+    if (labelTex.size > 120) { const k = labelTex.keys().next().value; labelTex.get(k).dispose(); labelTex.delete(k); }
+    const c = document.createElement('canvas'); c.width = 512; c.height = 96; const g = c.getContext('2d');
+    g.font = 'bold 40px sans-serif'; const w = Math.min(500, g.measureText(text).width + 40);
+    const mine = text.startsWith('⭐'), sale = text.startsWith('🏷'), free = text.startsWith('💲');
+    g.fillStyle = mine ? 'rgba(212,160,23,.92)' : sale ? 'rgba(52,199,89,.9)' : free ? 'rgba(20,24,34,.78)' : 'rgba(60,70,90,.85)';
+    g.beginPath(); g.roundRect ? g.roundRect(256 - w / 2, 12, w, 70, 20) : g.rect(256 - w / 2, 12, w, 70); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 48, 480);
+    labelTex.set(text, canvasTex(c));
+  }
+  return labelTex.get(text);
+}
+function updateProps(dt) {
+  propT -= dt;
+  const me = pos();
+  // 🏢 tugmasi: piyoda bino yonida turganda
+  if (!cur) {
+    let best = null, bd = 3.6;
+    for (const [pid, p] of Object.entries(PROPS)) {
+      if (Math.abs(p.cx - me.x) > 30 || Math.abs(p.cz - me.z) > 30) continue;
+      const dx = Math.max(p.x - me.x, 0, me.x - (p.x + p.w)), dz = Math.max(p.z - me.z, 0, me.z - (p.z + p.d)), d = Math.hypot(dx, dz);
+      if (d < bd) { bd = d; best = pid; }
+    }
+    nearProp = best;
+  } else nearProp = null;
+  if (propT > 0) return;
+  propT = 0.4;
+  if (!propLabels.length) for (let i = 0; i < 6; i++) {
+    const sp = new T.Sprite(new T.SpriteMaterial({transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: false})); sp.scale.set(0.3, 0.056, 1); sp.renderOrder = 9; sp.visible = false; scene.add(sp); propLabels.push(sp);
+  }
+  const near = Object.entries(PROPS).map(([pid, p]) => [pid, p, Math.hypot(p.cx - me.x, p.cz - me.z)]).filter(x => x[2] < 42 && PCAT[x[0]])
+    .sort((a, b) => a[2] - b[2]).slice(0, propLabels.length);
+  propLabels.forEach((sp, i) => {
+    const n = near[i];
+    if (!n) { sp.visible = false; return; }
+    const [pid, p] = n;
+    sp.material.map = propSprite(propText(pid)); sp.material.needsUpdate = true;
+    sp.position.set(p.cx, Math.min(p.h, 3.8) + 1.2, p.cz); sp.visible = true;
+  });
+}
+
 function hud(tgt) {
   $('h-coins').textContent = fmt(sessionCoins());
   $('stars').innerHTML = '<b>' + '★'.repeat(G.wanted) + '</b>' + '★'.repeat(5 - G.wanted);
@@ -1518,6 +1590,7 @@ function hud(tgt) {
     $('bB').querySelector('span').textContent = cur ? '🛑' : '⤴️'; $('lB').textContent = cur ? 'TORMOZ' : 'SAKRASH';
   }
   $('bH').classList.toggle('hide', !cur); $('h-radio').classList.toggle('hide', !cur);
+  $('bP').classList.toggle('hide', !nearProp);
   const nb = $('nitro');
   if (cur) { nb.classList.remove('hide'); nb.firstElementChild.style.width = (cur.nitro / cur.spec.cap * 100) + '%'; } else nb.classList.add('hide');
   $('bust').classList.toggle('hide', G.bust < 0.25);
@@ -1691,7 +1764,11 @@ const API = {
   raceAccept(id) { if (!cur) return toast('Avval mashinaga o\'tiring', 'Keyin qabul qiling'); if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'ra', to: id})); },
   racing() { return !!(G && G.race); }, colors: {skin: SKIN_C, hc: HAIR_C, tc: TOP_C, pc: PANT_C},
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
-  stop() { API.active = false; stop(); },
+  stop() { API.active = false; stop(); for (const sp of propLabels) sp.visible = false; nearProp = null; },
+  layoutHash, propIds: () => Object.keys(PROPS),
+  setProps(state, cat) { if (state) PSTATE = state; if (cat) PCAT = cat; propT = 0; },
+  nearProp: () => nearProp,
+  propPos: pid => PROPS[pid] ? {x: PROPS[pid].cx, z: PROPS[pid].cz} : null,
   stats() { return {missions: G ? Object.assign({}, G.mBy) : {}, total: G ? G.missions : 0, pickups: G ? G.pickups : 0}; },
   coins: sessionCoins,
   quality() { return QUALITY; },
@@ -1707,7 +1784,7 @@ const API = {
     const tgt = updateWorldObjs(dt);
     const me = pos(); updateDay(dt, me.x, me.z);
     updateCamera(dt, false);
-    updateNet(dt); updateSiren(); radioTick(!!cur);
+    updateNet(dt); updateSiren(); radioTick(!!cur); updateProps(dt);
     if (input.hHit && cur) honk();
     hud(tgt);
   },
@@ -1723,6 +1800,6 @@ const API = {
     renderer.render(scene, camera);
   },
 };
-API._dbg = {info: () => ({calls: renderer.info.render.calls, tris: renderer.info.render.triangles}), scene: () => scene, cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
+API._dbg = {props: () => PROPS, info: () => ({calls: renderer.info.render.calls, tris: renderer.info.render.triangles}), scene: () => scene, cam: () => camera, day: t => { dayT = t; }, G: () => G, cur: () => cur, player: () => player, police: () => police};
 window.City3D = API;
 })();

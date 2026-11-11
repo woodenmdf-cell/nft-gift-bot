@@ -20,6 +20,7 @@ from aiogram.types import (BotCommand, CallbackQuery, FSInputFile, InlineKeyboar
 
 import db
 import game
+import props
 import services as S
 from config import (DATA_DIR, DB_PATH, ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CARD_NUMBER, CARD_OWNER, CASHBACK,
                     GAME_VIP_DAYS, GAME_VIP_PRICE, HOST, MIN_TOPUP, PORT, WEBAPP_URL)
@@ -471,6 +472,7 @@ def make_app():
     r.add_get("/{name:three\\.min\\.js|city3d\\.js|gltf\\.js}", game_asset)
     r.add_static("/assets", WEB / "assets")
     game.setup(r, auth, ok, err, on_vip, verify=check_init_data, on_coins=on_coins)
+    props.setup(r, auth, ok, err, notify=lambda uid, text: S.send(bot, uid, text, reply_markup=game_kb("🏢 O'yinni ochish")))
     r.add_get("/api/config", api_config)
     r.add_post("/api/topup", api_topup)
     r.add_get("/admin", admin_page)

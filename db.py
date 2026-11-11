@@ -157,6 +157,7 @@ def stats():
         "game_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments"),
         "vip_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments WHERE kind='vip'"),
         "coin_revenue": one("SELECT COALESCE(SUM(amount),0) v FROM game_payments WHERE kind='coins'"),
+        "props_owned": one("SELECT COUNT(*) v FROM props WHERE owner IS NOT NULL") if _one("SELECT name v FROM sqlite_master WHERE name='props'") else 0,
     }
 
 
