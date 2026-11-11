@@ -59,6 +59,8 @@ def address(cx, cz):
     street = (H_STREETS if axis == "h" else V_STREETS)[k % 15]
     num = int(along / 12) * 2 + 1 + side
     return f"{street} ko'chasi, {num}-uy"
+MAX_GARAGES = 20             # shahardagi garajlar soni chegarasi (city3d.js bilan bir xil)
+GARAGE_STEP = 6
 KB_PRICE = [1200, 1800, 3000, 1800, 600]
 SPECIAL_BLOCKS = {(6, 6), (10, 3), (4, 9), (9, 9), (11, 11)}
 DISTRICTS = [["Olmazor", "Shayxontohur", "Yunusobod", "Qoraqamish"], ["Chilonzor", "Markaz", "Mirzo Ulug'bek", "Yashnobod"],
@@ -103,6 +105,7 @@ def _r50(v):
 def build_catalog():
     """id -> {name, price, income, x, z, w, d, h, district}"""
     rnd, mid, cat = _Rnd(SEED), WORLD / 2, {}
+    gar = [0, 0]                                                      # [garaj chiqishlari, qoldirilganlari]
     _raw.clear()
     for j in range(N):
         for i in range(N):
@@ -118,6 +121,12 @@ def build_catalog():
                         if a == 1 and c == 1:
                             continue
                         mi = 4 if rnd() < 0.12 else int(rnd() * 4)
+                        if mi == 4:                                   # garajlar ko'p edi: faqat har 6-chisi, jami 20 tagacha
+                            gar[0] += 1
+                            if (gar[0] - 1) % GARAGE_STEP or gar[1] >= MAX_GARAGES:
+                                mi = (i + j + a + c) % 4
+                            else:
+                                gar[1] += 1
                         rnd()                                         # rang (PAL)
                         f, h = tile * 0.8, KB_H[mi] * tile
                         cx, cz = x + m + tile * (a + 0.5), z + m + tile * (c + 0.5)

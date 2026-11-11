@@ -25,6 +25,7 @@ const blocks = [];
 const PAL = [0xb39ddb, 0x81c995, 0xf4a261, 0x90caf9, 0xe9c46a, 0xef9a9a, 0xa5d6a7, 0xce93d8, 0xffcc80, 0x80cbc4, 0xb0bec5, 0x9fa8da];
 // Kenney binolari: [fayl, balandlik (model birligida)]
 const KB = [['building-small-a', 0.95], ['building-small-b', 1.25], ['building-small-c', 1.75], ['building-small-d', 1.25], ['building-garage', 0.55]];
+const GAR = {n: 0, kept: 0, step: 6, max: 20};
 (function gen() {
   const mid = WORLD / 2;
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
@@ -37,7 +38,9 @@ const KB = [['building-small-a', 0.95], ['building-small-b', 1.25], ['building-s
       for (let a = 0; a < 3; a++) for (let c = 0; c < 3; c++) {
         const cx = x + m + tile * (a + 0.5), cz = z + m + tile * (c + 0.5);
         if (a === 1 && c === 1) { b.trees.push({x: cx - 3, z: cz - 2, r: 0.5}, {x: cx + 3, z: cz + 2, r: 0.5}); continue; }
-        const mi = srnd() < 0.12 ? 4 : Math.floor(srnd() * 4);
+        let mi = srnd() < 0.12 ? 4 : Math.floor(srnd() * 4);
+        // garajlar ko'p edi: faqat har 6-chisi, jami 20 tagacha (props.py bilan bir xil)
+        if (mi === 4) { if (GAR.n++ % GAR.step || GAR.kept >= GAR.max) mi = (i + j + a + c) % 4; else GAR.kept++; }
         // old tomoni ko'chaga qaraydi
         const rot = c === 2 ? 0 : c === 0 ? Math.PI : a === 0 ? -Math.PI / 2 : Math.PI / 2;
         const f = tile * 0.8, h = KB[mi][1] * tile;
