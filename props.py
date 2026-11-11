@@ -8,6 +8,7 @@ Savdo xavfsizligi: har bir bitim bitta SQLite tranzaksiyasida (BEGIN IMMEDIATE) 
 tanga yechilishi, sotuvchiga o'tishi va egalik o'zgarishi birga bo'ladi yoki umuman bo'lmaydi.
 Sotuvchi e'lonni bekor qilsa yoki bino boshqa qo'lga o'tsa, eski e'lon bilan sotib bo'lmaydi.
 """
+import asyncio
 import math
 import time
 
@@ -69,7 +70,8 @@ DISTRICTS = [["Olmazor", "Shayxontohur", "Yunusobod", "Qoraqamish"], ["Chilonzor
 INCOME_RATE = 0.012          # soatiga narxning 1.2% i
 INCOME_CAP_H = 12            # daromad 12 soatgacha yig'iladi
 VIP_INCOME = 0.2             # VIP: +20% daromad
-MAX_OWNED = 30
+MAX_OWNED = 3                # binolar kam (20 ta) — bir kishi hammasini egallab olmasin
+SALE_COUNT = 20              # sotuvdagi binolar soni: 4 ta noyob + har tumandan eng zo'r 1 ta
 FEE = 0.05                   # bozor komissiyasi (tanga yo'qoladi — iqtisodni barqaror tutadi)
 MIN_K, MAX_K = 0.5, 10       # e'lon narxi: asosiy narxning 50% ... 10 barobari
 
@@ -189,8 +191,27 @@ def layout_hash():
     return f"{len(_raw)}:{acc}"
 
 
-CATALOG = build_catalog()
+def select(full):
+    """Shahar binolari ko'p (975), lekin sotuvga faqat 20 tasi chiqadi: 4 ta noyob + 16 tumanning har biridan eng qimmati."""
+    out = {k: v for k, v in full.items() if v.get("special")}
+    best = {}
+    for k, v in full.items():
+        if not v.get("special") and (v["district"] not in best or v["price"] > full[best[v["district"]]]["price"]):
+            best[v["district"]] = k
+    names = {}
+    for k in best.values():
+        names.setdefault(full[k]["name"], []).append(k)
+    for k in sorted(best.values(), key=lambda k: -full[k]["price"])[:SALE_COUNT - len(out)]:
+        v = dict(full[k])
+        if len(names[v["name"]]) > 1:
+            v["name"] = f"{v['name']} ({v['district']})"
+        out[k] = v
+    return out
+
+
+FULL_CATALOG = build_catalog()
 LAYOUT = layout_hash()
+CATALOG = select(FULL_CATALOG)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS props(
@@ -209,6 +230,28 @@ CREATE INDEX IF NOT EXISTS ix_listings_open ON prop_listings(status, prop_id);
 def init():
     with db.conn() as c:
         c.executescript(SCHEMA)
+    return retire()
+
+
+def retire():
+    """Sotuvdan olingan binolar: egasiga to'lagan pulini + yig'ilmagan daromadini qaytarish (hech kim zarar ko'rmaydi)."""
+    now, done = int(time.time()), []
+    with db.conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        for p in c.execute("SELECT * FROM props WHERE owner IS NOT NULL").fetchall():
+            if p["id"] in CATALOG:
+                continue
+            info = FULL_CATALOG.get(p["id"], {"name": p["id"], "income": 0})
+            hours = min(INCOME_CAP_H, max(0.0, (now - (p["last_collect"] or now)) / 3600))
+            back = int(p["paid"] or 0) + int(info["income"] * hours)
+            c.execute("INSERT OR IGNORE INTO game_profiles(user_id,created) VALUES(?,?)", (p["owner"], now))
+            c.execute("UPDATE game_profiles SET coins=coins+? WHERE user_id=?", (back, p["owner"]))
+            _ledger(c, p["owner"], back, "prop_refund", f"{info['name']} ({p['id']}) sotuvdan olindi — pul qaytarildi")
+            c.execute("DELETE FROM props WHERE id=?", (p["id"],))
+            done.append((p["owner"], info["name"], back))
+        c.execute("UPDATE prop_listings SET status='cancelled', closed=? WHERE status='open' AND prop_id NOT IN (%s)"
+                  % ",".join("?" * len(CATALOG)), (now, *CATALOG))
+    return done
 
 
 def _ledger(c, uid, delta, kind, note):
@@ -248,7 +291,19 @@ def short_name(u):
 
 # ═════════════ HTTP ═════════════
 def setup(r, auth, ok, err, notify=None):
-    init()
+    refunded = init()
+    if refunded and notify:
+        async def _tell():
+            for uid, name, back in refunded:
+                try:
+                    await notify(uid, f"🏢 <b>{name}</b> endi sotuvda emas (shaharda faqat {SALE_COUNT} ta mulk qoldi).\n"
+                                      f"🪙 To'lagan pulingiz va daromadingiz qaytarildi: <b>+{back}</b> tanga.")
+                except Exception:
+                    pass
+        try:
+            asyncio.get_running_loop().create_task(_tell())
+        except RuntimeError:
+            pass
 
     async def catalog(request):
         return web.json_response({"props": {k: [v["price"], v["income"], v["name"], v["district"], v["address"], v["kind"]]
