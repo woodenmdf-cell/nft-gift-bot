@@ -172,7 +172,7 @@ const CAR_MODEL = {sedan: 'sedan', taxi: 'taxi', police: 'police', suv: 'suv', s
                    hatch: 'hatchbackSports', suvlux: 'suvLuxury', delivery: 'delivery', truck: 'truck', ambulance: 'ambulance'};
 const CAR_LEN = {sedan: 4.4, taxi: 4.4, police: 4.7, suv: 4.7, sport: 4.5, super: 4.6, van: 5.2, hatch: 4.1, suvlux: 4.8, delivery: 5.6, truck: 5.6, ambulance: 5.8};
 const CHAR_FILES = ['male-a', 'male-b', 'male-c', 'male-d', 'male-e', 'male-f', 'female-a', 'female-b', 'female-c', 'female-d', 'female-e', 'female-f'];
-const CHAR_SCALE = 2.4;
+const CHAR_SCALE = 2.2;
 async function loadAssets(onProgress) {
   if (!T.GLTFLoader) return;
   const L = new T.GLTFLoader(), jobs = [];
@@ -1482,10 +1482,10 @@ function updateCamera(dt, menu) {
       camYaw += ad(cur.yaw + back, camYaw) * Math.min(1, dt * 3.2);
       camPitch += (0.26 - camPitch) * Math.min(1, dt * 2);
     }
-    dist = 8.8 + sp * 0.07; tx = cur.x; ty = 1.6; tz = cur.z; fov = 62 + Math.min(18, sp * 0.4) + (input.a && cur.nitro > 0.05 ? 6 : 0);
+    dist = (cur.type === 'scooter' ? 7.4 : 9.6) + sp * 0.07; tx = cur.x; ty = 1.5; tz = cur.z; fov = 62 + Math.min(18, sp * 0.4) + (input.a && cur.nitro > 0.05 ? 6 : 0);
   } else {
     if (camDrag <= 0 && player.sp > 1 && getMove().y < -0.5) camYaw += ad(player.yaw, camYaw) * Math.min(1, dt * 1.5);
-    dist = 5.2; tx = player.x; ty = 1.55 + player.y; tz = player.z;
+    dist = 7.6; tx = player.x; ty = 1.25 + player.y; tz = player.z;
   }
   camDist += (dist - camDist) * Math.min(1, dt * 4);
   const fx = Math.sin(camYaw), fz = Math.cos(camYaw), ch = Math.cos(camPitch), shh = Math.sin(camPitch);
@@ -1540,16 +1540,8 @@ function drawMinimap(tgt) {
 }
 let lastCtx = '';
 // ═════════════ KO'CHMAS MULK (shaharda) ═════════════
-let PSTATE = {owned: {}}, PCAT = {}, propT = 0, nearProp = null;
-const propLabels = [], labelTex = new Map();
-function propText(pid) {
-  const o = PSTATE.owned[pid], c = PCAT[pid];
-  if (!c) return '';
-  if (o && o[1]) return `⭐ ${c[2]} · +${c[1]}/soat`;
-  if (o && o[2]) return `🏷 ${o[2]} 🪙 · ${c[2]}`;
-  if (o) return `🏢 ${c[2]}`;
-  return `💲 ${c[0]} 🪙 · ${c[2]}`;
-}
+let PSTATE = {owned: {}}, PCAT = {}, nearProp = null;
+const propLabels = [];
 let NAV = null, roofT = 0;
 const roofSigns = [], roofTex = new Map();
 function roofTexture(name, mine) {
@@ -1580,21 +1572,7 @@ function updateRoofSigns(dt, cx, cz) {
     sp.scale.set(w, w / 4, 1); sp.position.set(p.cx, p.h + w / 8 + 1.2, p.cz); sp.visible = true;
   });
 }
-function propSprite(text) {
-  if (!labelTex.has(text)) {
-    if (labelTex.size > 120) { const k = labelTex.keys().next().value; labelTex.get(k).dispose(); labelTex.delete(k); }
-    const c = document.createElement('canvas'); c.width = 512; c.height = 96; const g = c.getContext('2d');
-    g.font = 'bold 40px sans-serif'; const w = Math.min(500, g.measureText(text).width + 40);
-    const mine = text.startsWith('⭐'), sale = text.startsWith('🏷'), free = text.startsWith('💲');
-    g.fillStyle = mine ? 'rgba(212,160,23,.92)' : sale ? 'rgba(52,199,89,.9)' : free ? 'rgba(20,24,34,.78)' : 'rgba(60,70,90,.85)';
-    g.beginPath(); g.roundRect ? g.roundRect(256 - w / 2, 12, w, 70, 20) : g.rect(256 - w / 2, 12, w, 70); g.fill();
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 48, 480);
-    labelTex.set(text, canvasTex(c));
-  }
-  return labelTex.get(text);
-}
 function updateProps(dt) {
-  propT -= dt;
   const me = pos();
   // 🏢 tugmasi: piyoda bino yonida turganda
   if (!cur) {
@@ -1606,21 +1584,7 @@ function updateProps(dt) {
     }
     nearProp = best;
   } else nearProp = null;
-  updateRoofSigns(dt, me.x, me.z);
-  if (propT > 0) return;
-  propT = 0.4;
-  if (!propLabels.length) for (let i = 0; i < 6; i++) {
-    const sp = new T.Sprite(new T.SpriteMaterial({transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: false})); sp.scale.set(0.3, 0.056, 1); sp.renderOrder = 9; sp.visible = false; scene.add(sp); propLabels.push(sp);
-  }
-  const near = Object.entries(PROPS).map(([pid, p]) => [pid, p, Math.hypot(p.cx - me.x, p.cz - me.z)]).filter(x => x[2] < 42 && PCAT[x[0]])
-    .sort((a, b) => a[2] - b[2]).slice(0, propLabels.length);
-  propLabels.forEach((sp, i) => {
-    const n = near[i];
-    if (!n) { sp.visible = false; return; }
-    const [pid, p] = n;
-    sp.material.map = propSprite(propText(pid)); sp.material.needsUpdate = true;
-    sp.position.set(p.cx, Math.min(p.h, 3.8) + 1.2, p.cz); sp.visible = true;
-  });
+  updateRoofSigns(dt, me.x, me.z);   // ko'chada narx/daromad yozuvlari yo'q — faqat tomda egasining ismi
 }
 
 function hud(tgt) {
@@ -1829,7 +1793,7 @@ const API = {
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
   stop() { API.active = false; stop(); for (const sp of propLabels) sp.visible = false; for (const sp of roofSigns) sp.visible = false; nearProp = null; },
   layoutHash, propIds: () => Object.keys(PROPS),
-  setProps(state, cat) { if (state) PSTATE = state; if (cat) PCAT = cat; propT = 0; },
+  setProps(state, cat) { if (state) PSTATE = state; if (cat) PCAT = cat; roofT = 0; },
   nearProp: () => nearProp,
   setNav(pid, name) { const p = PROPS[pid]; NAV = p ? {x: p.cx, z: p.cz, name} : null; },
   propRect: pid => PROPS[pid] || null,

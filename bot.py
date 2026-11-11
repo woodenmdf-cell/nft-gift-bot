@@ -40,6 +40,22 @@ def is_admin(uid):
     return uid in ADMIN_IDS
 
 
+PLACEHOLDER_CARDS = {"", "8600 0000 0000 0000", "8600 1234 5678 9012"}
+
+
+def card():
+    """To'lov kartasi: avval bazadagi sozlama (/karta buyrug'i yoki admin panel), keyin Railway Variables."""
+    num = (db.get_setting("card_number") or CARD_NUMBER or "").strip()
+    owner = (db.get_setting("card_owner") or CARD_OWNER or "").strip()
+    if num in PLACEHOLDER_CARDS or len(re.sub(r"\D", "", num)) < 16:
+        return None, None
+    return num, owner
+
+
+def fmt_card(digits):
+    return " ".join(digits[i:i + 4] for i in range(0, len(digits), 4))
+
+
 def game_kb(text="🎮 O'ynash"):
     if not WEBAPP_URL.startswith("https://"):
         return None
@@ -95,6 +111,29 @@ async def admin_cmd(m: Message):
         f"💰 O'yin daromadi: {som(s['game_revenue'])}",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="👮 Admin panelga kirish", url=admin_login_url())]]))
+
+
+@dp.message(Command("karta", "card"))
+async def card_cmd(m: Message):
+    """Admin: to'lov kartasini o'rnatish — /karta 8600 1234 5678 9012 Ism Familiya"""
+    if not is_admin(m.from_user.id):
+        return
+    arg = (m.text or "").split(maxsplit=1)[1] if len((m.text or "").split(maxsplit=1)) > 1 else ""
+    mt = re.match(r"^\s*([\d\s-]{16,23})\s+(.+)$", arg)
+    digits = re.sub(r"\D", "", mt.group(1)) if mt else ""
+    if not mt or len(digits) != 16:
+        num, owner = card()
+        return await m.answer("💳 To'lov kartasini o'rnatish:\n<code>/karta 8600 1234 5678 9012 Ism Familiya</code>\n\n"
+                              + (f"Hozirgi karta: <code>{num}</code> — {owner}" if num else "⚠️ Hozir karta sozlanmagan."))
+    db.set_setting("card_number", fmt_card(digits))
+    db.set_setting("card_owner", mt.group(2).strip()[:60])
+    num, owner = card()
+    try:
+        await m.delete()                                   # karta raqami chatda qolmasin
+    except Exception:
+        pass
+    await m.answer(f"✅ To'lov kartasi o'rnatildi:\n💳 <code>{num}</code>\n👤 {owner}\n\n"
+                   f"Endi o'yinchilar «💳 Balans» orqali (eng kami {som(MIN_TOPUP)}) to'ldira oladi, cheklar sizga keladi.")
 
 
 @dp.message(F.photo | F.document)
@@ -177,7 +216,8 @@ def err(msg):
 
 
 async def api_config(request):
-    return web.json_response({"cashback": CASHBACK, "min_topup": MIN_TOPUP, "card": CARD_NUMBER, "card_owner": CARD_OWNER})
+    num, owner = card()
+    return web.json_response({"cashback": CASHBACK, "min_topup": MIN_TOPUP, "card": num or "", "card_owner": owner or ""})
 
 
 async def api_topup(request):
@@ -185,11 +225,16 @@ async def api_topup(request):
     amount = int(body.get("amount") or 0)
     if amount < MIN_TOPUP:
         return err(f"Eng kam summa: {som(MIN_TOPUP)}")
+    num, owner = card()
+    if not num:
+        await S.notify_admins(bot, "⚠️ Kimdir balans to'ldirmoqchi, lekin to'lov kartasi sozlanmagan!\n"
+                                   "Botga yozing: <code>/karta 8600 1234 5678 9012 Ism Familiya</code>")
+        return err("To'lov vaqtincha ishlamayapti — admin kartani sozlamoqda. Birozdan keyin urinib ko'ring.")
     tid = db.create_topup(user["id"], amount)
     await S.send(bot, user["id"],
                  f"💳 <b>Balansni to'ldirish #{tid}</b>\n\n"
                  f"💰 Summa: <b>{som(amount)}</b>\n"
-                 f"💳 Karta: <code>{CARD_NUMBER}</code>\n👤 {CARD_OWNER}\n\n"
+                 f"💳 Karta: <code>{num}</code>\n👤 {owner}\n\n"
                  f"To'lovdan so'ng <b>chek skrinshotini</b> shu yerga yuboring."
                  + (f"\n🎁 Cashback: +{som(amount * CASHBACK / 100)}" if CASHBACK else ""))
     return ok(id=tid)
@@ -280,6 +325,18 @@ async def a_stats(request):
     if day + 86400 <= time.time():
         day += 86400
     return web.json_response({**db.stats(), "today": db.ledger_summary(day), "storage": storage_info()})
+
+
+async def a_settings(request):
+    if request.method == "POST":
+        body = await request.json()
+        digits = re.sub(r"\D", "", str(body.get("card_number") or ""))
+        if len(digits) != 16:
+            return err("Karta raqami 16 ta raqamdan iborat bo'lishi kerak")
+        db.set_setting("card_number", fmt_card(digits))
+        db.set_setting("card_owner", str(body.get("card_owner") or "").strip()[:60])
+    num, owner = card()
+    return ok(card_number=num or "", card_owner=owner or "", min_topup=MIN_TOPUP, cashback=CASHBACK)
 
 
 async def a_ledger(request):
@@ -487,6 +544,8 @@ def make_app():
     r.add_post("/admin/api/users/{id:\\d+}/balance", a_balance)
     r.add_post("/admin/api/users/{id:\\d+}/coins", a_coins)
     r.add_get("/admin/api/users/{id:\\d+}/ledger", a_ledger)
+    r.add_get("/admin/api/settings", a_settings)
+    r.add_post("/admin/api/settings", a_settings)
     r.add_post("/admin/api/broadcast", a_broadcast)
     r.add_get("/admin/api/file/{fid}", a_file)
     r.add_get("/admin/api/backup", a_backup)
@@ -507,6 +566,10 @@ async def main():
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="🎮 O'ynash", web_app=WebAppInfo(url=WEBAPP_URL)))
     try:
+        num, _ = card()
+        if not num:
+            await S.notify_admins(bot, "⚠️ To'lov kartasi sozlanmagan — o'yinchilar balans to'ldira olmaydi.\n"
+                                       "Botga yozing: <code>/karta 8600 1234 5678 9012 Ism Familiya</code>")
         await bot.set_my_commands([BotCommand(command="start", description="🎮 O'yinni ochish"),
                                    BotCommand(command="balans", description="💰 Balansim")])
     except Exception as e:

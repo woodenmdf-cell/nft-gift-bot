@@ -78,6 +78,7 @@
     <a data-v="topups">💳 Balans to'ldirish <span class="cnt" id="c-top"></span></a>
     <a data-v="users">👥 Foydalanuvchilar</a>
     <a data-v="broadcast">📢 Xabar yuborish</a>
+    <a data-v="settings">⚙️ Sozlamalar</a>
     <a href="/admin/api/backup">💾 Zaxira nusxa (.db)</a>
     <a onclick="logout()" style="margin-top:auto">🚪 Chiqish</a>
   </aside>
@@ -182,6 +183,18 @@ V.broadcast = async () => head('📢 Xabar yuborish') + `</h2><div class="stat" 
   <textarea id="bt" rows="6" placeholder="Hamma foydalanuvchilarga yuboriladigan matn (HTML: <b>qalin</b>, <i>kursiv</i>)"></textarea>
   <div class="muted">Xabar ostiga «🎮 O'ynash» tugmasi qo'shiladi.</div>
   <button class="btn" onclick="bcast()">📢 Yuborish</button></div>`;
+V.settings = async () => {
+  const s = await api('settings');
+  return head('⚙️ Sozlamalar') + `</h2><div class="stat" style="max-width:520px;display:flex;flex-direction:column;gap:10px">
+    <b>💳 To'lov kartasi</b>
+    <div class="muted">O'yinchilar «💳 Balans» ni bosganda shu karta ko'rsatiladi. Botda ham o'zgartirsa bo'ladi: <code>/karta 8600 1234 5678 9012 Ism Familiya</code></div>
+    ${s.card_number ? '' : '<div style="color:var(--bad)">⚠️ Karta sozlanmagan — to\'lov ishlamaydi</div>'}
+    <div><label class="muted">Karta raqami</label><input id="cn" inputmode="numeric" value="${esc(s.card_number)}" placeholder="8600 1234 5678 9012"></div>
+    <div><label class="muted">Karta egasi</label><input id="co" value="${esc(s.card_owner)}" placeholder="Ism Familiya"></div>
+    <div class="muted">Eng kam to'ldirish: ${som(s.min_topup)} · Cashback: ${s.cashback}%</div>
+    <button class="btn" onclick="saveCard()">💾 Saqlash</button></div>`;
+};
+async function saveCard() { const r = await api('settings', {card_number: $('cn').value, card_owner: $('co').value}); toast(r.ok ? '✅ Saqlandi' : r.error); if (r.ok) render(); }
 async function bcast() { const t = $('bt').value.trim(); if (!t || !confirm('Hammaga yuborilsinmi?')) return; const r = await api('broadcast', {text: t}); toast(r.msg || r.error); }
 
 async function render() {
