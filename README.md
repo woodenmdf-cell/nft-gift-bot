@@ -27,7 +27,7 @@ o'yin bot domenining o'zida (`/`) ochiladi.
   boshqalarniki — ko'k 👑), menyu ortidagi shahar manzarasida ham.
 - «Shahar» bo'limida turi (do'kon, uy, ofis, garaj, plaza, tower, noyob), tuman va narx/daromad bo'yicha saralash.
 - Ko'rinishi: menyuda «🏢 Mulklarim» paneli (daromad, yig'ish), bo'limlar: Mulklarim / Bozor / Shahar;
-  shaharda yaqin binolar ustida narx yoki egasi, bino yonida **🏢 BINO** tugmasi, mini-xaritada o'z binolaringiz.
+  shaharda bino yonida **🏢 BINO** tugmasi, tomida egasining ismi, mini-xaritada o'z binolaringiz.
 - Binolar ro'yxati server (`props.py`) va o'yin (`city3d.js`) da bir xil generator bilan quriladi; mos kelishi nazorat
   summasi (`layout`) bilan tekshiriladi.
 
@@ -44,6 +44,12 @@ bo'lmaydi. Oldin o'ynaganlarga avval bepul berilgan sedan saqlanadi.
 - 🪙 **Tanga do'koni**: 10 000 → 2 200, 25 000 → 6 000, 50 000 → 13 000, 100 000 so'm → 30 000 tanga; birinchi xarid +50%, VIP +10%.
 - 🎁 Kunlik bonus seriyasi: 100 → 150 → 200 → 250 → 300 → 400 → 600 tanga.
 - Mukofot vaqti serverda o'lchanadi, soxta natija kesiladi; poyga nuqtalarini server tekshiradi (teleportga qarshi).
+
+## 💳 To'lov kartasi
+Karta raqami kodda emas, bazada saqlanadi (repozitoriya ochiq). Admin botga yozadi:
+`/karta 8600 1234 5678 9012 Ism Familiya` (xabar karta raqami chatda qolmasligi uchun o'chiriladi) yoki
+admin panel → ⚙️ Sozlamalar. Karta sozlanmaguncha to'ldirish so'rovlari qabul qilinmaydi va adminlarga eslatma keladi.
+`CARD_NUMBER` / `CARD_OWNER` muhit o'zgaruvchilari ham ishlaydi (bazadagi sozlama ustun).
 
 ## Admin panel (`https://domeningiz/admin`, botda `/admin`)
 📊 o'yin statistikasi va daromad · 💳 balans to'ldirish (chek, tasdiqlash) · 👥 foydalanuvchilar (balans, tanga, VIP,

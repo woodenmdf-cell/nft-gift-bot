@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS game_ledger(           -- har bir tanga harakati (his
 );
 CREATE INDEX IF NOT EXISTS ix_ledger_user ON game_ledger(user_id, id);
 CREATE INDEX IF NOT EXISTS ix_ledger_time ON game_ledger(created);
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS game_payments(
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount INTEGER, days INTEGER, created INTEGER
 );
@@ -252,3 +253,13 @@ def game_buy_coins(uid, price, coins):
 
 def game_coin_purchases(uid):
     return _one("SELECT COUNT(*) v FROM game_payments WHERE user_id=? AND kind='coins'", (uid,))["v"]
+
+
+# ── sozlamalar (admin o'zgartiradi, bazada saqlanadi) ──
+def get_setting(key, default=None):
+    r = _one("SELECT value FROM settings WHERE key=?", (key,))
+    return r["value"] if r else default
+
+
+def set_setting(key, value):
+    _exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
