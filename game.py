@@ -53,8 +53,10 @@ PAINT_VIP = {12, 13}
 PAINT_COUNT = 14
 LOOK_DEFAULT = {"char": 0, "acc": 0}
 # Topshiriq turlari bo'yicha mukofot (tanga) va tajriba
-MISSION_REWARD = {"deliver": 50, "taxi": 70, "race": 90}
-MISSION_XP = {"deliver": 20, "taxi": 28, "race": 35}
+MISSION_REWARD = {"deliver": 50, "taxi": 70, "race": 90,
+                  "ambulance": 110, "bus": 120, "truck": 100, "police": 140, "wedding": 120}
+MISSION_XP = {"deliver": 20, "taxi": 28, "race": 35,
+              "ambulance": 40, "bus": 45, "truck": 38, "police": 50, "wedding": 45}
 PICKUP_COINS = 3
 LEVEL_BONUS = 0.03           # har daraja uchun +3% tanga (maks. +60%)
 # Kunlik bonus seriyasi: ketma-ket kunlar (48 soat ichida qaytsangiz seriya davom etadi)
