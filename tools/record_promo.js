@@ -53,6 +53,13 @@ const AUTO = (sp) => {
     const l = lane(), k = 1 - Math.exp(-5 * dt);
     c.x += (l.x - c.x) * k; c.z += (l.z - c.z) * k; c.yaw += ad(l.yaw, c.yaw) * Math.min(1, dt * 4.5);
     c.vF = a.sp; c.vx = Math.sin(c.yaw) * a.sp; c.vz = Math.cos(c.yaw) * a.sp;
+    // ta'qib klipi: politsiya ortda yonma-yon bo'laklarda (kamera chizig'ini to'smaydi)
+    City3D._dbg.police().forEach((p, i) => {
+      const back = -1 + i * 5 + Math.sin(a.t * 1.3 + i) * 2, side = (i % 2 ? 3.6 : -3.6) * (1 + Math.sin(a.t * 0.7 + i) * 0.15);
+      const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw);
+      p.x = c.x - fx * back + fz * side; p.z = c.z - fz * back - fx * side; p.yaw = c.yaw;
+      p.vx = c.vx; p.vz = c.vz; p.vF = a.sp; p.mesh.position.set(p.x, 0, p.z); p.mesh.rotation.set(0, p.yaw, 0);
+    });
   };
 };
 
@@ -85,7 +92,7 @@ async function record(name, sc) {
     if (sc.police) {
       await page.evaluate(n => { City3D._dbg.G().wanted = n; }, sc.police);
       await step(2);
-      await page.evaluate(() => { const c = City3D._dbg.cur(); City3D._dbg.police().forEach((p, i) => { p.x = c.x - Math.sin(c.yaw) * (14 + i * 9) + (i % 2 ? 2 : -2); p.z = c.z - Math.cos(c.yaw) * (14 + i * 9); p.yaw = c.yaw; p.vx = Math.sin(c.yaw) * 20; p.vz = Math.cos(c.yaw) * 20; p.vF = 20; }); });
+      await page.evaluate(() => { const c = City3D._dbg.cur(); City3D._dbg.police().forEach((p, i) => { p.x = c.x - Math.sin(c.yaw) * (22 + i * 10) + (i % 2 ? 2.5 : -2.5); p.z = c.z - Math.cos(c.yaw) * (22 + i * 10); p.yaw = c.yaw; p.vx = Math.sin(c.yaw) * 20; p.vz = Math.cos(c.yaw) * 20; p.vF = 20; }); });
     }
   }
   await page.evaluate(d => City3D._dbg.day(d), sc.day);
