@@ -40,3 +40,9 @@ MIN_TOPUP = int(os.environ.get("MIN_TOPUP", "10000"))      # eng kam to'ldirish 
 # ── O'yin (Shahar Arena) ──
 GAME_VIP_PRICE = int(os.environ.get("GAME_VIP_PRICE", "19000"))   # oylik VIP narxi (so'm)
 GAME_VIP_DAYS = int(os.environ.get("GAME_VIP_DAYS", "30"))
+
+# ── Promo bot (guruhga videolar, reyting, konkurs) — ixtiyoriy, alohida token ──
+_p = re.search(r"\d{5,}:[A-Za-z0-9_-]{30,}", os.environ.get("PROMO_BOT_TOKEN", ""))
+PROMO_BOT_TOKEN = _p.group(0) if _p else ""
+PROMO_TIMES = os.environ.get("PROMO_TIMES", "10:00,13:30,17:00,20:30")    # Toshkent vaqti
+PROMO_PRIZES = os.environ.get("PROMO_PRIZES", "3000,2000,1000")            # haftalik konkurs sovg'alari (tanga)
