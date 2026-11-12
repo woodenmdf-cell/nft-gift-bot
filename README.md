@@ -56,6 +56,15 @@ admin panel → ⚙️ Sozlamalar. Karta sozlanmaguncha to'ldirish so'rovlari qa
 📊 o'yin statistikasi va daromad · 💳 balans to'ldirish (chek, tasdiqlash) · 👥 foydalanuvchilar (balans, tanga, VIP,
 bloklash) · 📢 hammaga xabar · 💾 zaxira nusxa. Har soatda zaxira adminlarga yuboriladi, `/restore` bilan tiklanadi.
 
+## 📣 Promo bot (`promo.py`) — guruhga odam jalb qilish
+Alohida bot (o'yin boti bilan bir serverda ishlaydi). Railway → Variables → `PROMO_BOT_TOKEN` ga @BotFather bergan yangi token qo'yiladi,
+keyin botni Telegram guruhingizga qo'shasiz (kanal bo'lsa — admin qilasiz). Bot guruhni o'zi eslab qoladi.
+- Kuniga 4 marta (`PROMO_TIMES`, Toshkent vaqti) navbat bilan: 🎬 o'yindan video, 🏆 reyting, 🏢 mulk yangiliklari, 📊 so'rovnoma, 🎁 konkurs, 💡 maslahat.
+- 🎁 Haftalik konkurs: yakshanba 20:00 da shu haftada eng ko'p tanga topgan 3 kishiga `PROMO_PRIZES` tanga avtomatik beriladi.
+- 👋 Guruhga yangi qo'shilganlarni kutib oladi. Har postda "🎮 Bepul o'ynash" tugmasi o'yin botiga olib boradi.
+- Admin (promo botga shaxsiy): `/post`, `/post video:chase`, `/guruhlar`, `/off`, `/on`.
+- Videolar `promo/clips/*.mp4` — o'yinning o'zidan avtomatik yozilgan: `node tools/record_promo.js http://127.0.0.1:8080 promo/clips`.
+
 ## O'rnatish (Railway)
 1. @BotFather → `/newbot` → token.
 2. Railway → Variables: `BOT_TOKEN`, `ADMIN_IDS`, `ADMIN_PASSWORD`, `CARD_NUMBER`, `CARD_OWNER` (qolganlari — `.env.example`).

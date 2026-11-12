@@ -23,7 +23,8 @@ import game
 import props
 import services as S
 from config import (DATA_DIR, DB_PATH, ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, CARD_NUMBER, CARD_OWNER, CASHBACK,
-                    GAME_VIP_DAYS, GAME_VIP_PRICE, HOST, MIN_TOPUP, PORT, WEBAPP_URL)
+                    GAME_VIP_DAYS, GAME_VIP_PRICE, HOST, MIN_TOPUP, PORT, PROMO_BOT_TOKEN, PROMO_PRIZES, PROMO_TIMES,
+                    WEBAPP_URL)
 
 logging.basicConfig(level=logging.INFO)
 if not re.fullmatch(r"\d{5,}:[A-Za-z0-9_-]{30,}", BOT_TOKEN or ""):
@@ -579,8 +580,27 @@ async def main():
     if not os.path.ismount("/data") and str(DATA_DIR).startswith("/data"):
         await S.notify_admins(bot, "⚠️ <b>Diqqat:</b> Railway'da <code>/data</code> volume ulanmagan! "
                                    "Har yangilanishda ma'lumotlar o'chadi. Volume qo'shing (Mount path: /data).")
+    if PROMO_BOT_TOKEN and PROMO_BOT_TOKEN != BOT_TOKEN:
+        import promo
+        pr = promo.make(PROMO_BOT_TOKEN, ADMIN_IDS, PROMO_TIMES, PROMO_PRIZES, lambda text: S.notify_admins(bot, text))
+        pr.game_username = (await bot.get_me()).username
+        asyncio.create_task(_run_promo(pr))
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
+
+
+async def _run_promo(pr):
+    """Promo bot yiqilsa ham o'yin boti ishlashda davom etadi."""
+    wait = 30
+    while True:
+        try:
+            await pr.bot.delete_webhook(drop_pending_updates=True)
+            await pr.run()
+            return
+        except Exception as e:
+            logging.error("Promo bot ishga tushmadi (PROMO_BOT_TOKEN ni tekshiring), %s s dan keyin qayta: %s", wait, e)
+        await asyncio.sleep(wait)
+        wait = min(wait * 2, 600)
 
 
 if __name__ == "__main__":
