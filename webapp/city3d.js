@@ -884,7 +884,7 @@ function makeMarker(color, icon) {
 }
 let giverMk = [], targetMk = null, arrow = null, coinMesh = null;
 function buildMarkers() {
-  for (let i = 0; i < 3; i++) giverMk.push(makeMarker(0xf5c542, '!'));
+  for (let i = 0; i < 5; i++) giverMk.push(makeMarker(0xf5c542, '!'));
   targetMk = makeMarker(0x34c759, '➜');
   const sh = new T.Shape(); sh.moveTo(0, 0.9); sh.lineTo(0.75, -0.3); sh.lineTo(0, 0); sh.lineTo(-0.75, -0.3); sh.closePath();
   const ag = new T.ShapeGeometry(sh); ag.rotateX(Math.PI / 2);
@@ -1012,7 +1012,78 @@ function vehPush(a, b) {
 // ═════════════ O'YIN HOLATI ═════════════
 let G = null;
 let camYaw = 0, camPitch = 0.32, camDrag = 0, camDist = 6, tNow = 0;
-function newGiver() { const types = ['deliver', 'taxi', 'race']; return Object.assign(farPoint(player, 50, 220), {type: pick(types)}); }
+// ═════════════ TOPSHIRIQLAR: haqiqiy manzillar va kasblar ═════════════
+// Har bir topshiriq shahardagi aniq binoga (nomi va manzili bilan) bog'lanadi. Kasblar uchun xizmat mashinasi beriladi.
+const MT = {
+  deliver: {n: '📦 Yetkazib berish', ic: '📦', w: 3, from: /Kafe|Novvoyxona|Somsaxona|Choyxona|Qahvaxona|Gul|Do'kon|Dorixona|Minimarket|Oshxona|Restoran/},
+  taxi: {n: '🚕 Taksi', ic: '🚕', w: 3, car: true},
+  race: {n: '🏁 Poyga', ic: '🏁', w: 1.5, car: true},
+  ambulance: {n: '🚑 Tez yordam', ic: '🚑', w: 1.2, from: /Klinika/, job: 'ambulance', col: 0xf4f4f4},
+  bus: {n: '🚌 Avtobus haydovchisi', ic: '🚌', w: 1, job: 'bus', col: 0xfbc02d},
+  truck: {n: '🚚 Yuk tashish', ic: '🚚', w: 1, from: /Ombor|Avtoservis|Garaj|Shinomontaj|Avtoyuvish/, job: 'truck', col: 0xe8e8e8},
+  police: {n: '🚓 Politsiya ta\'qibi', ic: '🚓', w: 1, from: /Bank|Mehmonxona/, job: 'police', col: 0xf4f6f8},
+  wedding: {n: '💐 To\'y korteji', ic: '💐', w: 1, from: /Turar-joy|Plaza/, car: true},
+};
+const MNAME = Object.fromEntries(Object.entries(MT).map(([k, v]) => [k, v.n]));
+let PLACES = [];
+// bino oldidagi yo'l cheti (topshiriq nuqtasi shu yerda)
+function frontPoint(p) {
+  const kz = cl(Math.round((p.cz - RD / 2) / CELL), 0, N), kx = cl(Math.round((p.cx - RD / 2) / CELL), 0, N);
+  const dz = Math.abs(p.cz - roadC(kz)), dx = Math.abs(p.cx - roadC(kx)), e = RD / 2 - 2.2;
+  if (dz <= dx) return {x: cl(p.cx, 12, WORLD - 12), z: roadC(kz) + (p.cz >= roadC(kz) ? e : -e)};
+  return {x: roadC(kx) + (p.cx >= roadC(kx) ? e : -e), z: cl(p.cz, 12, WORLD - 12)};
+}
+function setPlaces(pl) {
+  PLACES = Object.entries(pl || {}).filter(([id]) => PROPS[id]).map(([id, a]) => Object.assign({id, name: a[0], addr: a[1]}, frontPoint(PROPS[id])));
+}
+function findPlace(from, mn, mx, re, avoid) {
+  if (!PLACES.length) return null;
+  let pool = PLACES.filter(p => (!re || re.test(p.name)) && p !== avoid);
+  if (!pool.length) pool = PLACES;
+  const ok = pool.filter(p => { const d = dxz(p, from); return d >= mn && d <= mx; });
+  if (ok.length) return pick(ok);
+  const want = (mn + mx) / 2; let best = pool[0];
+  for (const p of pool) if (Math.abs(dxz(p, from) - want) < Math.abs(dxz(best, from) - want)) best = p;
+  return best;
+}
+const spotAt = (from, mn, mx, re) => { const p = findPlace(from, mn, mx, re); return p ? {x: p.x, z: p.z, name: p.name, addr: p.addr} : farPoint(from, mn, mx); };
+function newGiver() {
+  const have = G ? G.givers.map(g => g.type) : [], ks = Object.keys(MT);
+  let type = 'deliver';
+  for (let t = 0; t < 6; t++) {
+    let r = Math.random() * ks.reduce((a, k) => a + MT[k].w, 0);
+    for (const k of ks) { r -= MT[k].w; if (r <= 0) { type = k; break; } }
+    if (!have.includes(type)) break;
+  }
+  return Object.assign(spotAt(player, 50, 220, MT[type].from), {type});
+}
+// avtomobilni eng yaqin yo'l bo'lagiga qo'yish (shahar harakati qoidalari bo'yicha yuradi)
+function laneCar(type, color, p, ahead, toward) {
+  const v = makeVehicle(type, color, 0, 0, 0, 'traffic');
+  const kz = cl(Math.round((p.z - RD / 2) / CELL), 0, N), kx = cl(Math.round((p.x - RD / 2) / CELL), 0, N);
+  if (Math.abs(p.z - roadC(kz)) < Math.abs(p.x - roadC(kx))) { v.ax = 'x'; v.k = kz; v.along = p.x; } else { v.ax = 'z'; v.k = kx; v.along = p.z; }
+  const tgt = toward ? (v.ax === 'x' ? toward.x : toward.z) : WORLD / 2;
+  v.dir = v.along < tgt ? 1 : -1; v.along = cl(v.along + v.dir * (ahead || 0), 14, WORLD - 14);
+  v.sp = 10; v.cv = 0; v.lastNode = Math.round((v.along - RD / 2) / CELL);
+  const l = laneOf(v); v.x = l.x; v.z = l.z; v.yaw = l.yaw; v.mesh.position.set(v.x, 0, v.z); v.mesh.rotation.y = v.yaw;
+  return v;
+}
+// chorrahada yo'nalish tanlash: kortej — manzilga yaqinlashadi, jinoyatchi — o'yinchidan uzoqlashadi
+function smartTurn(v, m) {
+  const ix = v.ax === 'x' ? roadC(m) : roadC(v.k), iz = v.ax === 'x' ? roadC(v.k) : roadC(m), me = pos();
+  const opts = [{turn: false, dir: v.dir, x: v.ax === 'x' ? ix + v.dir * 40 : ix, z: v.ax === 'x' ? iz : iz + v.dir * 40}];
+  for (const d of [1, -1]) opts.push({turn: true, dir: d, x: v.ax === 'x' ? ix : ix + d * 40, z: v.ax === 'x' ? iz + d * 40 : iz});
+  let best = null, bs = -1e9;
+  for (const o of opts) {
+    if (o.x < 12 || o.x > WORLD - 12 || o.z < 12 || o.z > WORLD - 12) continue;
+    const sc = v.escort ? -dxz(o, v.escort) + (o.turn ? 0 : 3) : dxz(o, me) + Math.random() * 35;
+    if (sc > bs) { bs = sc; best = o; }
+  }
+  if (!best || !best.turn) return;
+  const l = laneOf(v), cross = v.ax === 'x' ? l.z : l.x;
+  v.ax = v.ax === 'x' ? 'z' : 'x'; v.k = m; v.along = cross; v.dir = best.dir;
+  v.lastNode = Math.round((v.along - RD / 2) / CELL);
+}
 function start() {
   G = {missions: 0, mBy: {deliver: 0, taxi: 0, race: 0}, pickups: 0, wanted: 0, mission: null, givers: [], coins: [], bust: 0, calm: 0, crashCd: 0, time: 0, shake: 0, hitPedCd: 0};
   // o'yinchi va uning mashinasi
@@ -1021,7 +1092,7 @@ function start() {
   const st = {x: sx, z: sz, y: 0, vy: 0, yaw: Math.PI, sp: 0};
   scene.remove(player.g); player = Object.assign(makePlayer(P.look), st);
   player.g.visible = true; cur = null;
-  for (const v of vehicles.filter(v => v.own)) removeVehicle(v);
+  for (const v of vehicles.filter(v => v.own || v.job || v.flee || v.escort)) removeVehicle(v);
   for (const v of police.slice()) removeVehicle(v);
   const type = CAR_STATS[P.car] ? P.car : 'scooter';
   const pi = P.paint && P.paint[type];
@@ -1029,7 +1100,7 @@ function start() {
   const mine = type === 'scooter' ? makeVehicle(type, col, sx - 0.4, sz - 1.8, Math.PI, 'parked')
     : makeVehicle(type, col, roadC(mid) + RD / 2 - 1.5, sz - 2.5, Math.PI, 'parked');
   mine.own = true; mine.spec = specFor(type, true); mine.nitro = mine.spec.cap;
-  for (let i = 0; i < 3; i++) G.givers.push(newGiver());
+  for (let i = 0; i < giverMk.length; i++) G.givers.push(newGiver());
   for (let i = 0; i < COINS; i++) G.coins.push(Object.assign(roadPoint(), {ph: Math.random() * 6}));
   coinMesh.visible = true; arrow.visible = true;
   camYaw = Math.PI; camPitch = 0.3; dayT = 0.06;
@@ -1038,12 +1109,12 @@ function start() {
 }
 function stop() {
   engineStop(); netStop();
-  if (G) { for (const m of giverMk) m.visible = false; targetMk.visible = false; }
+  if (G) { if (G.mission) { cleanupMission(G.mission); G.mission = null; } for (const m of giverMk) m.visible = false; targetMk.visible = false; }
   coinMesh.visible = false; arrow.visible = false; player.g.visible = false;
   if (cur) { cur.ai = 'parked'; cur = null; }
   headL.intensity = 0;
 }
-function missionReward(t) { const r = (SHOP && SHOP.missions) || {deliver: 50, taxi: 70, race: 90}; return r[t] || 50; }
+function missionReward(t) { const r = (SHOP && SHOP.missions) || {deliver: 50, taxi: 70, race: 90, ambulance: 110, bus: 120, truck: 100, police: 140, wedding: 120}; return r[t] || 50; }
 function sessionCoins() {
   if (!G) return 0;
   const base = Object.entries(G.mBy).reduce((a, [t, n]) => a + missionReward(t) * n, 0) + G.pickups * PICKUP_COINS;
@@ -1054,22 +1125,128 @@ function addWanted(n, msg) {
   G.wanted = Math.min(5, G.wanted + n); G.calm = 0;
   toast('⭐'.repeat(G.wanted), msg || 'Politsiya sizni qidirmoqda!'); sfx(440, 0.12, 'square', 0.05); setTimeout(() => sfx(330, 0.18, 'square', 0.05), 130);
 }
-const MNAME = {deliver: '📦 Yetkazib berish', taxi: '🚕 Taksi', race: '🏁 Poyga'};
 function startMission(g) {
-  if ((g.type === 'taxi' || g.type === 'race') && !cur) { if (!G.needCarT || G.needCarT < tNow) { toast(MNAME[g.type], 'Buning uchun mashinaga o\'tiring'); G.needCarT = tNow + 3; } return false; }
-  const me = pos(); let pts = [], total = 0, from = me, speed = 14;
-  if (g.type === 'deliver') pts = [farPoint(me, 150, 300)];
-  else if (g.type === 'taxi') { const a = farPoint(me, 60, 130); pts = [a, farPoint(a, 150, 270)]; }
-  else { speed = 19; for (let i = 0; i < 4; i++) { const p = farPoint(from, 80, 140); pts.push(p); from = p; } }
-  from = me; for (const p of pts) { total += dxz(from, p); from = p; }
-  G.mission = {type: g.type, pts, idx: 0, time: total / speed + 14};
-  toast(MNAME[g.type], 'Vaqt: ' + Math.round(G.mission.time) + ' soniya'); sfx(660, 0.12); sfx(880, 0.15); haptic('medium');
+  const t = MT[g.type];
+  if (t.car && (!cur || cur.job)) { if (!G.needCarT || G.needCarT < tNow) { toast(t.n, 'Buning uchun o\'z mashinangizga o\'tiring'); G.needCarT = tNow + 3; } return false; }
+  const me = pos(), ms = {type: g.type, pts: [], idx: 0, time: 0, hp: 100, wait: 0, rams: 0, lost: 0, hold: 0, from: g.name || ''};
+  let total = 0, from = me, speed = 14, extra = 14;
+  if (t.job) {                                      // xizmat mashinasi beriladi (o'z mashinangiz joyida qoladi)
+    if (cur) exitCar();
+    const kz = cl(Math.round((g.z - RD / 2) / CELL), 0, N), yaw = Math.abs(g.z - roadC(kz)) < RD / 2 ? Math.PI / 2 : 0;
+    const off = (yaw ? g.x : g.z) < WORLD / 2 ? 9 : -9;     // o'z mashinangizdan bir oz oldinroqda
+    const v = makeVehicle(t.job, t.col, g.x + (yaw ? off : 0), g.z + (yaw ? 0 : off), yaw, 'parked');
+    v.job = true; v.spec = specFor(t.job, false); v.spec.max *= 1.12; v.nitro = v.spec.cap; carCollide(v);
+    v.mesh.position.set(v.x, 0, v.z); ms.veh = v; enterCar(v);
+  }
+  if (g.type === 'deliver') ms.pts = [spotAt(me, 150, 300)];
+  else if (g.type === 'taxi') ms.pts = [spotAt(me, 150, 290)];
+  else if (g.type === 'race') { speed = 19; for (let i = 0; i < 4; i++) { const p = farPoint(from, 80, 140); ms.pts.push(p); from = p; } }
+  else if (g.type === 'ambulance') { speed = 12; extra = 24; ms.pts = [spotAt(me, 110, 230, /^(?!Klinika)/), {x: g.x, z: g.z, name: g.name || 'Klinika', addr: g.addr}]; }
+  else if (g.type === 'bus') { speed = 8; for (let i = 0; i < 5; i++) { const p = spotAt(from, 70, 130); ms.pts.push(p); from = p; } extra = 5 * 3 + 20; }
+  else if (g.type === 'truck') { speed = 10; extra = 20; ms.pts = [spotAt(me, 160, 300, /Do'kon|Minimarket|Dorixona|Kiyim|Telefon|Kitob|Kafe|Restoran|Novvoyxona/)]; }
+  else if (g.type === 'police') {
+    const s = laneCar('sport', 0x151515, farPoint(me, 60, 100), 0); s.flee = true; s.sp = 15.5;
+    ms.npc = s; ms.pts = [s]; ms.time = 100;
+  } else if (g.type === 'wedding') {
+    const d = spotAt(me, 230, 380, /Restoran|Mehmonxona|Choyxona|Oshxona/);
+    const e = laneCar('sedan', 0xffffff, g, 16, d); e.escort = d; e.sp = 8.5;
+    const rib = new T.Mesh(new T.BoxGeometry(1.4, 0.18, 0.5), new T.MeshBasicMaterial({color: 0xff4f9a})); rib.position.y = 1.75; e.mesh.add(rib);
+    ms.npc = e; ms.dest = d; ms.pts = [e]; ms.time = (Math.abs(d.x - e.x) + Math.abs(d.z - e.z)) / 5.5 + 50;
+  }
+  if (!ms.time) { from = me; for (const p of ms.pts) { total += dxz(from, p); from = p; } ms.time = total / speed + extra; }
+  G.mission = ms;
+  const first = ms.pts[0] || {}, intro = {
+    taxi: () => `🙋 Yo'lovchi o'tirdi: ${first.name || 'manzilga'}`, deliver: () => `${ms.from ? ms.from + ' → ' : ''}${first.name || 'manzil'}`,
+    ambulance: () => `Bemor: ${first.name || ''}`, bus: () => '5 ta bekatda to\'xtab yo\'lovchilarni oling', truck: () => `Yuk: ${ms.from} → ${first.name || ''}`,
+    police: () => 'Qora sport mashinani to\'xtating: 3 marta urib yoki yonida to\'xtatib', wedding: () => `Kelin mashinasi ortidan: ${ms.dest.name || 'to\'yxonaga'}`, race: () => ''}[g.type]();
+  toast(t.n, (intro ? intro + ' · ' : '') + Math.round(ms.time) + ' s'); sfx(660, 0.12); sfx(880, 0.15); haptic('medium');
   return true;
 }
 function missionLabel(m) {
-  if (m.type === 'deliver') return '📦 Posilkani manzilga yetkazing';
-  if (m.type === 'taxi') return m.idx === 0 ? '🚕 Yo\'lovchini oling' : '🚕 Yo\'lovchini manzilga olib boring';
-  return `🏁 Nazorat nuqtasi ${m.idx + 1}/${m.pts.length}`;
+  const p = m.pts[m.idx] || {}, nm = p.name ? ' → ' + p.name : '';
+  switch (m.type) {
+    case 'deliver': return '📦 Posilka' + nm;
+    case 'taxi': return '🚕 Yo\'lovchi' + nm;
+    case 'race': return `🏁 Nazorat nuqtasi ${m.idx + 1}/${m.pts.length}`;
+    case 'ambulance': return (m.idx === 0 ? '🚑 Bemorni oling' : '🚑 Klinikaga') + nm;
+    case 'bus': return `🚌 Bekat ${m.idx + 1}/${m.pts.length}` + nm;
+    case 'truck': return '🚚 Yuk' + nm;
+    case 'police': return '🚓 Jinoyatchini to\'xtating';
+    case 'wedding': return '💐 Kelin mashinasi ortidan → ' + (m.dest.name || 'to\'yxona');
+  }
+  return MNAME[m.type] || '';
+}
+function missionSub(m) {
+  const p = m.pts[m.idx], t = MT[m.type], a = [`⏱ ${Math.ceil(m.time)} s`, `${Math.round(dxz(pos(), p))} m`];
+  if (t.job && cur !== m.veh) return '⚠️ Xizmat mashinasiga qayting · ' + a[0];
+  if (m.type === 'police') a.push(`💥 ${m.rams}/3`);
+  else if (m.type === 'wedding') { a.push(m.lost > 0.5 ? '⚠️ Yaqinroq yuring!' : '✅ Kortejdasiz'); }
+  else {
+    if (m.type === 'ambulance' && m.idx > 0) a.push(`❤️ ${m.hp}%`);
+    if (m.type === 'truck') a.push(`📦 ${m.hp}%`);
+    if (m.type === 'bus' && m.wait > 0) a.push('👥 Yo\'lovchilar chiqmoqda…');
+    if (p.addr) a.push(p.addr);
+  }
+  return a.join(' · ');
+}
+// urilish topshiriqqa ta'sir qiladi: bemor/yuk shikastlanadi, jinoyatchi to'xtaydi, kortejga urilish — muvaffaqiyatsizlik
+function missionHit(f, o) {
+  const ms = G && G.mission; if (!ms) return;
+  if (o && o === ms.npc) {
+    if (ms.type === 'police' && cur === ms.veh && tNow - (ms.ramT || 0) > 0.8) { ms.ramT = tNow; ms.rams++; toast(`💥 Urildi ${ms.rams}/3`, 'Jinoyatchi sekinlashdi'); }
+    else if (ms.type === 'wedding') ms.crash = true;
+    return;
+  }
+  if (tNow - (ms.hitT || 0) < 0.6) return;
+  if ((ms.type === 'ambulance' && ms.idx > 0) || ms.type === 'truck') {
+    ms.hitT = tNow; ms.hp = Math.max(0, ms.hp - Math.round(Math.min(40, f * 1.6)));
+    toast(ms.type === 'truck' ? '📦 Yuk shikastlandi' : '🩺 Bemorning ahvoli og\'irlashdi', ms.hp + '%');
+  }
+}
+function missionStep(ms, dt, me) {
+  const t = MT[ms.type], p = ms.pts[ms.idx];
+  if (ms.hp <= 0) return ms.type === 'truck' ? '📦 Yuk butunlay sindi' : '🩺 Bemorni qutqarib bo\'lmadi';
+  if (ms.type === 'police') {
+    const s = ms.npc, d = dxz(s, me);
+    if (d > 230) return '🚓 Jinoyatchi qochib ketdi';
+    if (ms.rams >= 3) return 'done';
+    if (cur === ms.veh && d < 8.5 && (s.cv || 0) < 2.5) { ms.hold += dt; if (ms.hold > 1.5) return 'done'; } else ms.hold = Math.max(0, ms.hold - dt * 0.5);
+    return null;
+  }
+  if (ms.type === 'wedding') {
+    const e = ms.npc, d = dxz(e, me);
+    if (ms.crash) return '💥 Kelin mashinasiga urildingiz!';
+    if (d > 55 || !cur) { ms.lost += dt; if (ms.lost > 10) return '💐 Kortejdan adashib qoldingiz'; } else ms.lost = Math.max(0, ms.lost - dt);
+    if (dxz(e, ms.dest) < 16) return d < 50 ? 'done' : '💐 Kortej sizsiz yetib bordi';
+    return null;
+  }
+  if (t.job && cur !== ms.veh) return null;
+  if ((t.car || ms.type === 'taxi') && !cur) return null;
+  if (dxz(p, me) < (ms.type === 'bus' ? 8 : ms.type === 'race' ? 4.5 : 6)) {
+    if (ms.type === 'bus') {
+      if (Math.abs(cur.vF || 0) > 2.2) { if (tNow - (ms.stopT || 0) > 3) { ms.stopT = tNow; toast('🚏 Bekat', 'To\'xtang — yo\'lovchilar chiqishi kerak'); } return null; }
+      ms.wait += dt; if (ms.wait < 2.5) return null;
+      ms.wait = 0; ms.time += 4; toast('👥 Yo\'lovchilar chiqdi', p.name || '');
+    }
+    ms.idx++; sfx(990, 0.1); haptic('light');
+    if (ms.type === 'ambulance' && ms.idx === 1) toast('🩺 Bemor mashinada', 'Ehtiyot bo\'lib klinikaga olib boring — urilish bemorga zarar');
+    if (ms.idx >= ms.pts.length) return 'done';
+    if (ms.type === 'race') ms.time += 4;
+  } else if (ms.type === 'bus') ms.wait = 0;
+  return null;
+}
+function cleanupMission(ms) {
+  if (ms.npc) removeVehicle(ms.npc);
+  if (ms.veh) { if (cur === ms.veh) exitCar(); removeVehicle(ms.veh); }
+}
+function endMission(ok, msg) {
+  const ms = G.mission; if (!ms) return;
+  G.mission = null;
+  if (ok) {
+    G.missions++; G.mBy[ms.type] = (G.mBy[ms.type] || 0) + 1; sfx(1320, 0.25, 'triangle', 0.06); haptic('heavy');
+    toast('✅ Bajarildi!', `+${Math.floor(missionReward(ms.type) * (1 + (P.level_bonus || 0) / 100)) * (P.vip ? 2 : 1)} tanga` + (ms.veh ? ' · xizmat mashinasi topshirildi' : ''));
+  } else { toast(msg || '⌛ Vaqt tugadi', 'Topshiriq bajarilmadi'); sfx(160, 0.3, 'triangle', 0.06); }
+  cleanupMission(ms);
 }
 const pos = () => cur ? {x: cur.x, z: cur.z} : {x: player.x, z: player.z};
 
@@ -1183,15 +1360,16 @@ function updateTraffic(dt) {
     if (v.ai !== 'traffic') continue;
     if (v.stun > 0) v.stun -= dt;
     let want = v.stun > 0 ? 0 : v.sp;
+    if (v.escort && me && dxz(v, me) > 30) want = 0;          // kortej orqada qolganlarni kutadi
     const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
     const reach = v.L / 2 + 7;
     const ahead = o => { const dx = o.x - v.x, dz = o.z - v.z, f = dx * fx + dz * fz, l = Math.abs(dx * fz - dz * fx); return f > 0 && f < reach && l < 2.4; };
     const mA = v.dir > 0 ? Math.ceil((v.along - RD / 2) / CELL) : Math.floor((v.along - RD / 2) / CELL);
-    if (mA >= 0 && mA <= N && lightState(v.ax, tNow) !== 'g') {
+    if (!v.flee && mA >= 0 && mA <= N && lightState(v.ax, tNow) !== 'g') {
       const dStop = (roadC(mA) - v.along) * v.dir - RD / 2 - v.L / 2 - 0.6;
       if (dStop > -0.5 && dStop < 9) want = Math.min(want, Math.max(0, dStop * 1.4));
     }
-    if (me && ahead(me)) want = 0;
+    if (me && !v.flee && ahead(me)) want = 0;
     else for (const o of vehicles) if (o !== v && Math.abs(o.x - v.x) < 11 && Math.abs(o.z - v.z) < 11 && ahead(o)) { want = Math.min(want, (o.cv || 0) * 0.8); break; }
     for (const p of peds) if (!p.down && Math.abs(p.x - v.x) < 8 && Math.abs(p.z - v.z) < 8 && ahead(p)) { want = 0; break; }
     v.cv += cl(want - v.cv, -14 * dt, 5 * dt);
@@ -1199,7 +1377,8 @@ function updateTraffic(dt) {
     const lo = Math.min(prev, v.along), hi = Math.max(prev, v.along), m = Math.round((v.along - RD / 2) / CELL), node = roadC(m);
     if (m >= 0 && m <= N && node >= lo && node <= hi && m !== v.lastNode) {
       v.lastNode = m;
-      if (Math.random() < 0.35) {
+      if (v.flee || v.escort) smartTurn(v, m);
+      else if (Math.random() < 0.35) {
         const l = laneOf(v), cross = v.ax === 'x' ? l.z : l.x;
         v.ax = v.ax === 'x' ? 'z' : 'x'; v.k = m; v.along = cross; v.dir = Math.random() < 0.5 ? 1 : -1;
         v.lastNode = Math.round((v.along - RD / 2) / CELL);
@@ -1274,8 +1453,9 @@ function updatePlayerFoot(dt) {
 // Faqat o'z (sotib olingan) mashinasiga o'tiriladi — boshqalarning mashinasini minib bo'lmaydi
 const ownCar = () => vehicles.find(v => v.own);
 function nearestCar() {
-  const v = ownCar();
-  return v && dxz(v, player) < (v.type === 'scooter' ? 3.2 : 4.2) ? v : null;
+  const job = G && G.mission && G.mission.veh;            // topshiriq paytida xizmat mashinasi ham
+  for (const v of [job, ownCar()]) if (v && dxz(v, player) < (v.type === 'scooter' ? 3.2 : v.type === 'bus' ? 6.5 : 4.4)) return v;
+  return null;
 }
 function summonCar() {
   const v = ownCar(); if (!v) return;
@@ -1303,13 +1483,16 @@ function updateCar(dt) {
   const boost = input.a && v.nitro > 0.05 && (v.vF || 0) > 2;
   if (boost) v.nitro = Math.max(0, v.nitro - dt); else if (!input.a) v.nitro = Math.min(v.spec.cap, v.nitro + v.spec.re * dt);
   const imp = drive(v, dt, Math.abs(thr) < 0.12 ? 0 : thr, Math.abs(steer) < 0.1 ? 0 : steer, input.b, boost);
-  if (imp > 7) { G.shake = Math.min(0.6, imp / 30); sfx(90, 0.18, 'sawtooth', 0.07); haptic(imp > 14 ? 'heavy' : 'medium'); }
+  if (imp > 7) { G.shake = Math.min(0.6, imp / 30); sfx(90, 0.18, 'sawtooth', 0.07); haptic(imp > 14 ? 'heavy' : 'medium'); missionHit(imp); }
+  if (v.bar) { const f = (tNow * 8 | 0) % 2; v.bar[0].visible = !!f; v.bar[1].visible = !f; }
   for (const o of vehicles) {
     if (o === v || Math.abs(o.x - v.x) > 7 || Math.abs(o.z - v.z) > 7) continue;
     const rel = vehPush(v, o);
     if (rel > 1) {
       if (o.ai === 'traffic') o.stun = 1.5;
+      if (rel > 4 && (o.flee || o.escort)) { missionHit(rel, o); continue; }
       if (rel > 7 && G.crashCd <= 0) {
+        missionHit(rel);
         G.crashCd = 1.2; G.shake = 0.5; sfx(80, 0.25, 'sawtooth', 0.08); haptic('heavy');
         // yulduz faqat o'yinchi o'zi tez kelib urilganda (orqadan urilish yoki yengil tegish hisobga olinmaydi)
         if ((o.ai === 'traffic' || o.ai === 'police') && lastHit.into > 8 && rel > 9) addWanted(1, o.ai === 'police' ? 'Politsiyaga urildingiz!' : 'Avariya! Politsiya kelyapti');
@@ -1435,8 +1618,9 @@ function updateWorldObjs(dt) {
   // topshiriqlar
   const ms = G.mission;
   if (!ms) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < G.givers.length; i++) {
       const g = G.givers[i], mk = giverMk[i];
+      if (mk.ty !== g.type) { mk.icon.material = iconSprite(MT[g.type].ic, '#f5c542').material; mk.ty = g.type; }
       mk.visible = true; mk.position.set(g.x, 0, g.z); mk.ring.scale.setScalar(1 + Math.sin(tNow * 4) * 0.08);
       if (dxz(g, me) < 3.5 && startMission(g)) { G.givers[i] = newGiver(); break; }
     }
@@ -1446,14 +1630,10 @@ function updateWorldObjs(dt) {
     ms.time -= dt;
     const p = ms.pts[ms.idx];
     targetMk.visible = true; targetMk.position.set(p.x, 0, p.z); targetMk.ring.scale.setScalar(1 + Math.sin(tNow * 5) * 0.1);
-    if (dxz(p, me) < 4.5) {
-      ms.idx++; sfx(990, 0.1); haptic('light');
-      if (ms.type === 'taxi' && ms.idx === 1) toast('🙋 Yo\'lovchi o\'tirdi', 'Manzilga olib boring');
-      if (ms.idx >= ms.pts.length) {
-        const mt = ms.type; G.missions++; G.mBy[mt] = (G.mBy[mt] || 0) + 1; G.mission = null; sfx(1320, 0.25, 'triangle', 0.06); haptic('heavy');
-        toast('✅ Bajarildi!', `+${Math.floor(missionReward(mt) * (1 + (P.level_bonus || 0) / 100)) * (P.vip ? 2 : 1)} tanga`);
-      } else if (ms.type === 'race') ms.time += 4;
-    } else if (ms.time <= 0) { G.mission = null; toast('⌛ Vaqt tugadi', 'Topshiriq bajarilmadi'); sfx(160, 0.3, 'triangle', 0.06); }
+    const r = missionStep(ms, dt, me);
+    if (r === 'done') endMission(true);
+    else if (r) endMission(false, r);
+    else if (ms.time <= 0) endMission(false, ms.type === 'police' ? '🚓 Jinoyatchi qochib ketdi' : '⌛ Vaqt tugadi');
   }
   // yo'nalish strelkasi
   if (NAV && !G.mission && dxz(NAV, me) < 14) { toast('🏁 Yetib keldingiz', NAV.name || ''); NAV = null; }
@@ -1601,8 +1781,11 @@ function hud(tgt) {
   const mEl = $('mission');
   if (G.race) mEl.innerHTML = `🏁 Poyga: ${Math.min(G.race.idx + 1, G.race.pts.length)}/${G.race.pts.length}<small>vs ${esc(G.race.vs)} — ${G.race.opp}/${G.race.pts.length}</small>`;
   else if (NAV && !G.mission) mEl.innerHTML = `🧭 ${esc(NAV.name || 'Bino')}<small>${Math.round(dxz(pos(), NAV))} m · ko'k ko'rsatkich bo'ylab boring</small>`;
-  else if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>⏱ ${Math.ceil(G.mission.time)} s · ${Math.round(dxz(pos(), G.mission.pts[G.mission.idx]))} m</small>`;
-  else mEl.innerHTML = 'Sariq <b style="color:#f5c542">!</b> belgisiga boring<small>Topshiriq oling</small>';
+  else if (G.mission) mEl.innerHTML = esc(missionLabel(G.mission)) + `<small>${esc(missionSub(G.mission))}</small>`;
+  else {
+    const me1 = pos(), g = G.givers.reduce((a, b) => dxz(a, me1) < dxz(b, me1) ? a : b, G.givers[0]);
+    mEl.innerHTML = g ? `Sariq belgiga boring: ${esc(MT[g.type].n)}<small>${esc(g.name ? g.name + ' · ' : '')}${Math.round(dxz(g, me1))} m</small>` : 'Topshiriq oling';
+  }
   // tugmalar
   const near = !cur ? nearestCar() : null, oc = ownCar();
   const far = !cur && !near && oc && dxz(oc, player) > 25;
@@ -1610,7 +1793,7 @@ function hud(tgt) {
   if (ctxKey !== lastCtx) {
     lastCtx = ctxKey;
     $('bE').classList.toggle('hide', ctxKey === 'foot');
-    const sc = oc && oc.type === 'scooter';
+    const sc = (near || oc) && (near || oc).type === 'scooter';
     $('bE').querySelector('span').textContent = cur ? '🚶' : far ? '📲' : sc ? '🛴' : '🚗';
     $('lE').textContent = cur ? 'TUSHISH' : far ? 'CHAQIRISH' : sc ? 'MINISH' : 'O\'TIRISH';
     $('bA').querySelector('span').textContent = cur ? '🔥' : '🏃'; $('lA').textContent = cur ? 'NITRO' : 'YUGURISH';
@@ -1678,7 +1861,7 @@ function onNet(m) {
   } else if (m.t === 'info') { toast('ℹ️ ' + m.m, '');
   } else if (m.t === 'ri') { if (window.onRaceInvite) window.onRaceInvite(m.from, m.name);
   } else if (m.t === 'rs') {
-    G.mission = null;
+    if (G.mission) endMission(false, '🏁 Onlayn poyga boshlandi');
     G.race = {pts: m.pts, idx: 0, opp: 0, vs: m.vs, vsId: m.vs_id, startAt: tNow + m.in, go: false};
     toast('🏁 Poyga: ' + m.vs, 'Tayyorlaning!'); haptic('heavy');
   } else if (m.t === 'rp') {
@@ -1797,6 +1980,7 @@ const API = {
   chat(i) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify({t: 'c', m: i})); else toast('Onlayn emas', 'Chat faqat onlayn rejimda ishlaydi'); },
   stop() { API.active = false; stop(); for (const sp of propLabels) sp.visible = false; for (const sp of roofSigns) sp.visible = false; nearProp = null; },
   layoutHash, propIds: () => Object.keys(PROPS),
+  setPlaces,
   setProps(state, cat) { if (state) PSTATE = state; if (cat) PCAT = cat; roofT = 0; },
   nearProp: () => nearProp,
   setNav(pid, name) { const p = PROPS[pid]; NAV = p ? {x: p.cx, z: p.cz, name} : null; },

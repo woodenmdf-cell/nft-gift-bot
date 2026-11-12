@@ -7,7 +7,8 @@ o'yin bot domenining o'zida (`/`) ochiladi.
 - 🏙 **3D shahar** (14×14 kvartal, ~850 m, 16 tuman): piyoda yurish, yugurish, sakrash; faqat o'z mashinangizga o'tirish
   (yangi o'yinchiga ⚡ elektr skuter, qolganlari tangaga — 🛠 garaj; uzoqda qolsa «📲 Chaqirish»); transport, piyodalar, svetoforlar, avtobuslar, kun/tun.
 - 🕌 Toshkent uslubi: tumanlar nomi, do'kon peshtaxtalari, madrasa, teleminora; ⛽ yoqilg'i (nitro), 🎨 bo'yash ustaxonasi.
-- 📦 Topshiriqlar: yetkazish (50), taksi (70), poyga (90 tanga) + daraja bonusi; yo'lda tangalar; ⭐ politsiya ta'qibi.
+- 📦 Topshiriqlar haqiqiy binolarga (nomi va manzili bilan): yetkazish (50), taksi (70), poyga (90 tanga) + daraja bonusi; yo'lda tangalar; ⭐ politsiya ta'qibi.
+- 🧑‍🔧 Kasblar (xizmat mashinasi beriladi): 🚑 tez yordam (110 — urilish bemorga zarar), 🚌 avtobus (120 — 5 bekatda to'xtash), 🚚 yuk (100 — yuk shikastlanadi), 🚓 politsiya ta'qibi (140 — jinoyatchini 3 marta urib yoki to'xtatib), 💐 to'y korteji (120 — kelin mashinasi ortidan).
 - 👥 **Onlayn**: `/ws/city` — 25 kishilik xonalar, chat, 🏁 server hakamlik qiladigan onlayn poyga (g'olibga 150 tanga).
 - 🧍 12 ta personaj + aksessuarlar, 🛠 garaj (mashinalar, yaxshilashlar), 📻 radio, signal, sirena.
 - 🎨 Grafika: Kenney (kenney.nl, CC0) modellari — `webapp/assets/`, LOD bilan telefonda tez ishlaydi.

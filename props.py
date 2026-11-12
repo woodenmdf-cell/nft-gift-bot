@@ -212,6 +212,8 @@ def select(full):
 FULL_CATALOG = build_catalog()
 LAYOUT = layout_hash()
 CATALOG = select(FULL_CATALOG)
+# Topshiriqlar uchun: shahardagi barcha binolarning nomi va manzili (o'yinda haqiqiy manzillarga yuboriladi)
+PLACES = {k: [v["name"], v["address"]] for k, v in FULL_CATALOG.items()}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS props(
@@ -308,7 +310,7 @@ def setup(r, auth, ok, err, notify=None):
     async def catalog(request):
         return web.json_response({"props": {k: [v["price"], v["income"], v["name"], v["district"], v["address"], v["kind"]]
                                             for k, v in CATALOG.items()},
-                                  "rate": INCOME_RATE, "cap_h": INCOME_CAP_H, "vip_bonus": VIP_INCOME,
+                                  "places": PLACES, "rate": INCOME_RATE, "cap_h": INCOME_CAP_H, "vip_bonus": VIP_INCOME,
                                   "max_owned": MAX_OWNED, "layout": LAYOUT, "fee": FEE, "min_k": MIN_K, "max_k": MAX_K})
 
     async def state(request):

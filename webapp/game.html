@@ -599,6 +599,7 @@ async function loadPropsCatalog() {
     PCAT.mismatch = true;
   }
   City3D.setProps(null, PCAT.props);
+  if (City3D.setPlaces && PCAT.places && !PCAT.mismatch) City3D.setPlaces(PCAT.places);
 }
 async function loadProps() {
   if (GUEST || !PCAT) return;
