@@ -84,6 +84,14 @@ CREATE TABLE IF NOT EXISTS payments(charge_id TEXT PRIMARY KEY, uid INTEGER, ite
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 """)
 db.commit()
+for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0"):
+    try:
+        db.execute(f"ALTER TABLE users ADD COLUMN {col}")
+    except sqlite3.OperationalError:
+        pass                                       # column already there
+db.commit()
+REF_PCT = 10                                       # inviter gets 10% of every 50K a friend banks
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 
 
 def setting(k, default=None):
@@ -109,6 +117,7 @@ class Account:
         self.name = name
         if uid is None:
             self.tokens, self.stars, self.owned, self.skin, self.best = 0, 0, ["yashil"], "yashil", 0
+            self.ref, self.ref_earned = None, 0
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
@@ -118,6 +127,7 @@ class Account:
         else:
             db.execute("UPDATE users SET name=?, username=? WHERE uid=?", (name, username, uid))
         self.tokens, self.stars, self.best = r["tokens"], r["stars"], r["best"]
+        self.ref, self.ref_earned = r["ref"], r["ref_earned"] or 0
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
         if "yashil" not in self.owned:
             self.owned.insert(0, "yashil")
@@ -137,8 +147,8 @@ class Account:
     def save(self):
         if self.uid is None:
             return
-        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=? WHERE uid=?",
-                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.uid))
+        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=? WHERE uid=?",
+                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.uid))
         db.commit()
 
     def add_tokens(self, n):
@@ -158,9 +168,20 @@ class Account:
         rows = db.execute("SELECT stars, status, created FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
         return [{"stars": r["stars"], "status": STATUS.get(r["status"], r["status"]), "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
 
+    def ref_count(self):
+        if self.uid is None:
+            return 0
+        return db.execute("SELECT COUNT(*) c FROM users WHERE ref=?", (self.uid,)).fetchone()["c"]
+
+    def ref_link(self):
+        if self.uid is None or not BOT_USERNAME:
+            return ""
+        return f"https://t.me/{BOT_USERNAME}?start=ref_{self.uid}"
+
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name}
+                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name,
+                "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT}}
 
 
 STATUS = {"pending": "⏳ Kutilmoqda", "sent": "✅ Yuborildi", "rejected": "❌ Rad etildi"}
@@ -217,9 +238,13 @@ async def bot_loop():
     if not BOT_TOKEN:
         log.warning("BOT_TOKEN not set: Telegram bot is off")
         return
+    global BOT_USERNAME
     me = await tg("getMe")
+    if me and me.get("username"):
+        BOT_USERNAME = me["username"]
     log.info("bot @%s started, web app: %s", me and me.get("username"), PUBLIC_URL or "(no PUBLIC_URL yet)")
     await tg("setMyCommands", commands=[{"command": "start", "description": "O'yinni ochish"},
+                                        {"command": "ref", "description": "Do'stlarni taklif qilish"},
                                         {"command": "admin", "description": "Admin panel"}])
     if PUBLIC_URL:
         await tg("setChatMenuButton", menu_button={"type": "web_app", "text": "O'ynash", "web_app": {"url": PUBLIC_URL}})
@@ -257,11 +282,25 @@ async def handle_update(u):
         return
     text = (m.get("text") or "").strip()
     if text.startswith("/start"):
+        arg = text.split(maxsplit=1)[1] if " " in text else ""
+        if arg.startswith("ref_") and arg[4:].isdigit():
+            await register_ref(frm, int(arg[4:]))
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
                       "• Har 50K token hisobingizga o'tadi\n• Har 500K token = 50 ⭐\n"
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
+    elif text.startswith("/ref"):
+        acc = Account.get(frm["id"], frm.get("first_name", ""), frm.get("username", ""))
+        await tg("sendMessage", chat_id=chat, disable_web_page_preview=True,
+                 text=f"👥 <b>Do'stlarni taklif qiling</b>\n\nDo'stingiz o'yinda har 50K token yig'ganda, "
+                      f"sizga +{BANK_STEP * REF_PCT // 100 // 1000}K token tushadi ({REF_PCT}%).\n\n"
+                      f"🔗 Sizning havolangiz:\n{acc.ref_link()}\n\n"
+                      f"👤 Taklif qilinganlar: {acc.ref_count()}\n💰 Topilgan: {fmt(acc.ref_earned)} token",
+                 parse_mode="HTML",
+                 reply_markup={"inline_keyboard": [[{"text": "📤 Do'stlarga yuborish",
+                                                     "url": "https://t.me/share/url?" + urllib.parse.urlencode(
+                                                         {"url": acc.ref_link(), "text": "Shar Yutar o'ynaymiz! Sharlar jangi va Telegram yulduzlari 🎮⭐"})}]]})
     elif text.startswith("/admin"):
         adm = admin_id()
         if adm is None:
@@ -271,12 +310,32 @@ async def handle_update(u):
             users = db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
             pend = db.execute("SELECT COUNT(*) c, COALESCE(SUM(stars),0) s FROM reqs WHERE status='pending'").fetchone()
             paid = db.execute("SELECT COALESCE(SUM(stars),0) s FROM payments").fetchone()["s"]
+            refs = db.execute("SELECT COUNT(*) c FROM users WHERE ref IS NOT NULL").fetchone()["c"]
             online = sum(1 for c in conns if c.player and c.player.alive)
             await tg("sendMessage", chat_id=chat,
                      text=f"📊 O'yinchilar: {users}\n🟢 Hozir o'ynayapti: {online}\n"
-                          f"⏳ Kutilayotgan so'rovlar: {pend['c']} ta ({pend['s']} ⭐)\n💰 Jami Stars to'lovlari: {paid} ⭐")
+                          f"⏳ Kutilayotgan so'rovlar: {pend['c']} ta ({pend['s']} ⭐)\n💰 Jami Stars to'lovlari: {paid} ⭐\n👥 Taklif orqali kelganlar: {refs}")
         else:
             await tg("sendMessage", chat_id=chat, text="Bu buyruq faqat admin uchun.")
+
+
+async def register_ref(frm, inviter):
+    """Only brand-new players can be invited, and nobody can invite themselves."""
+    uid = frm["id"]
+    if inviter == uid or db.execute("SELECT 1 FROM users WHERE uid=?", (uid,)).fetchone():
+        return
+    if not db.execute("SELECT 1 FROM users WHERE uid=?", (inviter,)).fetchone():
+        return
+    db.execute("INSERT INTO users(uid,name,username,created,ref) VALUES(?,?,?,?,?)",
+               (uid, frm.get("first_name", "") or str(uid), frm.get("username", ""), int(time.time()), inviter))
+    db.commit()
+    name = frm.get("first_name") or "Yangi o'yinchi"
+    await tg("sendMessage", chat_id=inviter,
+             text=f"🎉 {name} sizning havolangiz orqali o'yinga qo'shildi!\n"
+                  f"U har 50K token yig'ganda sizga +{BANK_STEP * REF_PCT // 100 // 1000}K token tushadi.")
+    inv = Account.cache.get(inviter)
+    if inv:
+        push_acc(inv)
 
 
 async def handle_callback(q):
@@ -630,11 +689,12 @@ class Game:
         if c:
             c.player = None
 
-    def bank(self, p):
+    def bank(self, p):  # noqa: E301
         while p.m * 10 >= BANK_STEP:
             p.m -= BANK_STEP / 10
             p.round_bank += BANK_STEP
             conv = p.conn.acc.add_tokens(BANK_STEP)
+            pay_referrer(p.conn.acc, BANK_STEP)
             p.conn.toast("💰 50K token hisobingizga o'tdi!", fx="bank")
             if conv:
                 p.conn.toast(f"🎉 500K token → {conv} ⭐ balansga tushdi!", fx="stars")
@@ -717,6 +777,21 @@ class Game:
     def meta_msg(self):
         return json.dumps({"t": "meta", "p": {p.id: [p.name, p.skin, 0 if p.bot else 1] for p in self.players}},
                           separators=(",", ":"), ensure_ascii=False)
+
+
+def pay_referrer(acc, banked):
+    if not acc.ref:
+        return
+    inv = Account.get(acc.ref)
+    bonus = banked * REF_PCT // 100
+    inv.ref_earned += bonus
+    conv = inv.add_tokens(bonus)
+    for c in conns:
+        if c.acc is inv:
+            c.toast(f"👥 {acc.name} 50K yig'di — sizga +{fmt(bonus)} token!")
+            if conv:
+                c.toast(f"🎉 500K token → {conv} ⭐ balansga tushdi!", fx="stars")
+    push_acc(inv)
 
 
 def fmt(n):
