@@ -305,14 +305,15 @@ async def handle_update(u):
         adm = admin_id()
         if adm is None:
             set_setting("admin", frm["id"])
-            await tg("sendMessage", chat_id=chat, text="✅ Siz admin bo'ldingiz. Yulduz so'rovlari shu yerga keladi.")
+            await tg("sendMessage", chat_id=chat, text="✅ Siz admin bo'ldingiz. Yulduz so'rovlari shu yerga keladi.\n/admin — statistika va admin panel")
         elif adm == frm["id"]:
             users = db.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
             pend = db.execute("SELECT COUNT(*) c, COALESCE(SUM(stars),0) s FROM reqs WHERE status='pending'").fetchone()
             paid = db.execute("SELECT COALESCE(SUM(stars),0) s FROM payments").fetchone()["s"]
             refs = db.execute("SELECT COUNT(*) c FROM users WHERE ref IS NOT NULL").fetchone()["c"]
             online = sum(1 for c in conns if c.player and c.player.alive)
-            await tg("sendMessage", chat_id=chat,
+            kb = {"inline_keyboard": [[{"text": "📊 Admin panel", "web_app": {"url": PUBLIC_URL + "/admin"}}]]} if PUBLIC_URL else None
+            await tg("sendMessage", chat_id=chat, reply_markup=kb,
                      text=f"📊 O'yinchilar: {users}\n🟢 Hozir o'ynayapti: {online}\n"
                           f"⏳ Kutilayotgan so'rovlar: {pend['c']} ta ({pend['s']} ⭐)\n💰 Jami Stars to'lovlari: {paid} ⭐\n👥 Taklif orqali kelganlar: {refs}")
         else:
@@ -338,33 +339,37 @@ async def register_ref(frm, inviter):
         push_acc(inv)
 
 
+async def resolve_request(rid, ok):
+    """Marks a withdraw request sent or rejected (rejected stars go back). Returns a note or None."""
+    r = db.execute("SELECT * FROM reqs WHERE id=?", (rid,)).fetchone()
+    if not r or r["status"] != "pending":
+        return None
+    acc = Account.get(r["uid"])
+    if ok:
+        db.execute("UPDATE reqs SET status='sent' WHERE id=?", (rid,))
+        note, user_msg = "✅ Yuborildi", f"✅ {r['stars']} ⭐ yulduz sizga sovg'a qilindi! O'ynashda davom eting 🎮"
+    else:
+        db.execute("UPDATE reqs SET status='rejected' WHERE id=?", (rid,))
+        acc.stars += r["stars"]
+        acc.save()
+        note, user_msg = "❌ Rad etildi (⭐ balansga qaytarildi)", f"❌ {r['stars']} ⭐ so'rovingiz rad etildi, yulduzlar balansingizga qaytarildi."
+    db.commit()
+    if r["admin_chat"] and r["admin_msg"]:
+        await tg("editMessageReplyMarkup", chat_id=r["admin_chat"], message_id=r["admin_msg"], reply_markup={"inline_keyboard": []})
+        await tg("sendMessage", chat_id=r["admin_chat"], reply_to_message_id=r["admin_msg"], text=f"#{rid}: {note}")
+    await tg("sendMessage", chat_id=r["uid"], text=user_msg)
+    push_acc(acc)
+    return note
+
+
 async def handle_callback(q):
     data, frm = q.get("data", ""), q.get("from", {})
     if frm.get("id") != admin_id() or ":" not in data:
         await tg("answerCallbackQuery", callback_query_id=q["id"], text="Faqat admin")
         return
     action, rid = data.split(":", 1)
-    r = db.execute("SELECT * FROM reqs WHERE id=?", (int(rid),)).fetchone()
-    if not r or r["status"] != "pending":
-        await tg("answerCallbackQuery", callback_query_id=q["id"], text="Allaqachon ko'rib chiqilgan")
-        return
-    acc = Account.get(r["uid"])
-    if action == "ok":
-        db.execute("UPDATE reqs SET status='sent' WHERE id=?", (r["id"],))
-        note, user_msg = "✅ Yuborildi", f"✅ {r['stars']} ⭐ yulduz sizga sovg'a qilindi! O'ynashda davom eting 🎮"
-    else:
-        db.execute("UPDATE reqs SET status='rejected' WHERE id=?", (r["id"],))
-        acc.stars += r["stars"]
-        acc.save()
-        note, user_msg = "❌ Rad etildi (⭐ balansga qaytarildi)", f"❌ {r['stars']} ⭐ so'rovingiz rad etildi, yulduzlar balansingizga qaytarildi."
-    db.commit()
-    await tg("answerCallbackQuery", callback_query_id=q["id"], text=note)
-    msg = q.get("message")
-    if msg:
-        await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
-                 text=msg.get("text", "") + f"\n\n{note}")
-    await tg("sendMessage", chat_id=r["uid"], text=user_msg)
-    push_acc(acc)
+    note = await resolve_request(int(rid), action == "ok")
+    await tg("answerCallbackQuery", callback_query_id=q["id"], text=note or "Allaqachon ko'rib chiqilgan")
 
 
 async def handle_payment(uid, sp):
@@ -422,11 +427,14 @@ async def notify_admin_request(rid, acc, stars):
     r = db.execute("SELECT username FROM users WHERE uid=?", (acc.uid,)).fetchone()
     if r and r["username"]:
         who += f" (@{r['username']})"
-    await tg("sendMessage", chat_id=adm,
+    sent = await tg("sendMessage", chat_id=adm,
              text=f"⭐ Yulduz so'rovi #{rid}\n👤 {who}\n🆔 {acc.uid}\n💫 {stars} ⭐\n\n"
                   f"Yulduzlarni sovg'a qilib yuboring, keyin «Yuborildi»ni bosing.",
              reply_markup={"inline_keyboard": [[{"text": "✅ Yuborildi", "callback_data": f"ok:{rid}"},
                                                 {"text": "❌ Rad etish", "callback_data": f"no:{rid}"}]]})
+    if sent:
+        db.execute("UPDATE reqs SET admin_chat=?, admin_msg=? WHERE id=?", (adm, sent["message_id"], rid))
+        db.commit()
 
 
 # ---------------------------------------------------------------- the arena
@@ -1029,6 +1037,89 @@ async def on_message(c, m):
         asyncio.create_task(notify_admin_request(cur.lastrowid, c.acc, amount))
 
 
+# ---------------------------------------------------------------- admin app API
+def admin_user(init_data):
+    if DEV and init_data.startswith("dev:"):
+        return int(init_data[4:])
+    u = check_init_data(init_data)
+    return int(u["id"]) if u else None
+
+
+def online_uids():
+    return {c.acc.uid for c in conns if c.acc and c.acc.uid is not None and c.player and c.player.alive}
+
+
+def admin_overview(q=""):
+    now = int(time.time())
+    day0 = (now + 5 * 3600) // 86400 * 86400 - 5 * 3600     # midnight in Tashkent
+    one = lambda sql, *a: db.execute(sql, a).fetchone()[0]
+    for a in Account.cache.values():          # include unsaved online changes
+        a.save()
+    on = online_uids()
+    stats = {
+        "users": one("SELECT COUNT(*) FROM users"),
+        "new_today": one("SELECT COUNT(*) FROM users WHERE created>=?", day0),
+        "online": len(on),
+        "bots": sum(1 for p in game.players if p.bot),
+        "tokens": one("SELECT COALESCE(SUM(tokens),0) FROM users"),
+        "stars_balance": one("SELECT COALESCE(SUM(stars),0) FROM users"),
+        "pending_n": one("SELECT COUNT(*) FROM reqs WHERE status='pending'"),
+        "pending_stars": one("SELECT COALESCE(SUM(stars),0) FROM reqs WHERE status='pending'"),
+        "sent_stars": one("SELECT COALESCE(SUM(stars),0) FROM reqs WHERE status='sent'"),
+        "paid_total": one("SELECT COALESCE(SUM(stars),0) FROM payments"),
+        "paid_today": one("SELECT COALESCE(SUM(stars),0) FROM payments WHERE created>=?", day0),
+        "payments_n": one("SELECT COUNT(*) FROM payments"),
+        "refs": one("SELECT COUNT(*) FROM users WHERE ref IS NOT NULL"),
+    }
+    sql = ("SELECT u.uid, u.name, u.username, u.tokens, u.stars, u.best, u.created, u.ref_earned, "
+           "(SELECT COUNT(*) FROM users r WHERE r.ref=u.uid) refs, "
+           "(SELECT COALESCE(SUM(stars),0) FROM payments p WHERE p.uid=u.uid) paid FROM users u")
+    args = ()
+    if q:
+        sql += " WHERE u.name LIKE ? OR u.username LIKE ? OR CAST(u.uid AS TEXT) LIKE ?"
+        args = (f"%{q}%",) * 3
+    sql += " ORDER BY u.stars DESC, u.tokens DESC LIMIT 300"
+    users = [dict(r) | {"online": r["uid"] in on} for r in db.execute(sql, args)]
+    reqs = [dict(r) for r in db.execute(
+        "SELECT q.id, q.uid, q.stars, q.status, q.created, u.name, u.username FROM reqs q LEFT JOIN users u ON u.uid=q.uid "
+        "ORDER BY (q.status='pending') DESC, q.id DESC LIMIT 50")]
+    pays = [dict(r) for r in db.execute(
+        "SELECT p.uid, p.item, p.stars, p.created, u.name FROM payments p LEFT JOIN users u ON u.uid=p.uid ORDER BY p.created DESC LIMIT 30")]
+    return {"ok": True, "stats": stats, "users": users, "reqs": reqs, "payments": pays, "now": now}
+
+
+async def admin_api(body):
+    try:
+        m = json.loads(body or b"{}")
+    except ValueError:
+        return {"ok": False, "error": "bad json"}
+    uid = admin_user(m.get("initData", ""))
+    adm = admin_id()
+    if adm is None:
+        return {"ok": False, "error": "Admin hali belgilanmagan: botga /admin yozing"}
+    if uid != adm:
+        return {"ok": False, "error": "Bu panel faqat admin uchun"}
+    act = m.get("action", "overview")
+    if act == "req":
+        note = await resolve_request(int(m.get("id", 0)), bool(m.get("ok")))
+        if not note:
+            return {"ok": False, "error": "So'rov allaqachon ko'rib chiqilgan"}
+    elif act == "stars":
+        target = int(m.get("uid", 0))
+        if not db.execute("SELECT 1 FROM users WHERE uid=?", (target,)).fetchone():
+            return {"ok": False, "error": "O'yinchi topilmadi"}
+        acc = Account.get(target)
+        delta = int(m.get("delta", 0))
+        acc.stars = max(0, acc.stars + delta)
+        acc.save()
+        push_acc(acc)
+        log.info("admin changed stars of %s by %s", target, delta)
+        for c in conns:
+            if c.acc is acc:
+                c.toast(f"⭐ Admin balansingizni o'zgartirdi: {'+' if delta > 0 else ''}{delta} ⭐")
+    return admin_overview(str(m.get("q", ""))[:40])
+
+
 # ---------------------------------------------------------------- HTTP
 INDEX = os.path.join(HERE, "public", "index.html")
 
@@ -1059,7 +1150,27 @@ async def http_handler(reader, writer):
         await writer.drain()
         await ws_session(reader, writer)
         return
-    if path in ("/", "/index.html"):
+    if path == "/api/admin" and method == "POST":
+        try:
+            n = min(int(hdr.get("content-length", "0")), 65536)
+            body = await asyncio.wait_for(reader.readexactly(n), 15) if n else b""
+            out = await admin_api(body)
+        except Exception:
+            log.exception("admin api failed")
+            out = {"ok": False, "error": "server xatosi"}
+        data = json.dumps(out, ensure_ascii=False).encode()
+        writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(data)}\r\n"
+                     "Cache-Control: no-store\r\nConnection: close\r\n\r\n".encode() + data)
+        try:
+            await writer.drain()
+        finally:
+            writer.close()
+        return
+    if path in ("/admin", "/admin.html"):
+        with open(os.path.join(HERE, "public", "admin.html"), "rb") as f:
+            body, ctype = f.read(), "text/html; charset=utf-8"
+        status = "200 OK"
+    elif path in ("/", "/index.html"):
         with open(INDEX, "rb") as f:
             body, ctype = f.read(), "text/html; charset=utf-8"
         status = "200 OK"

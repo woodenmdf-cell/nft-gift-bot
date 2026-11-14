@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>Shar Yutar — Admin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#0d1540;color:#fff;padding:12px 12px calc(20px + env(safe-area-inset-bottom))}
+  h1{font-size:20px;margin:4px 0 12px;display:flex;align-items:center;justify-content:space-between}
+  h1 small{font-size:11px;font-weight:600;opacity:.6}
+  .tabs{display:flex;gap:6px;position:sticky;top:0;background:#0d1540;padding:6px 0 10px;z-index:5}
+  .tab{flex:1;border:0;border-radius:12px;padding:10px 4px;font-weight:800;font-size:13px;color:#cfd8ff;background:#1b2766}
+  .tab.on{background:#ffd21f;color:#2a2000}
+  .tab .badge{background:#e8344f;color:#fff;border-radius:8px;padding:0 6px;font-size:11px;margin-left:4px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .st{background:#1b2766;border-radius:14px;padding:12px}
+  .st .k{font-size:12px;opacity:.7}
+  .st .v{font-size:22px;font-weight:900;margin-top:2px}
+  .st .s{font-size:11px;opacity:.6;margin-top:2px}
+  .st.warn{background:linear-gradient(135deg,#5a1a2a,#2a1540)}
+  .st.good{background:linear-gradient(135deg,#14502a,#16304a)}
+  .sec{font-size:13px;font-weight:800;opacity:.75;margin:16px 2px 8px}
+  input{width:100%;font-size:15px;padding:11px 12px;border-radius:12px;border:0;background:#1b2766;color:#fff;outline:none;margin-bottom:10px}
+  .row{background:#1b2766;border-radius:14px;padding:11px 12px;margin-bottom:8px}
+  .row .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .name{font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sub{font-size:11px;opacity:.6;margin-top:2px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2fd06a;margin-right:5px;vertical-align:middle}
+  .bal{text-align:right;white-space:nowrap}
+  .bal b{font-size:17px;color:#ffe14d}
+  .bal div{font-size:11px;opacity:.7}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:11px}
+  .chip{background:rgba(255,255,255,.08);border-radius:8px;padding:3px 7px}
+  .acts{display:flex;gap:6px;margin-top:9px}
+  .btn{border:0;border-radius:10px;padding:9px 10px;font-weight:800;font-size:13px;color:#fff;background:#2a3a8a;flex:1}
+  .btn.ok{background:#22a33f}.btn.no{background:#c8283f}.btn.gold{background:#ffc21a;color:#2a2000}
+  .empty{opacity:.6;text-align:center;padding:24px 0;font-size:14px}
+  .err{background:#5a1a2a;border-radius:14px;padding:16px;text-align:center;font-weight:700}
+  .status{font-size:12px;font-weight:800}
+  .hidden{display:none!important}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:9px 14px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:8;padding:16px}
+  .mcard{background:#1d2f7a;border-radius:18px;padding:18px;width:min(340px,100%)}
+  .mcard h3{margin:0 0 4px}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
+</style>
+</head>
+<body>
+<h1>📊 Shar Yutar admin <small id="upd"></small></h1>
+<div id="err" class="err hidden"></div>
+<div id="app" class="hidden">
+  <div class="tabs">
+    <button class="tab on" data-t="stats">📊 Statistika</button>
+    <button class="tab" data-t="users">👥 O'yinchilar</button>
+    <button class="tab" data-t="reqs">⭐ So'rovlar<span class="badge hidden" id="reqBadge"></span></button>
+  </div>
+
+  <div id="t-stats">
+    <div class="grid" id="statGrid"></div>
+    <div class="sec">💳 Oxirgi Stars to'lovlari</div>
+    <div id="pays"></div>
+  </div>
+
+  <div id="t-users" class="hidden">
+    <input id="q" placeholder="🔎 Ism, @username yoki ID">
+    <div id="users"></div>
+  </div>
+
+  <div id="t-reqs" class="hidden">
+    <div id="reqs"></div>
+  </div>
+</div>
+
+<div id="starDlg" class="modal hidden">
+  <div class="mcard">
+    <h3 id="sdName"></h3>
+    <div class="sub" id="sdBal"></div>
+    <div class="steps">
+      <button class="btn no" data-d="-50">−50</button><button class="btn no" data-d="-10">−10</button>
+      <button class="btn ok" data-d="10">+10</button><button class="btn ok" data-d="50">+50</button>
+    </div>
+    <button class="btn" id="sdClose" style="width:100%">Yopish</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const tg = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#0d1540'); tg.setBackgroundColor('#0d1540'); } catch (e) {} }
+const DEV = (location.hash.match(/dev=(\d+)/) || [])[1];
+const initData = tg ? tg.initData : (DEV ? 'dev:' + DEV : '');
+let data = null, tab = 'stats', q = '', starUid = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(n >= 1e4 ? 0 : 1) + 'K' : String(n);
+const ago = t => { const s = Math.max(0, (data ? data.now : Date.now() / 1000) - t); return s < 60 ? 'hozir' : s < 3600 ? Math.floor(s / 60) + ' daq oldin' : s < 86400 ? Math.floor(s / 3600) + ' soat oldin' : Math.floor(s / 86400) + ' kun oldin'; };
+const ITEM = {revive: '❤️ Davom etish', anti: '🛡 Anti-Kil'};
+let toastT;
+function toast(m){ $('toast').textContent = m; $('toast').style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => $('toast').style.opacity = 0, 2200); }
+
+async function api(body){
+  const r = await fetch('/api/admin', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({initData, q, ...body})});
+  const j = await r.json();
+  if (!j.ok) { if (!data) { $('err').textContent = '🔒 ' + j.error; $('err').classList.remove('hidden'); } else toast(j.error); return false; }
+  data = j; $('err').classList.add('hidden'); $('app').classList.remove('hidden'); render(); return true;
+}
+
+function render(){
+  const s = data.stats;
+  $('upd').textContent = 'yangilandi ' + new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+  const cards = [
+    ['👥 O\'yinchilar', s.users, `bugun +${s.new_today}`],
+    ['🟢 Hozir o\'ynayapti', s.online, `${s.bots} ta bot maydonda`],
+    ['💰 Stars to\'lovlari', s.paid_total + ' ⭐', `bugun ${s.paid_today} ⭐ · ${s.payments_n} ta`, 'good'],
+    ['🎁 Yuborilgan ⭐', s.sent_stars + ' ⭐', 'so\'rovlar bo\'yicha'],
+    ['⏳ Kutilayotgan so\'rov', s.pending_n, `${s.pending_stars} ⭐`, s.pending_n ? 'warn' : ''],
+    ['⭐ Balanslardagi jami', s.stars_balance + ' ⭐', 'yechib olinishi mumkin', s.stars_balance ? 'warn' : ''],
+    ['🪙 Hisoblardagi token', fmt(s.tokens), 'har 500K = 50 ⭐'],
+    ['🔗 Taklif bilan kelgan', s.refs, 'referal'],
+  ];
+  $('statGrid').innerHTML = cards.map(([k, v, sub, cls]) => `<div class="st ${cls || ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join('');
+  $('pays').innerHTML = data.payments.length ? data.payments.map(p => `<div class="row"><div class="top"><div><div class="name">${esc(p.name || p.uid)}</div><div class="sub">${esc(ITEM[p.item] || (p.item.startsWith('skin:') ? '🎨 ' + p.item.slice(5) + ' skini' : p.item))} · ${ago(p.created)}</div></div><div class="bal"><b>+${p.stars} ⭐</b></div></div></div>`).join('') : '<div class="empty">Hali to\'lov yo\'q</div>';
+
+  $('users').innerHTML = data.users.length ? data.users.map(u => `<div class="row">
+      <div class="top"><div style="min-width:0"><div class="name">${u.online ? '<span class="dot"></span>' : ''}${esc(u.name)}</div>
+        <div class="sub">${u.username ? '@' + esc(u.username) + ' · ' : ''}ID ${u.uid} · ${ago(u.created)}</div></div>
+        <div class="bal"><b>${u.stars} ⭐</b><div>${fmt(u.tokens)} token</div></div></div>
+      <div class="chips"><span class="chip">👑 rekord ${fmt(u.best)}</span><span class="chip">💳 to'lagan ${u.paid} ⭐</span><span class="chip">🔗 ${u.refs} do'st · +${fmt(u.ref_earned)}</span></div>
+      <div class="acts"><button class="btn gold" data-star="${u.uid}">⭐ Balansni o'zgartirish</button></div></div>`).join('') : '<div class="empty">Topilmadi</div>';
+
+  const pend = data.reqs.filter(r => r.status === 'pending');
+  $('reqBadge').textContent = pend.length; $('reqBadge').classList.toggle('hidden', !pend.length);
+  const ST = {pending: '⏳ Kutilmoqda', sent: '✅ Yuborildi', rejected: '❌ Rad etildi'};
+  $('reqs').innerHTML = data.reqs.length ? data.reqs.map(r => `<div class="row">
+      <div class="top"><div style="min-width:0"><div class="name">#${r.id} · ${esc(r.name || r.uid)}</div>
+        <div class="sub">${r.username ? '@' + esc(r.username) + ' · ' : ''}ID ${r.uid} · ${ago(r.created)}</div></div>
+        <div class="bal"><b>${r.stars} ⭐</b><div class="status">${ST[r.status] || r.status}</div></div></div>
+      ${r.status === 'pending' ? `<div class="sub" style="margin-top:6px">Yulduzlarni Telegram'da sovg'a qiling, keyin «Yuborildi»ni bosing.</div>
+      <div class="acts"><button class="btn ok" data-req="${r.id}" data-ok="1">✅ Yuborildi</button><button class="btn no" data-req="${r.id}" data-ok="0">❌ Rad etish</button></div>` : ''}</div>`).join('') : '<div class="empty">So\'rov yo\'q</div>';
+}
+
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  tab = b.dataset.t;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  ['stats', 'users', 'reqs'].forEach(t => $('t-' + t).classList.toggle('hidden', t !== tab));
+});
+let qT; $('q').oninput = e => { clearTimeout(qT); qT = setTimeout(() => { q = e.target.value.trim(); api({}); }, 350); };
+
+document.body.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.req) {
+    const ok = b.dataset.ok === '1';
+    const go = async () => { b.disabled = true; if (await api({action: 'req', id: +b.dataset.req, ok})) toast(ok ? '✅ Yuborildi deb belgilandi' : '❌ Rad etildi, ⭐ balansga qaytdi'); };
+    if (tg && tg.showConfirm) tg.showConfirm(ok ? 'Yulduzlarni yubordingizmi?' : 'So\'rovni rad etasizmi? ⭐ o\'yinchi balansiga qaytadi.', y => y && go()); else go();
+  } else if (b.dataset.star) {
+    starUid = +b.dataset.star; const u = data.users.find(x => x.uid === starUid);
+    $('sdName').textContent = u.name; $('sdBal').textContent = 'Hozirgi balans: ' + u.stars + ' ⭐'; $('starDlg').classList.remove('hidden');
+  } else if (b.dataset.d) {
+    if (await api({action: 'stars', uid: starUid, delta: +b.dataset.d})) {
+      const u = data.users.find(x => x.uid === starUid); $('sdBal').textContent = 'Hozirgi balans: ' + (u ? u.stars : '?') + ' ⭐'; toast('⭐ Balans o\'zgardi');
+    }
+  } else if (b.id === 'sdClose') $('starDlg').classList.add('hidden');
+});
+
+api({});
+setInterval(() => { if (document.visibilityState === 'visible') api({}); }, 10000);
+</script>
+</body>
+</html>
