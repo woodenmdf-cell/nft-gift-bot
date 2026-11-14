@@ -73,6 +73,16 @@
   .refstat{flex:1;background:rgba(255,255,255,.08);border-radius:12px;padding:8px;text-align:center}
   .refstat b{display:block;font-size:20px}
   .refstat span{font-size:11px;opacity:.75}
+  .watchb{font-size:17px;font-weight:900;padding:10px 34px;border:0;border-radius:16px;color:#fff;background:rgba(255,255,255,.16);box-shadow:0 4px 0 rgba(0,0,0,.25)}
+  #watchBar{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom));z-index:4;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+  #watchBar button{pointer-events:auto}
+  .wtop{background:rgba(20,30,80,.8);color:#fff;font-size:12px;font-weight:800;border-radius:10px;padding:4px 10px}
+  .wtop .live{color:#ff4d5e}
+  .wrow{display:flex;align-items:center;gap:8px}
+  .wnav{width:46px;height:46px;border:0;border-radius:50%;font-size:18px;font-weight:900;color:#fff;background:rgba(20,30,80,.8)}
+  .wwho{min-width:170px;text-align:center;background:rgba(20,30,80,.85);color:#fff;border-radius:14px;padding:6px 12px}
+  .wwho b{display:block;font-size:16px}
+  .wwho span{font-size:12px;color:#ffe14d;font-weight:800}
   #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;z-index:9;transition:opacity .3s;opacity:0;pointer-events:none;max-width:90%;text-align:center}
 </style>
 </head>
@@ -96,6 +106,7 @@
   <div class="menuBtns">
     <button class="play" id="playBtn">▶ O'YNASH</button>
     <button class="accb" id="accBtn">💰 HISOB</button>
+    <button class="watchb" id="watchBtn">👁 KUZATISH</button>
   </div>
   <div class="best" id="bestTxt"></div>
 </div>
@@ -175,6 +186,18 @@
   <button id="antiTg">⭐ Telegram Stars bilan to'lash</button>
 </div>
 <div id="killOut" class="hidden"></div>
+<div id="watchBar" class="hidden">
+  <div class="wtop"><span class="live">● JONLI</span> <span id="wCount"></span></div>
+  <div class="wrow">
+    <button class="wnav" id="wPrev">◀</button>
+    <div class="wwho"><b id="wName"></b><span id="wScore"></span></div>
+    <button class="wnav" id="wNext">▶</button>
+  </div>
+  <div class="wrow">
+    <button class="play" id="wPlay" style="margin:0;font-size:17px;padding:11px 26px">▶ O'YNASH</button>
+    <button class="ghost" id="wMenu" style="padding:11px 18px">☰ Menyu</button>
+  </div>
+</div>
 <div id="net" class="hidden">🔌 Serverga ulanmoqda...</div>
 <div id="toast"></div>
 
@@ -283,6 +306,7 @@ const DEV_UID = (location.hash.match(/dev=(\d+)/) || [])[1];
 // opened from the admin panel: jump straight into the arena next to that player
 const JOIN = (location.hash.match(/join=(\d+)/) || [])[1];
 let joined = false;
+const WATCH = /[?&#]watch=1/.test(location.search + location.hash);
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 let ws = null, connected = false, myId = null, lastSend = 0;
 let foods = [], players = [], me = null, popups = [];
@@ -355,7 +379,7 @@ function onMsg(m){
       me = ensurePlayer(m.id); me.x = me.sx = m.x; me.z = me.sz = m.z; me.m = m.m; me.fresh = false; me.vx = me.vz = 0;
       players = [...byId.values()];
       state = 'play'; popups = [];
-      ['menu', 'dead', 'acc'].forEach(id => show(id, false));
+      ['menu', 'dead', 'acc', 'watchBar'].forEach(id => show(id, false));
       ['score', 'board', 'boosts', 'exitBtn'].forEach(id => show(id, true));
       break;
     case 'fix': if (me) { me.x = m.x; me.z = m.z; } break;
@@ -370,6 +394,7 @@ function onMsg(m){
       break;
     case 'acc':
       acc = m;
+      if (WATCH && !joined && state === 'menu') { joined = true; openWatch(); }
       if (JOIN && !joined && state === 'menu') { joined = true; send({t: 'play', name: nameVal() || acc.name, near: +JOIN}); }
       if (!document.getElementById('menu').classList.contains('hidden')) refreshMenu();
       if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
@@ -583,9 +608,10 @@ function quad(a, b, c, d){ ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x
 
 function render(){
   // camera follows the player (or arena centre on menu)
-  const tx = me && state !== 'menu' ? me.x : Math.sin(perf / 9000) * 40;
-  const tz = me && state !== 'menu' ? me.z : Math.cos(perf / 9000) * 40;
-  const tr = me && state !== 'menu' ? rad(me.m) : 3;
+  const focus = state === 'watch' ? watchTarget() : (me && state !== 'menu' ? me : null);
+  const tx = focus ? focus.x : Math.sin(perf / 9000) * 40;
+  const tz = focus ? focus.z : Math.cos(perf / 9000) * 40;
+  const tr = focus ? rad(focus.m) : 3;
   const wantDist = 16 + tr * 5;
   cam.dist += (wantDist - cam.dist) * 0.05;
   cam.x += (tx - cam.x) * 0.25;
@@ -712,9 +738,45 @@ function refreshMenu(){
   const nm = document.getElementById('name');
   if (!nm.value && acc.name && acc.name !== 'Mehmon') nm.value = acc.name;
 }
+// ---------- spectator mode: watch the live arena without playing ----------
+let watchIdx = 0, watchId = null;
+function watchTarget(){
+  const r = ranked(); if (!r.length) return null;
+  let p = watchId != null ? r.find(q => q.id === watchId) : null;
+  if (!p) { watchIdx = Math.min(watchIdx, r.length - 1); p = r[watchIdx]; watchId = p.id; }
+  return p;
+}
+function openWatch(){
+  if (!connected) { toast('Serverga ulanmoqda...'); return; }
+  state = 'watch'; watchIdx = 0; watchId = null;
+  ['menu', 'acc', 'dead', 'boosts', 'exitBtn', 'score', 'buyDlg'].forEach(id => show(id, false));
+  show('board', true); show('watchBar', true); hudT = 0;
+}
+function watchStep(d){
+  const r = ranked(); if (!r.length) return;
+  const cur = r.findIndex(q => q.id === watchId);
+  watchIdx = ((cur < 0 ? 0 : cur) + d + r.length) % r.length; watchId = r[watchIdx].id; hudT = 0; haptic('light');
+}
+function updWatch(){
+  if ((hudT -= 1) > 0) return; hudT = 10;
+  const live = ranked(), t = watchTarget();
+  let h = '';
+  live.slice(0, 5).forEach((p, i) => h += `<div class="${p === t ? 'me' : ''}"><span>${i + 1}. ${esc(p.name)}</span><span>${fmt(p.m * 10)}</span></div>`);
+  document.getElementById('board').innerHTML = h;
+  document.getElementById('wCount').textContent = `· maydonda ${live.length} ta`;
+  document.getElementById('wName').textContent = t ? `${live.indexOf(t) + 1}. ${t.name}` : '—';
+  document.getElementById('wScore').textContent = t ? fmt(t.m * 10) + ' token' : '';
+}
+document.getElementById('watchBtn').onclick = openWatch;
+document.getElementById('wPrev').onclick = () => watchStep(-1);
+document.getElementById('wNext').onclick = () => watchStep(1);
+document.getElementById('wPlay').onclick = () => { show('watchBar', false); startGame(); };
+document.getElementById('wMenu').onclick = () => openMenu();
+['wPrev', 'wNext', 'wPlay', 'wMenu'].forEach(id => document.getElementById(id).addEventListener('pointerdown', e => e.stopPropagation()));
+
 function openMenu(){
   state = 'menu';
-  ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg'].forEach(id => show(id, false)); show('menu', true);
+  ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg', 'watchBar'].forEach(id => show(id, false)); show('menu', true);
   cancelKillUi(); refreshMenu();
 }
 function openAcc(){
@@ -780,7 +842,7 @@ function frame(t){
   if (speedLeft > 0) speedLeft -= dt;
   if (killIn) document.getElementById('kaCd').textContent = Math.max(0, Math.ceil((killIn.end - t) / 1000));
   if (killOut) document.getElementById('killOut').textContent = `🎯 ${killOut.to}ga KIL yuborildi · ${Math.max(0, Math.ceil((killOut.end - t) / 1000))}s`;
-  if (state === 'play') updHud();
+  if (state === 'play') updHud(); else if (state === 'watch') updWatch();
   render();
   requestAnimationFrame(frame);
 }

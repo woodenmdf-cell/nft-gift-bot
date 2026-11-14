@@ -235,7 +235,8 @@ def check_init_data(init_data):
 def play_keyboard():
     if not PUBLIC_URL:
         return None
-    return {"inline_keyboard": [[{"text": "🎮 O'ynash", "web_app": {"url": PUBLIC_URL}}]]}
+    return {"inline_keyboard": [[{"text": "🎮 O'ynash", "web_app": {"url": PUBLIC_URL}}],
+                                [{"text": "👁 Kuzatish (jonli)", "web_app": {"url": PUBLIC_URL + "/?watch=1"}}]]}
 
 
 async def bot_loop():
