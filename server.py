@@ -908,11 +908,44 @@ async def ws_session(reader, writer):
         conns.discard(c)
         c.closed = True
         if c.player:
+            remember(c)
             game.remove(c.player)
         try:
             writer.close()
         except Exception:
             pass
+
+
+RESUME = {}           # uid -> what their blob had when the connection dropped
+RESUME_TTL = 600      # seconds a dropped game can be picked up again
+
+
+def remember(c):
+    p = c.player
+    if p and p.alive and c.acc and c.acc.uid is not None and p.m > 12:
+        RESUME[c.acc.uid] = {"m": p.m, "rb": p.round_bank, "t": time.time()}
+
+
+def save_resume_on_exit():
+    """Railway stops the old container on every deploy: keep everyone's game for the new one."""
+    for c in list(conns):
+        remember(c)
+    for a in Account.cache.values():
+        a.save()
+    set_setting("resume", json.dumps(RESUME))
+    log.info("saved %d games for resuming", len(RESUME))
+
+
+def load_resume():
+    try:
+        data = json.loads(setting("resume", "{}") or "{}")
+    except ValueError:
+        data = {}
+    now = time.time()
+    for uid, r in data.items():
+        if now - r.get("t", 0) < RESUME_TTL:
+            RESUME[int(uid)] = r
+    set_setting("resume", "{}")
 
 
 def clean_name(s, default):
@@ -949,6 +982,11 @@ async def on_message(c, m):
             c.acc.name = clean_name(m["name"], c.acc.name)
             c.acc.save()
         c.player = p = game.spawn_human(c)
+        r = RESUME.pop(c.acc.uid, None) if c.acc.uid is not None else None
+        if r and time.time() - r["t"] < RESUME_TTL:
+            p.m, p.round_bank = r["m"], r["rb"]
+            p.x, p.z = game.safe_spot(rad(p.m))
+            c.toast(f"♻️ O'yiningiz tiklandi: {fmt(p.m * 10)} token")
         near = m.get("near")
         if near and c.acc.uid is not None and c.acc.uid == admin_id():
             friend = next((q for q in game.players if q.conn and q.conn.acc.uid == int(near) and q.alive), None)
@@ -1384,8 +1422,22 @@ async def game_loop():
 
 
 async def main():
+    import signal
+    load_resume()
     for _ in range(MIN_BOTS + 6):
         game.new_bot()
+
+    def on_term():
+        try:
+            save_resume_on_exit()
+        finally:
+            os._exit(0)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, on_term)
+        except (NotImplementedError, RuntimeError):
+            pass
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
     await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed())

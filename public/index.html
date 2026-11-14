@@ -306,6 +306,7 @@ const DEV_UID = (location.hash.match(/dev=(\d+)/) || [])[1];
 // opened from the admin panel: jump straight into the arena next to that player
 const JOIN = (location.hash.match(/join=(\d+)/) || [])[1];
 let joined = false;
+let resumeAfterReconnect = false;   // the connection dropped mid-game: go straight back in once it is back
 const WATCH = /[?&#]watch=1/.test(location.search + location.hash);
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 let ws = null, connected = false, myId = null, lastSend = 0;
@@ -334,7 +335,7 @@ function connect(){
   ws.onmessage = e => { try { onMsg(JSON.parse(e.data)); } catch (err) { console.error(err); } };
   ws.onclose = () => {
     connected = false; netEl.classList.remove('hidden');
-    if (state === 'play') { state = 'menu'; me = null; myId = null; openMenu(); }
+    if (state === 'play') { resumeAfterReconnect = true; if (me) byId.delete(me.id); me = null; myId = null; openMenu(); }
     setTimeout(connect, 1500);
   };
 }
@@ -394,6 +395,7 @@ function onMsg(m){
       break;
     case 'acc':
       acc = m;
+      if (resumeAfterReconnect && state === 'menu') { resumeAfterReconnect = false; send({t: 'play', name: nameVal() || acc.name}); }
       if (WATCH && !joined && state === 'menu') { joined = true; openWatch(); }
       if (JOIN && !joined && state === 'menu') { joined = true; send({t: 'play', name: nameVal() || acc.name, near: +JOIN}); }
       if (!document.getElementById('menu').classList.contains('hidden')) refreshMenu();
