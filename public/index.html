@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Shar Yutar</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html,body{margin:0;height:100%;overflow:hidden;background:#8ec9ff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:none}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .hud{position:fixed;pointer-events:none;z-index:2}
+  #score{top:calc(10px + env(safe-area-inset-top));left:10px;background:rgba(20,40,90,.55);color:#fff;font-weight:800;padding:6px 12px;border-radius:12px;font-size:15px}
+  #score small{display:block;font-weight:600;opacity:.8;font-size:11px}
+  #board{top:calc(10px + env(safe-area-inset-top));right:10px;background:rgba(20,40,90,.85);color:#fff;border-radius:12px;padding:6px 8px;font-size:12px;min-width:130px}
+  #board div{display:flex;justify-content:space-between;gap:10px;padding:1px 2px;white-space:nowrap}
+  #board .me{color:#ffe14d;font-weight:800}
+  #board .sep{opacity:.5;justify-content:center}
+  #boosts{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));left:0;right:0;display:flex;justify-content:center;gap:10px;z-index:3}
+  .bbtn{pointer-events:auto;border:0;border-radius:14px;padding:9px 13px;font-weight:800;font-size:13px;color:#fff;box-shadow:0 4px 0 rgba(0,0,0,.2);display:flex;align-items:center;gap:6px}
+  .bbtn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.2)}
+  .bbtn.speed{background:linear-gradient(#4aa8ff,#2a78e0)}
+  .bbtn.kill{background:linear-gradient(#ff5a6e,#d81f3c)}
+  .ov{position:fixed;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;background:rgba(5,10,35,.55);padding:16px}
+  .kcard{background:#1d2f7a;color:#fff;border-radius:18px;padding:18px 16px;width:min(340px,94vw);text-align:center}
+  .kcard h3{margin:0 0 4px;font-size:22px}
+  .krow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(255,255,255,.1);border-radius:12px;padding:10px 12px;margin-top:8px;font-weight:800}
+  .krow button{border:0;border-radius:10px;padding:8px 12px;font-weight:900;color:#fff;background:linear-gradient(#ff5a6e,#d81f3c)}
+  #killAlert{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:7;width:min(350px,94vw);background:linear-gradient(#e8344f,#a3122a);color:#fff;border-radius:18px;padding:14px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.35);animation:shake .4s 2}
+  #killAlert .cd{font-size:44px;font-weight:900;line-height:1.1}
+  #killAlert button{width:100%;margin-top:8px;border:0;border-radius:12px;padding:12px;font-size:17px;font-weight:900}
+  #antiBtn{color:#10306b;background:linear-gradient(#bfe3ff,#6fb8ff);box-shadow:0 4px 0 #2d6fb8}
+  #antiTg{color:#fff;background:rgba(255,255,255,.18);font-size:14px!important;padding:9px!important}
+  #killOut{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:4;background:rgba(160,20,45,.9);color:#fff;font-weight:900;border-radius:12px;padding:8px 14px;font-size:14px;pointer-events:none;white-space:nowrap}
+  @keyframes shake{0%,100%{transform:translateX(-50%)}25%{transform:translateX(calc(-50% - 6px))}75%{transform:translateX(calc(-50% + 6px))}}
+  .bbtn .tag{background:rgba(255,255,255,.25);border-radius:8px;padding:1px 6px;font-size:11px}
+  .bbtn.on{filter:saturate(.3) brightness(1.1)}
+  .screen{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(60,110,220,.85),rgba(15,25,70,.95));color:#fff;text-align:center}
+  .hidden{display:none!important}
+  h1{font-size:44px;margin:0;letter-spacing:1px;text-shadow:0 4px 0 #1b2f80;font-weight:900}
+  h1 span{color:#ffe14d}
+  .sub{opacity:.85;margin:6px 0 18px;font-size:14px}
+  input{font-size:17px;padding:11px 14px;border-radius:12px;border:0;width:240px;text-align:center;font-weight:700;outline:none}
+  .skins{display:grid;grid-template-columns:repeat(4,64px);gap:10px;margin:18px 0}
+  .sk{width:64px;height:64px;border-radius:50%;position:relative;border:3px solid transparent;cursor:pointer}
+  .sk.sel{border-color:#ffe14d;box-shadow:0 0 0 3px rgba(255,225,77,.35)}
+  .sk .lock{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);background:#ffb800;color:#3a2600;font-size:11px;font-weight:900;border-radius:8px;padding:1px 6px;white-space:nowrap}
+  .play{margin-top:8px;font-size:22px;font-weight:900;padding:14px 56px;border:0;border-radius:18px;color:#2a2000;background:linear-gradient(#ffe766,#ffc21a);box-shadow:0 6px 0 #b98400}
+  .play:active{transform:translateY(3px);box-shadow:0 3px 0 #b98400}
+  .best{margin-top:14px;opacity:.85;font-size:14px}
+  .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
+  .stat{font-size:18px;margin:4px 0}
+  .btnrow{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+  .rev{font-size:17px;font-weight:900;padding:12px 26px;border:0;border-radius:14px;color:#fff;background:linear-gradient(#53d36b,#24a63f);box-shadow:0 5px 0 #17762b}
+  .ghost{background:rgba(255,255,255,.15);color:#fff;font-size:16px;font-weight:800;padding:12px 26px;border:0;border-radius:14px}
+  .menuBtns{display:flex;flex-direction:column;gap:12px;align-items:center}
+  .accb{font-size:20px;font-weight:900;padding:12px 44px;border:0;border-radius:18px;color:#fff;background:linear-gradient(#5fd57a,#22a33f);box-shadow:0 6px 0 #16752b}
+  .accb:active{transform:translateY(3px);box-shadow:0 3px 0 #16752b}
+  #exitBtn{position:fixed;top:calc(62px + env(safe-area-inset-top));left:10px;z-index:3;border:0;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12px;color:#fff;background:rgba(20,40,90,.7)}
+  .card{background:rgba(255,255,255,.1);border-radius:16px;padding:14px 16px;width:min(340px,92vw);margin:6px 0;text-align:left}
+  .card .k{opacity:.75;font-size:13px}
+  .card .v{font-size:26px;font-weight:900;margin-top:2px}
+  .bar{height:12px;border-radius:8px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffe14d,#ff9f1a);border-radius:8px}
+  .hint{font-size:12px;opacity:.7;margin-top:6px}
+  .wd{margin-top:10px;width:100%;font-size:16px;font-weight:900;padding:12px;border:0;border-radius:14px;color:#2a2000;background:linear-gradient(#ffe766,#ffc21a);box-shadow:0 4px 0 #b98400}
+  .wd:disabled{filter:grayscale(1);opacity:.55;box-shadow:none}
+  .req{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid rgba(255,255,255,.1)}
+  .req:first-child{border-top:0}
+  .scrollscr{justify-content:flex-start;overflow-y:auto;padding-top:calc(30px + env(safe-area-inset-top))}
+  .bbtn.dis{filter:grayscale(1);opacity:.5}
+  #net{position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:9;background:rgba(0,0,0,.7);color:#fff;font-size:13px;padding:6px 12px;border-radius:10px;pointer-events:none}
+  #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;z-index:9;transition:opacity .3s;opacity:0;pointer-events:none;max-width:90%;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="score" class="hud hidden">0<small>token</small></div>
+<button id="exitBtn" class="hidden">☰ Menyu</button>
+<div id="board" class="hud hidden"></div>
+<div id="boosts" class="hidden">
+  <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
+  <button class="bbtn kill" id="bKill">🎯 KIL <span class="tag">10 ⭐</span></button>
+</div>
+
+<div id="menu" class="screen">
+  <h1>SHAR <span>YUTAR</span></h1>
+  <div class="sub">Donachalarni ye, kattalash, kichiklarni yut!</div>
+  <input id="name" maxlength="14" placeholder="Ismingiz">
+  <div class="skins" id="skins"></div>
+  <div class="hint" id="skinHint" style="margin:-8px 0 14px;font-size:12px;opacity:.75"></div>
+  <div class="menuBtns">
+    <button class="play" id="playBtn">▶ O'YNASH</button>
+    <button class="accb" id="accBtn">💰 HISOB</button>
+  </div>
+  <div class="best" id="bestTxt"></div>
+</div>
+
+<div id="dead" class="screen dead hidden">
+  <h2>Sizni yutishdi!</h2>
+  <div class="stat" id="dScore"></div>
+  <div class="stat" id="dBest"></div>
+  <div class="stat" id="dKiller" style="opacity:.8;font-size:14px"></div>
+  <div class="stat" id="dBank" style="color:#ffe14d;font-size:15px;font-weight:800"></div>
+  <div class="btnrow">
+    <button class="rev" id="revBtn">❤️ Davom etish · 10 ⭐</button>
+    <button class="ghost" id="againBtn">Qaytadan boshlash</button>
+    <button class="ghost" id="menuBtn">Menyu</button>
+  </div>
+</div>
+<div id="acc" class="screen scrollscr hidden">
+  <h1 style="font-size:32px">💰 <span>HISOB</span></h1>
+  <div class="sub" id="accName"></div>
+  <div class="card">
+    <div class="k">O'yin tokenlari</div>
+    <div class="v" id="accTok">0</div>
+    <div class="bar"><i id="accBar" style="width:0%"></i></div>
+    <div class="hint" id="accLeft"></div>
+    <div class="hint">O'yinda har 50K token yig'ilganda avtomatik hisobga o'tadi. 50K ga yetmagani o'tmaydi.</div>
+  </div>
+  <div class="card">
+    <div class="k">Balans</div>
+    <div class="v" id="accStars">0 ⭐</div>
+    <div class="hint">Har 500K token avtomatik 50 ⭐ ga aylanib, balansga tushadi.</div>
+    <button class="wd" id="wdBtn">⭐ Yulduzga aylantirish</button>
+    <div class="hint" id="wdHint"></div>
+  </div>
+  <div class="card">
+    <div class="k">So'rovlarim</div>
+    <div id="accReqs" style="margin-top:6px"></div>
+  </div>
+  <button class="ghost" id="accBack" style="margin-top:10px">← Orqaga</button>
+</div>
+<div id="buyDlg" class="screen hidden" style="background:rgba(5,10,35,.75)">
+  <div class="card" style="text-align:center;background:#1d2f7a;padding:22px 18px">
+    <div id="bdBall" style="width:90px;height:90px;border-radius:50%;margin:0 auto 12px"></div>
+    <div style="font-size:22px;font-weight:900" id="bdName"></div>
+    <div style="font-size:30px;font-weight:900;color:#ffe14d;margin:4px 0" id="bdPrice"></div>
+    <div class="hint" id="bdBal" style="font-size:14px;opacity:.85"></div>
+    <button class="wd" id="bdFromBal">💰 Balansdan to'lash</button>
+    <button class="ghost" id="bdTg" style="width:100%;margin-top:10px">⭐ Telegram Stars bilan to'lash</button>
+    <button class="ghost" id="bdCancel" style="width:100%;margin-top:10px;background:transparent">Bekor qilish</button>
+  </div>
+</div>
+<div id="killPick" class="ov hidden">
+  <div class="kcard">
+    <h3>🎯 KIL</h3>
+    <div class="hint">Siz TOP-3 dasiz! Qolgan ikkitasidan birini tanlang. U 10 soniya ichida Anti-Kil ishlatmasa, uning barcha tokenlari sizniki bo'ladi. Narxi: balansdan 10 ⭐ (qaytarilmaydi).</div>
+    <div id="killList"></div>
+    <button class="ghost" id="killCancel" style="width:100%;margin-top:12px">Bekor qilish</button>
+  </div>
+</div>
+<div id="killAlert" class="hidden">
+  <div style="font-size:17px;font-weight:900" id="kaTitle"></div>
+  <div style="font-size:13px;opacity:.9;margin-top:4px">10 soniya ichida Anti-Kil ishlatmasangiz, yig'gan tokenlaringiz 0 bo'ladi!</div>
+  <div class="cd" id="kaCd">10</div>
+  <button id="antiBtn">🛡 ANTI-KIL · 10 ⭐</button>
+  <button id="antiTg">⭐ Telegram Stars bilan to'lash</button>
+</div>
+<div id="killOut" class="hidden"></div>
+<div id="net" class="hidden">🔌 Serverga ulanmoqda...</div>
+<div id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+// Telegram SDK is loaded only inside Telegram, so the page also runs as a plain web page
+let tg = null;
+function initTg(){
+  const w = window.Telegram && window.Telegram.WebApp;
+  if (!w || !w.initData) return;
+  tg = w;
+  try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch(e){}
+  const u = tg.initDataUnsafe && tg.initDataUnsafe.user;
+  const inp = document.getElementById('name');
+  if (u && !inp.value) inp.value = u.first_name || u.username || '';
+}
+const inTelegram = /tgWebApp/.test(location.hash + location.search) || !!window.TelegramWebviewProxy;
+if (inTelegram) {
+  const sc = document.createElement('script');
+  sc.src = 'https://telegram.org/js/telegram-web-app.js';
+  sc.onload = () => { initTg(); connect(); };
+  sc.onerror = () => connect();
+  document.head.appendChild(sc);
+}
+
+// ---------- storage ----------
+const store = {
+  get(k, d){ try { const v = localStorage.getItem('sy_'+k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem('sy_'+k, JSON.stringify(v)); } catch(e){} }
+};
+
+// ---------- skins ----------
+const SKINS = [
+  {id:'yashil', type:'solid', c:'#2fd06a', price:0, label:'Silliq yashil'},
+  {id:'tarvuz', type:'melon', price:15, label:'Tarvuz'},
+  {id:'konfet', type:'candy', price:15, label:'Konfet'},
+  {id:'leopard', type:'leopard', price:20, label:'Leopard'},
+  {id:'gulli', type:'flower', price:25, label:'Gulli'},
+  {id:'kamalak', type:'rainbow', price:25, label:'Kamalak'},
+  {id:'muz', type:'ice', price:30, label:'Muz'},
+  {id:'olov', type:'fire', price:35, label:'Olov'},
+  {id:'lava', type:'lava', price:45, label:'Lava'},
+  {id:'chaqmoq', type:'bolt', price:45, label:'Chaqmoq'},
+  {id:'galaktika', type:'galaxy', price:50, label:'Galaktika'},
+  {id:'oltin', type:'gold', price:75, label:'Oltin'},
+];
+const toastEl = document.getElementById('toast');
+let toastT = 0;
+function toast(msg){ toastEl.textContent = msg; toastEl.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(()=>toastEl.style.opacity=0, 2200); }
+function haptic(kind){ if (!tg || !tg.HapticFeedback) return; try { kind === 'err' ? tg.HapticFeedback.notificationOccurred('error') : tg.HapticFeedback.impactOccurred(kind); } catch(e){} }
+// ---------- canvas & camera ----------
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1, F = 600;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  F = Math.min(H * 0.95, W * 1.6);
+}
+window.addEventListener('resize', resize); resize();
+
+const PITCH = 0.5, SP = Math.sin(PITCH), CP = Math.cos(PITCH);
+const cam = {x:0, y:20, z:20, dist:18, cy:0};
+function project(x, y, z){
+  const vx = x - cam.x, vy = y - cam.y, vz = z - cam.z;
+  const depth = -vy * SP - vz * CP;
+  if (depth < 0.5) return null;
+  const sy = vy * CP - vz * SP, s = F / depth;
+  return {x: W/2 + vx * s, y: cam.cy - sy * s, s, d: depth};
+}
+
+// ---------- world ----------
+const S = 130;
+const FOOD_COLORS = ['#ff4d5e','#3f7bff','#2fd06a','#ffd21f','#b05cff','#ff8a1f','#1fd0d0','#ff5cc8'];
+const rad = m => 0.45 * Math.sqrt(m);
+const speedOf = m => 9 * Math.pow(m / 10, -0.2);
+const fmt = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'K' : String(Math.floor(n));
+
+// ---------- input: drag-anywhere joystick + keys ----------
+const joy = {on:false, ox:0, oy:0, x:0, y:0};
+const keys = {};
+cv.addEventListener('pointerdown', e => { joy.on = true; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; });
+window.addEventListener('pointermove', e => { if (joy.on) { joy.x = e.clientX; joy.y = e.clientY; } });
+window.addEventListener('pointerup', () => { joy.on = false; });
+window.addEventListener('pointercancel', () => { joy.on = false; });
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+function inputDir(){
+  let dx = 0, dz = 0;
+  if (keys['arrowleft'] || keys['a']) dx -= 1;
+  if (keys['arrowright'] || keys['d']) dx += 1;
+  if (keys['arrowup'] || keys['w']) dz -= 1;
+  if (keys['arrowdown'] || keys['s']) dz += 1;
+  if (dx || dz) { const l = Math.hypot(dx, dz); return {x: dx/l, z: dz/l, k: 1}; }
+  if (joy.on) {
+    const jx = joy.x - joy.ox, jy = joy.y - joy.oy, l = Math.hypot(jx, jy);
+    if (l > 6) return {x: jx/l, z: jy/l, k: Math.min(1, l / 50)};
+  }
+  return {x:0, z:0, k:0};
+}
+
+// ================= online client: the server owns mass, tokens, stars and KIL =================
+const DEV_UID = (location.hash.match(/dev=(\d+)/) || [])[1];
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+let ws = null, connected = false, myId = null, lastSend = 0;
+let foods = [], players = [], me = null, popups = [];
+const byId = new Map();
+let meta = {};
+let acc = {tokens: 0, stars: 0, owned: ['yashil'], skin: 'yashil', reqs: [], best: 0, guest: true};
+let state = 'menu', speedLeft = 0, killIn = null, killOut = null;
+const SKIN_BY_ID = Object.fromEntries(SKINS.map(s => [s.id, s]));
+const skinOf = id => SKIN_BY_ID[id] || (id && id[0] === '#' ? {type: 'solid', c: id} : SKINS[0]);
+const KILL_COST = 10, ANTI_COST = 10, TOKEN_GOAL = 500000, GOAL_STARS = 50;
+
+function send(o){ if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+const nameVal = () => document.getElementById('name').value.trim().slice(0, 14);
+const netEl = document.getElementById('net');
+
+function connect(){
+  netEl.classList.remove('hidden');
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    connected = true; netEl.classList.add('hidden');
+    const hello = {t: 'hello', initData: tg ? tg.initData : '', name: nameVal()};
+    if (DEV_UID) hello.dev_uid = +DEV_UID;
+    send(hello);
+  };
+  ws.onmessage = e => { try { onMsg(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+  ws.onclose = () => {
+    connected = false; netEl.classList.remove('hidden');
+    if (state === 'play') { state = 'menu'; me = null; myId = null; openMenu(); }
+    setTimeout(connect, 1500);
+  };
+}
+
+function ensurePlayer(id){
+  let p = byId.get(id);
+  if (!p) {
+    const md = meta[id] || ['?', 'yashil', 0];
+    p = {id, name: md[0], skin: skinOf(md[1]), alive: true, x: 0, z: 0, sx: 0, sz: 0, m: 10, fresh: true};
+    byId.set(id, p);
+  }
+  return p;
+}
+
+function onMsg(m){
+  switch (m.t) {
+    case 'init':
+      foods = m.food.map(([x, z, b, c]) => ({x, z, r: b ? 0.75 : 0.38, c: FOOD_COLORS[c]}));
+      break;
+    case 'meta':
+      meta = m.p;
+      for (const [id, md] of Object.entries(meta)) { const p = byId.get(+id); if (p) { p.name = md[0]; p.skin = skinOf(md[1]); } }
+      break;
+    case 's': {
+      const seen = new Set();
+      for (const [id, x, z, mass, sp] of m.p) {
+        const p = ensurePlayer(id); seen.add(id); p.alive = true;
+        if (p.fresh) { p.x = p.sx = x; p.z = p.sz = z; p.fresh = false; }
+        if (p === me) {
+          const dm = mass - me.m;
+          if (dm >= 0.9) popups.push({x: me.x, z: me.z - rad(me.m), t: 0, txt: '+' + fmt(dm * 10)});
+          me.m = mass; speedLeft = sp;
+        } else { p.sx = x; p.sz = z; p.m = mass; }
+      }
+      for (const id of [...byId.keys()]) if (!seen.has(id) && id !== myId) byId.delete(id);
+      players = [...byId.values()];
+      for (const [i, x, z, b, c] of m.f) foods[i] = {x, z, r: b ? 0.75 : 0.38, c: FOOD_COLORS[c]};
+      break;
+    }
+    case 'spawn':
+      myId = m.id;
+      me = ensurePlayer(m.id); me.x = me.sx = m.x; me.z = me.sz = m.z; me.m = m.m; me.fresh = false; me.vx = me.vz = 0;
+      players = [...byId.values()];
+      state = 'play'; popups = [];
+      ['menu', 'dead', 'acc'].forEach(id => show(id, false));
+      ['score', 'board', 'boosts', 'exitBtn'].forEach(id => show(id, true));
+      break;
+    case 'fix': if (me) { me.x = m.x; me.z = m.z; } break;
+    case 'dead':
+      state = 'dead'; haptic('err'); cancelKillUi();
+      if (me) byId.delete(me.id); me = null; myId = null;
+      document.getElementById('dScore').textContent = '🏆 Natija: ' + fmt(m.score);
+      document.getElementById('dBest').textContent = '👑 Rekord: ' + fmt(m.best);
+      document.getElementById('dKiller').textContent = m.killer + ' sizni yutib yubordi';
+      document.getElementById('dBank').textContent = m.banked ? "💰 Bu o'yinda hisobga o'tdi: +" + fmt(m.banked) : "💡 50K ga yetgan tokenlargina hisobga o'tadi";
+      ['boosts', 'exitBtn'].forEach(id => show(id, false)); show('dead', true);
+      break;
+    case 'acc':
+      acc = m;
+      if (!document.getElementById('menu').classList.contains('hidden')) refreshMenu();
+      if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
+      if (killIn) updAntiBtn();
+      break;
+    case 'toast':
+      toast(m.msg);
+      if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+50 ⭐', big: true}); haptic('heavy'); }
+      break;
+    case 'speedOn':
+      speedLeft = m.sec; toast('⚡ 30 soniya 2x tezlik!'); haptic('medium');
+      if (me) popups.push({x: me.x, z: me.z, t: 0, txt: '-1K ⚡', big: true});
+      break;
+    case 'killOut':
+      killOut = {to: m.to, end: performance.now() + m.sec * 1000}; show('killOut', true); haptic('heavy');
+      break;
+    case 'killIn':
+      killIn = {from: m.from, end: performance.now() + m.sec * 1000};
+      document.getElementById('kaTitle').textContent = `⚠️ ${m.from} sizga KIL ishlatdi!`;
+      updAntiBtn(); show('killAlert', true); haptic('err');
+      break;
+    case 'killEnd':
+      toast(m.msg);
+      if (m.safe || m.lost) { killIn = null; show('killAlert', false); haptic(m.lost ? 'err' : 'medium'); }
+      else { killOut = null; show('killOut', false); if (m.gain && me) popups.push({x: me.x, z: me.z, t: 0, txt: '+' + fmt(m.gain) + ' 💀', big: true}); }
+      break;
+    case 'invoice':
+      if (tg && tg.openInvoice) tg.openInvoice(m.link, st => { if (st === 'paid') toast("To'lov qabul qilindi ✅"); else if (st === 'failed') toast("To'lov o'tmadi"); });
+      else toast("To'lov faqat Telegram ichida ishlaydi");
+      break;
+  }
+}
+
+// ---------- local movement of my own blob (the server checks the speed) ----------
+function moveMe(dt){
+  const d = inputDir();
+  let sp = speedOf(me.m) * d.k * (speedLeft > 0 ? 2 : 1);
+  const a = Math.min(1, dt * 6);
+  me.vx = (me.vx || 0) + (d.x * sp - (me.vx || 0)) * a;
+  me.vz = (me.vz || 0) + (d.z * sp - (me.vz || 0)) * a;
+  me.x += me.vx * dt; me.z += me.vz * dt;
+  const lim = S - rad(me.m) * 0.6;
+  me.x = Math.max(-lim, Math.min(lim, me.x)); me.z = Math.max(-lim, Math.min(lim, me.z));
+  const now = performance.now();
+  if (now - lastSend > 50) { lastSend = now; send({t: 'pos', x: +me.x.toFixed(2), z: +me.z.toFixed(2)}); }
+}
+
+// ---------- HUD ----------
+let hudT = 0;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const ranked = () => players.filter(p => p.alive).sort((a, b) => b.m - a.m);
+function updHud(){
+  if ((hudT -= 1) > 0) return; hudT = 10;
+  if (!me) return;
+  document.getElementById('score').innerHTML = fmt(me.m * 10) + '<small>/ 50K token</small>';
+  const live = ranked(), rank = live.indexOf(me) + 1;
+  let h = '';
+  live.slice(0, 5).forEach((p, i) => h += `<div class="${p === me ? 'me' : ''}"><span>${i + 1}. ${esc(p.name)}</span><span>${fmt(p.m * 10)}</span></div>`);
+  if (rank > 5) h += `<div class="sep">···</div><div class="me"><span>${rank}. ${esc(me.name)}</span><span>${fmt(me.m * 10)}</span></div>`;
+  document.getElementById('board').innerHTML = h;
+  document.getElementById('bSpeed').classList.toggle('on', speedLeft > 0);
+  document.getElementById('tSpeed').textContent = speedLeft > 0 ? Math.ceil(speedLeft) + 's' : '1K token';
+  // KIL opens only when you are in the top 3 yourself
+  document.getElementById('bKill').classList.toggle('dis', !(rank >= 1 && rank <= 3));
+}
+function cancelKillUi(){ killIn = killOut = null; ['killAlert', 'killOut', 'killPick'].forEach(id => show(id, false)); }
+function openKill(){
+  if (state !== 'play' || !me) return;
+  const top = ranked().slice(0, 3);
+  if (!top.includes(me)) { toast('🔒 KIL faqat TOP-3 ga chiqqaningizda ochiladi'); return; }
+  if (killOut) { toast('KIL allaqachon ishlayapti'); return; }
+  if (acc.stars < KILL_COST) { toast(`KIL uchun balansda kamida ${KILL_COST} ⭐ bo'lishi kerak`); return; }
+  const list = top.filter(p => p !== me);
+  document.getElementById('killList').innerHTML = list.map((p, i) =>
+    `<div class="krow"><span>${esc(p.name)} · ${fmt(p.m * 10)}</span><button data-id="${p.id}">🎯 KIL</button></div>`).join('');
+  document.querySelectorAll('#killList button').forEach(b => b.onclick = () => { send({t: 'kill', target: +b.dataset.id}); show('killPick', false); });
+  show('killPick', true);
+}
+function updAntiBtn(){
+  const b = document.getElementById('antiBtn');
+  b.disabled = acc.stars < ANTI_COST;
+  b.textContent = acc.stars < ANTI_COST ? '🛡 ANTI-KIL · balansda ⭐ yetmaydi' : `🛡 ANTI-KIL · ${ANTI_COST} ⭐ (balans: ${acc.stars})`;
+}
+document.getElementById('antiBtn').onclick = () => send({t: 'anti'});
+document.getElementById('antiTg').onclick = () => send({t: 'invoice', item: 'anti'});
+document.getElementById('killCancel').onclick = () => show('killPick', false);
+function show(id, on){ document.getElementById(id).classList.toggle('hidden', !on); }
+// ---------- rendering ----------
+// patterns are laid out in unit dome coordinates: u = -1..1 across, v = -1..1 up
+let seed = 12345; const srand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const PAT = {
+  galaxy: Array.from({length: 18}, () => [srand() * 1.8 - 0.9, srand() * 1.9 - 0.9, srand() * 0.8 + 0.4]),
+  lava: Array.from({length: 7}, () => { let u = srand() * 1.6 - 0.8, v = srand() * 1.8 - 0.9; const pts = [[u, v]];
+          for (let i = 0; i < 4; i++) { u += srand() * 0.5 - 0.25; v += srand() * 0.5 - 0.25; pts.push([u, v]); } return pts; }),
+  pools: Array.from({length: 6}, () => [srand() * 1.6 - 0.8, srand() * 1.6 - 0.8, srand() * 0.06 + 0.04]),
+  bolts: [-0.55, 0.05, 0.6].map((u0, k) => { const pts = []; let u = u0, v = 1.05;
+          for (let i = 0; i < 6; i++) { pts.push([u, v]); u += (i % 2 ? -1 : 1) * (0.18 + srand() * 0.1); v -= 0.36; } return pts; }),
+  flowers: [[-0.5,0.5],[0.15,0.75],[0.6,0.3],[-0.15,0.05],[-0.7,-0.25],[0.4,-0.35],[0.75,-0.75],[-0.35,-0.7],[0.05,-0.45],[-0.05,0.95]],
+  spots: Array.from({length: 16}, () => [srand() * 1.8 - 0.9, srand() * 1.8 - 0.9, srand() * 0.06 + 0.06]),
+  flames: Array.from({length: 6}, (_, i) => [-0.75 + i * 0.3 + srand() * 0.1, srand() * 0.4 + 0.5]),
+  cracks: Array.from({length: 5}, () => { let u = srand() * 1.4 - 0.7, v = srand() * 1.4 - 0.7; const pts = [[u, v]];
+          for (let i = 0; i < 3; i++) { u += srand() * 0.6 - 0.3; v += srand() * 0.6 - 0.3; pts.push([u, v]); } return pts; }),
+};
+const FLOWER_COLS = ['#ffffff', '#ffef7a', '#c9a8ff', '#ff9ccf'];
+function shade(hex, f){
+  const n = parseInt(hex.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  if (f > 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; } else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+function domePath(g, X, Y, R, sa, ca){
+  g.beginPath();
+  g.ellipse(X, Y, R, Math.max(0.5, R * sa), 0, 0, Math.PI);
+  g.ellipse(X, Y, R, Math.max(0.5, R * ca), 0, Math.PI, Math.PI * 2);
+  g.closePath();
+}
+const BASE = {
+  galaxy: ['#7b5cff', '#2b1a7a', '#0d0830'], fire: ['#fff3a0', '#ffb21f', '#ff4b1f', '#a3120a'],
+  ice: ['#ffffff', '#b9f0ff', '#4cb8f0', '#1e6fb5'], gold: ['#fffbe0', '#ffd84a', '#d99a00', '#7d5400'],
+  lava: ['#7a2a0c', '#3a0f04', '#160401'], bolt: ['#3d5bd6', '#1b2a6b', '#060b2a'],
+  flower: ['#e9fff0', '#9be8b3', '#3fae63'], melon: ['#8ff09c', '#3cc95a', '#1b7a32'],
+  leopard: ['#fff0c2', '#ffc95c', '#c97a12'], candy: ['#ffffff', '#f4f4fb', '#cfd0e0'],
+};
+// paints one blob (dome) of the given skin; also used for the round previews in the menu
+function paintDome(g, skin, X, Y, R, sa, ca, detail){
+  const P = (u, v) => [X + u * R, Y - v * R * (v >= 0 ? ca : sa)];
+  const hx = X - R * 0.35, hy = Y - R * ca * 0.55;
+  domePath(g, X, Y, R, sa, ca);
+  let fill;
+  if (skin.type === 'rainbow') {
+    fill = g.createLinearGradient(X, Y - R * ca, X, Y + R * sa);
+    ['#ff4d5e', '#ff9f1a', '#ffe14d', '#3fd36b', '#3f9bff', '#9b5cff'].forEach((c, i) => fill.addColorStop(i / 5, c));
+  } else {
+    fill = g.createRadialGradient(hx, hy, R * 0.05, X, Y, R * 1.25);
+    const st = BASE[skin.type] || [shade(skin.c, 0.5), skin.c, shade(skin.c, -0.4)];
+    st.forEach((c, i) => fill.addColorStop(i / (st.length - 1), c));
+  }
+  g.fillStyle = fill; g.fill();
+  if (detail) {
+    g.save(); domePath(g, X, Y, R, sa, ca); g.clip();
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const line = (pts, w, col) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); pts.forEach(([u, v], i) => { const [x, y] = P(u, v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); };
+    const dot = (u, v, r, col) => { const [x, y] = P(u, v); g.fillStyle = col; g.beginPath(); g.arc(x, y, Math.max(0.6, r * R), 0, 7); g.fill(); };
+    switch (skin.type) {
+      case 'galaxy': for (const [u, v, k] of PAT.galaxy) { g.globalAlpha = k * 0.9; dot(u, v, 0.022 * k, '#fff'); } g.globalAlpha = 1; break;
+      case 'lava':
+        for (const [u, v, r] of PAT.pools) dot(u, v, r, 'rgba(255,120,20,.55)');
+        for (const c of PAT.lava) { line(c, R * 0.1, 'rgba(255,80,0,.45)'); line(c, R * 0.035, '#ffb627'); line(c, R * 0.012, '#fff2a8'); }
+        break;
+      case 'bolt': for (const b of PAT.bolts) { line(b, R * 0.13, 'rgba(120,180,255,.35)'); line(b, R * 0.06, '#ffe14d'); line(b, R * 0.02, '#ffffff'); } break;
+      case 'flower':
+        PAT.flowers.forEach(([u, v], i) => {
+          const col = FLOWER_COLS[i % FLOWER_COLS.length];
+          for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 + i; dot(u + Math.cos(a) * 0.075, v + Math.sin(a) * 0.075, 0.06, col); }
+          dot(u, v, 0.045, '#ffb300');
+        }); break;
+      case 'melon':
+        for (let k = -3; k <= 3; k++) { const pts = []; for (let v = -1; v <= 1.01; v += 0.1) pts.push([Math.sin(k * 0.42) * Math.sqrt(Math.max(0, 1 - v * v)) + Math.sin(v * 9 + k) * 0.03, v]); line(pts, R * 0.075, '#145a24'); }
+        break;
+      case 'leopard':
+        for (const [u, v, r] of PAT.spots) { dot(u, v, r, '#b8691c'); const [x, y] = P(u, v); g.strokeStyle = '#4a2a0c'; g.lineWidth = Math.max(0.6, R * 0.03); g.beginPath(); g.arc(x, y, Math.max(0.6, r * R * 1.05), 0.4, 5.4); g.stroke(); }
+        break;
+      case 'candy': for (let k = -7; k <= 7; k++) line([[k * 0.3 - 1.2, -1.1], [k * 0.3 + 0.6, 1.1]], R * 0.1, '#ff3b5c'); break;
+      case 'fire':
+        for (const [u, h] of PAT.flames) { const [x0, y0] = P(u - 0.12, -1), [x1, y1] = P(u + 0.12, -1), [xt, yt] = P(u, -1 + h * 2);
+          g.fillStyle = 'rgba(255,240,140,.55)'; g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(x0, (y0 + yt) / 2, xt, yt); g.quadraticCurveTo(x1, (y1 + yt) / 2, x1, y1); g.fill(); }
+        break;
+      case 'ice': for (const c of PAT.cracks) line(c, R * 0.02, 'rgba(255,255,255,.85)'); break;
+      case 'gold': for (const [u, v, k] of PAT.galaxy.slice(0, 6)) { g.globalAlpha = 0.8; dot(u * 0.8, v * 0.8, 0.02 * k, '#fffbe0'); } g.globalAlpha = 1; break;
+    }
+    // soft 3D shading over the pattern
+    const sh = g.createRadialGradient(hx, hy, R * 0.05, X, Y, R * 1.2);
+    sh.addColorStop(0, 'rgba(255,255,255,.28)'); sh.addColorStop(0.45, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.28)');
+    g.fillStyle = sh; g.fillRect(X - R, Y - R, R * 2, R * 2);
+    g.restore();
+  }
+}
+function drawBlob(e, simple){
+  const P = e.P, R = e.r * P.s;
+  if (R < 0.6 || !isFinite(R) || !isFinite(P.x) || !isFinite(P.y)) return;
+  const horiz = Math.hypot(e.x - cam.x, e.z - cam.z), va = Math.atan2(cam.y, horiz);
+  const sa = Math.sin(va), ca = Math.cos(va);
+  ctx.fillStyle = 'rgba(0,40,0,.18)';
+  ctx.beginPath(); ctx.ellipse(P.x + R * 0.1, P.y + R * sa * 0.25, R * 1.08, R * sa * 1.1, 0, 0, Math.PI * 2); ctx.fill();
+  if (simple) {
+    domePath(ctx, P.x, P.y, R, sa, ca);
+    const g = ctx.createRadialGradient(P.x - R * 0.35, P.y - R * ca * 0.55, 0, P.x, P.y, R * 1.2);
+    g.addColorStop(0, shade(e.c, 0.45)); g.addColorStop(0.55, e.c); g.addColorStop(1, shade(e.c, -0.35));
+    ctx.fillStyle = g; ctx.fill(); return;
+  }
+  paintDome(ctx, e.skin, P.x, P.y, R, sa, ca, R > 5);
+}
+function drawLabel(p){
+  const R = p.r * p.P.s; if (R < 4) return;
+  // hidden behind a nearer blob: no label
+  for (const q of players) {
+    if (q === p || !q.alive || !q.P || q.P.d >= p.P.d) continue;
+    const Rq = q.r * q.P.s;
+    if (Rq > R && Math.hypot((p.P.x - q.P.x) / Rq, (p.P.y - q.P.y) / (Rq * 0.85)) < 1) return;
+  }
+  const horiz = Math.hypot(p.x - cam.x, p.z - cam.z), ca = Math.cos(Math.atan2(cam.y, horiz));
+  const y = p.P.y - R * ca - 8, fs = Math.max(11, Math.min(26, R * 0.32 + 9));
+  ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+  ctx.font = `900 ${fs}px system-ui,sans-serif`; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(30,20,0,.55)';
+  ctx.fillStyle = p === me ? '#ffd21f' : '#ffe9a8';
+  ctx.strokeText(fmt(p.m * 10), p.P.x, y - fs * 1.05); ctx.fillText(fmt(p.m * 10), p.P.x, y - fs * 1.05);
+  ctx.font = `800 ${fs * 0.9}px system-ui,sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.5)';
+  ctx.strokeText(p.name, p.P.x, y); ctx.fillText(p.name, p.P.x, y);
+}
+function quad(a, b, c, d){ ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); }
+
+function render(){
+  // camera follows the player (or arena centre on menu)
+  const tx = me && state !== 'menu' ? me.x : Math.sin(perf / 9000) * 40;
+  const tz = me && state !== 'menu' ? me.z : Math.cos(perf / 9000) * 40;
+  const tr = me && state !== 'menu' ? rad(me.m) : 3;
+  const wantDist = 16 + tr * 5;
+  cam.dist += (wantDist - cam.dist) * 0.05;
+  cam.x += (tx - cam.x) * 0.25;
+  const camZTarget = tz + cam.dist * CP;
+  cam.z += (camZTarget - cam.z) * 0.25;
+  cam.y = cam.dist * SP;
+  cam.cy = H * 0.56;
+
+  // sky
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#6fb6ff'); sky.addColorStop(1, '#cfe8ff');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+  // floor
+  const far = 70 + tr * 7;
+  const zNear = cam.z - 2, zFar = cam.z - cam.dist * CP - far;
+  const xHalf = (cam.dist + far) * (W / 2) / F * 1.15 + 4;
+  const x0 = Math.max(-S, cam.x - xHalf), x1 = Math.min(S, cam.x + xHalf);
+  const z0 = Math.max(-S, zFar), z1 = Math.min(S, zNear);
+  if (x1 > x0 && z1 > z0) {
+    // plain floor reaches the back wall so distant blobs always stand on grass
+    const xf = Math.max(-S, cam.x - xHalf * 3), xg = Math.min(S, cam.x + xHalf * 3);
+    const a = project(xf, 0, -S), b = project(xg, 0, -S), c = project(xg, 0, z1), d = project(xf, 0, z1);
+    if (a && b && c && d) { ctx.fillStyle = '#8fe04a'; quad(a, b, c, d); ctx.fill(); }
+    const T = 4 * Math.pow(2, Math.max(0, Math.floor(Math.log2(tr / 7))));
+    ctx.fillStyle = '#7ccf3a';
+    const i0 = Math.floor(x0 / T), i1 = Math.ceil(x1 / T), j0 = Math.floor(z0 / T), j1 = Math.ceil(z1 / T);
+    for (let j = j0; j < j1; j++) {
+      const za = Math.max(z0, j * T), zb = Math.min(z1, (j + 1) * T);
+      if (zb <= za) continue;
+      for (let i = i0; i < i1; i++) {
+        if (((i + j) & 1) !== 0) continue;
+        const xa = Math.max(x0, i * T), xb = Math.min(x1, (i + 1) * T);
+        if (xb <= xa) continue;
+        const p1 = project(xa, 0, za), p2 = project(xb, 0, za), p3 = project(xb, 0, zb), p4 = project(xa, 0, zb);
+        if (!p1 || !p2 || !p3 || !p4) continue;
+        quad(p1, p2, p3, p4); ctx.fill();
+      }
+    }
+  }
+  // back & side walls
+  const WH = 8;
+  ctx.lineWidth = 1;
+  const wall = (ax, az, bx, bz) => {
+    const p1 = project(ax, 0, az), p2 = project(bx, 0, bz), p3 = project(bx, WH, bz), p4 = project(ax, WH, az);
+    if (!p1 || !p2 || !p3 || !p4) return;
+    quad(p1, p2, p3, p4); ctx.fillStyle = 'rgba(70,120,220,.55)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.moveTo(p4.x, p4.y); ctx.lineTo(p3.x, p3.y); ctx.stroke();
+  };
+  for (let x = Math.floor(Math.max(-S, cam.x - xHalf * 3) / 6) * 6; x < Math.min(S, cam.x + xHalf * 3); x += 6) wall(Math.max(x, -S), -S, Math.min(x + 6, S), -S);
+  for (const sx of [-S, S]) if (Math.abs(cam.x - sx) < xHalf * 3 + 10) for (let z = -S; z < z1; z += 6) wall(sx, z, sx, Math.min(z + 6, z1));
+
+  // entities, far to near
+  const vis = [];
+  for (const f of foods) {
+    if (f.x < x0 - 2 || f.x > x1 + 2 || f.z < z0 - 2 || f.z > z1) continue;
+    const P = project(f.x, 0, f.z); if (!P || P.x < -20 || P.x > W + 20 || P.y < -20 || P.y > H + 20) continue;
+    f.P = P; vis.push(f);
+  }
+  for (const p of players) {
+    if (!p.alive) continue;
+    const P = project(p.x, 0, p.z); if (!P) continue;
+    p.P = P; p.r = rad(p.m); vis.push(p);
+  }
+  vis.sort((a, b) => b.P.d - a.P.d);
+  for (const e of vis) { const isFood = e.name === undefined; drawBlob(e, isFood); if (!isFood) drawLabel(e); }
+  ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+
+  // "+N" popups
+  for (const pp of popups) {
+    const P = project(pp.x, 2 + pp.t * 5, pp.z); if (!P) continue;
+    ctx.globalAlpha = 1 - pp.t / 0.9;
+    ctx.font = `900 ${pp.big ? 22 : 15}px system-ui,sans-serif`; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.45)';
+    ctx.fillStyle = pp.big ? '#ffe14d' : '#fff';
+    ctx.strokeText(pp.txt, P.x, P.y); ctx.fillText(pp.txt, P.x, P.y);
+  }
+  ctx.globalAlpha = 1;
+  // joystick
+  if (joy.on && state === 'play') {
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(joy.ox, joy.oy, 50, 0, 7); ctx.stroke();
+    let jx = joy.x - joy.ox, jy = joy.y - joy.oy; const l = Math.hypot(jx, jy); if (l > 50) { jx *= 50 / l; jy *= 50 / l; }
+    ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(joy.ox + jx, joy.oy + jy, 22, 0, 7); ctx.fill();
+  }
+}
+
+// ---------- menu, skins, account ----------
+function skinPreview(s){
+  if (s.prev) return s.prev;
+  const n = 160, c = document.createElement('canvas'); c.width = c.height = n;
+  paintDome(c.getContext('2d'), s, n / 2, n / 2, n / 2 - 2, 1, 1, true);
+  return s.prev = 'url(' + c.toDataURL() + ')';
+}
+function renderSkins(){
+  const box = document.getElementById('skins'); box.innerHTML = '';
+  for (const s of SKINS) {
+    const d = document.createElement('div');
+    d.className = 'sk' + (s.id === acc.skin ? ' sel' : '');
+    d.style.backgroundImage = skinPreview(s); d.style.backgroundSize = '100% 100%'; d.style.backgroundRepeat = 'no-repeat'; d.style.backgroundOrigin = 'border-box';
+    if (!acc.owned.includes(s.id)) d.innerHTML = `<span class="lock">${s.price} ⭐</span>`;
+    d.onclick = () => { if (acc.owned.includes(s.id)) send({t: 'skin', id: s.id}); else openBuy(s); };
+    box.appendChild(d);
+  }
+}
+let buyingSkin = null;
+function openBuy(s){
+  buyingSkin = s;
+  const bb = document.getElementById('bdBall'); bb.style.backgroundImage = skinPreview(s); bb.style.backgroundSize = '100% 100%'; bb.style.backgroundRepeat = 'no-repeat';
+  document.getElementById('bdName').textContent = s.label;
+  document.getElementById('bdPrice').textContent = s.price + ' ⭐';
+  const enough = acc.stars >= s.price;
+  document.getElementById('bdBal').textContent = 'Balansingiz: ' + acc.stars + ' ⭐' + (enough ? '' : ' — yetarli emas');
+  document.getElementById('bdFromBal').disabled = !enough;
+  show('buyDlg', true);
+}
+document.getElementById('bdFromBal').onclick = () => { if (buyingSkin) send({t: 'skin', id: buyingSkin.id, buy: true}); show('buyDlg', false); };
+document.getElementById('bdTg').onclick = () => { if (buyingSkin) send({t: 'invoice', item: 'skin:' + buyingSkin.id}); show('buyDlg', false); };
+document.getElementById('bdCancel').onclick = () => show('buyDlg', false);
+
+function refreshMenu(){
+  renderSkins();
+  document.getElementById('bestTxt').textContent = acc.best ? '👑 Rekordingiz: ' + fmt(acc.best) : '';
+  document.getElementById('skinHint').textContent = '🎨 Rangni bosing · Balans: ' + acc.stars + ' ⭐';
+  const nm = document.getElementById('name');
+  if (!nm.value && acc.name && acc.name !== 'Mehmon') nm.value = acc.name;
+}
+function openMenu(){
+  state = 'menu';
+  ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg'].forEach(id => show(id, false)); show('menu', true);
+  cancelKillUi(); refreshMenu();
+}
+function openAcc(){
+  show('menu', false); show('acc', true);
+  document.getElementById('accName').textContent = '👤 ' + (acc.name || '') + (acc.guest ? ' (mehmon)' : '');
+  document.getElementById('accTok').textContent = acc.tokens.toLocaleString('ru-RU').replace(/,/g, ' ') + ' / 500K';
+  document.getElementById('accBar').style.width = Math.min(100, acc.tokens / TOKEN_GOAL * 100) + '%';
+  document.getElementById('accLeft').textContent = '50 ⭐ gacha yana ' + fmt(TOKEN_GOAL - acc.tokens) + ' token qoldi';
+  document.getElementById('accStars').textContent = acc.stars + ' ⭐';
+  const wd = document.getElementById('wdBtn');
+  wd.disabled = acc.stars < GOAL_STARS || acc.guest;
+  document.getElementById('wdHint').textContent = acc.guest ? "Mehmon rejimi: tokenlar saqlanmaydi. O'yinni Telegram bot orqali oching."
+    : acc.stars < GOAL_STARS ? "Kamida 50 ⭐ bo'lganda so'rov yuborish mumkin" : "Yulduzlar Telegram akkauntingizga sovg'a qilib yuboriladi";
+  const box = document.getElementById('accReqs');
+  box.innerHTML = acc.reqs.length ? acc.reqs.map(r => `<div class="req"><span>${r.stars} ⭐ · ${r.date}</span><span>${r.status}</span></div>`).join('') : '<div class="hint">Hali so\'rov yo\'q</div>';
+}
+function startGame(){
+  if (!connected) { toast('Serverga ulanmoqda...'); return; }
+  store.set('name', nameVal());
+  send({t: 'play', name: nameVal()});
+}
+document.getElementById('name').value = store.get('name', '');
+document.getElementById('playBtn').onclick = startGame;
+document.getElementById('againBtn').onclick = startGame;
+document.getElementById('menuBtn').onclick = openMenu;
+document.getElementById('revBtn').onclick = () => send({t: 'invoice', item: 'revive'});
+document.getElementById('accBtn').onclick = openAcc;
+document.getElementById('accBack').onclick = openMenu;
+document.getElementById('wdBtn').onclick = () => send({t: 'withdraw'});
+document.getElementById('exitBtn').onclick = e => {
+  e.stopPropagation(); send({t: 'leave'});
+  if (me) byId.delete(me.id); me = null; myId = null;
+  toast("50K ga yetmagan tokenlar hisobga o'tmaydi"); openMenu();
+};
+document.getElementById('bSpeed').onclick = e => { e.stopPropagation(); send({t: 'speed'}); };
+document.getElementById('bKill').onclick = e => { e.stopPropagation(); openKill(); };
+['bSpeed', 'bKill', 'killAlert', 'killPick', 'exitBtn'].forEach(id => document.getElementById(id).addEventListener('pointerdown', e => e.stopPropagation()));
+
+// ---------- loop ----------
+let last = performance.now(), perf = 0;
+function frame(t){
+  const dt = Math.min(0.05, (t - last) / 1000); last = t; perf = t;
+  if (state === 'play' && me) moveMe(dt);
+  const k = Math.min(1, dt * 10);
+  for (const p of players) if (p !== me) { p.x += (p.sx - p.x) * k; p.z += (p.sz - p.z) * k; }
+  popups = popups.filter(p => (p.t += dt) < 0.9);
+  if (speedLeft > 0) speedLeft -= dt;
+  if (killIn) document.getElementById('kaCd').textContent = Math.max(0, Math.ceil((killIn.end - t) / 1000));
+  if (killOut) document.getElementById('killOut').textContent = `🎯 ${killOut.to}ga KIL yuborildi · ${Math.max(0, Math.ceil((killOut.end - t) / 1000))}s`;
+  if (state === 'play') updHud();
+  render();
+  requestAnimationFrame(frame);
+}
+openMenu();
+requestAnimationFrame(frame);
+if (!inTelegram) connect();     // inside Telegram we connect once the SDK has loaded
+window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
+})();
+</script>
+</body>
+</html>
