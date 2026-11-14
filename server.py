@@ -49,6 +49,7 @@ GOAL_STARS = 50
 SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 KILL_COST = ANTI_COST = REVIVE_COST = 10
 KILL_TIME = 10.0
+BOT_LIMIT = 50000         # a bot reaching this many tokens leaves the arena
 TOTAL_PLAYERS = 18        # arena is topped up with bots to this many
 MIN_BOTS = 6
 TICK = 1 / 20
@@ -690,6 +691,13 @@ class Game:
         for p in self.players:
             if p.alive and p.m > 150:
                 p.m -= p.m * 0.0015 * dt
+            if p.bot and p.alive and p.m * 10 >= BOT_LIMIT:      # bots never outgrow real players
+                p.alive = False
+                p.respawn_at = now + 3
+                for k in [k for k in self.kills if k["tgt"] is p]:
+                    self.kills.remove(k)
+                    if k["frm"].conn:
+                        k["frm"].conn.send({"t": "killEnd", "msg": f"{p.name} maydondan chiqib ketdi"})
         for p in self.players:
             if p.alive and not p.bot:
                 self.bank(p)
