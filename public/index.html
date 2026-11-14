@@ -83,6 +83,9 @@
   .wwho{min-width:170px;text-align:center;background:rgba(20,30,80,.85);color:#fff;border-radius:14px;padding:6px 12px}
   .wwho b{display:block;font-size:16px}
   .wwho span{font-size:12px;color:#ffe14d;font-weight:800}
+  .subb{font-size:14px;font-weight:800;padding:10px 18px;border:0;border-radius:14px;color:#fff;background:linear-gradient(90deg,#2aa3ef,#7b5cff);box-shadow:0 4px 0 rgba(0,0,0,.25);animation:pulse 1.6s infinite}
+  .subb b{color:#ffe14d}
+  @keyframes pulse{50%{transform:scale(1.04)}}
   #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;z-index:9;transition:opacity .3s;opacity:0;pointer-events:none;max-width:90%;text-align:center}
 </style>
 </head>
@@ -107,6 +110,7 @@
     <button class="play" id="playBtn">▶ O'YNASH</button>
     <button class="accb" id="accBtn">💰 HISOB</button>
     <button class="watchb" id="watchBtn">👁 KUZATISH</button>
+    <button class="subb hidden" id="subBtn">📢 Kanalga obuna bo'ling · <b>+20K 🎁</b></button>
   </div>
   <div class="best" id="bestTxt"></div>
 </div>
@@ -733,8 +737,22 @@ document.getElementById('bdFromBal').onclick = () => { if (buyingSkin) send({t: 
 document.getElementById('bdTg').onclick = () => { if (buyingSkin) send({t: 'invoice', item: 'skin:' + buyingSkin.id}); show('buyDlg', false); };
 document.getElementById('bdCancel').onclick = () => show('buyDlg', false);
 
+let subOpened = false;
+function refreshSub(){
+  const sub = acc.sub || {};
+  const btn = document.getElementById('subBtn');
+  show('subBtn', !acc.guest && sub.link && !sub.claimed);
+  btn.innerHTML = subOpened ? "✅ Obuna bo'ldim — tekshirish" : `📢 Kanalga obuna bo'ling · <b>+${fmt(sub.bonus || 20000)} 🎁</b>`;
+}
+document.getElementById('subBtn').onclick = () => {
+  const sub = acc.sub || {}; if (!sub.link) return;
+  if (!subOpened) {
+    subOpened = true; refreshSub();
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(sub.link); else window.open(sub.link, '_blank');
+  } else send({t: 'subcheck'});
+};
 function refreshMenu(){
-  renderSkins();
+  renderSkins(); refreshSub();
   document.getElementById('bestTxt').textContent = acc.best ? '👑 Rekordingiz: ' + fmt(acc.best) : '';
   document.getElementById('skinHint').textContent = '🎨 Rangni bosing · Balans: ' + acc.stars + ' ⭐';
   const nm = document.getElementById('name');

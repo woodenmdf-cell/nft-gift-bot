@@ -84,13 +84,14 @@ CREATE TABLE IF NOT EXISTS payments(charge_id TEXT PRIMARY KEY, uid INTEGER, ite
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 """)
 db.commit()
-for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0"):
+for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0"):
     try:
         db.execute(f"ALTER TABLE users ADD COLUMN {col}")
     except sqlite3.OperationalError:
         pass                                       # column already there
 db.commit()
 CHANNEL = os.environ.get("CHANNEL", "@VIZUAL_OTZIF").strip()   # channel with the live pinned leaderboard
+SUB_BONUS = 20000                                 # tokens for subscribing to the channel (once)
 REF_PCT = 10                                       # inviter gets 10% of every 50K a friend banks
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 
@@ -118,7 +119,7 @@ class Account:
         self.name = name
         if uid is None:
             self.tokens, self.stars, self.owned, self.skin, self.best = 0, 0, ["yashil"], "yashil", 0
-            self.ref, self.ref_earned = None, 0
+            self.ref, self.ref_earned, self.sub_bonus = None, 0, 0
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
@@ -132,6 +133,7 @@ class Account:
             self.name = r["name"] or name                 # internal lookups keep the stored name
         self.tokens, self.stars, self.best = r["tokens"], r["stars"], r["best"]
         self.ref, self.ref_earned = r["ref"], r["ref_earned"] or 0
+        self.sub_bonus = r["sub_bonus"] or 0
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
         if "yashil" not in self.owned:
             self.owned.insert(0, "yashil")
@@ -151,8 +153,8 @@ class Account:
     def save(self):
         if self.uid is None:
             return
-        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=? WHERE uid=?",
-                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.uid))
+        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=? WHERE uid=?",
+                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.sub_bonus, self.uid))
         db.commit()
 
     def add_tokens(self, n):
@@ -185,7 +187,9 @@ class Account:
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
                 "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name,
-                "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT}}
+                "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
+                "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
+                        "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
 
 
 STATUS = {"pending": "⏳ Kutilmoqda", "sent": "✅ Yuborildi", "rejected": "❌ Rad etildi"}
@@ -293,7 +297,8 @@ async def handle_update(u):
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
                       "• Har 50K token hisobingizga o'tadi\n• Har 500K token = 50 ⭐\n"
-                      "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n\nBoshlash uchun pastdagi tugmani bosing 👇",
+                      "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
+                      f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
     elif text.startswith("/ref"):
         acc = Account.get(frm["id"], frm.get("first_name", ""), frm.get("username", ""))
@@ -344,6 +349,18 @@ async def register_ref(frm, inviter):
         push_acc(inv)
 
 
+async def post_payout_proof(acc, stars):
+    """Real payouts are the best advert: announce each one in the channel."""
+    if not CHANNEL:
+        return
+    total = db.execute("SELECT COALESCE(SUM(stars),0) FROM reqs WHERE status='sent'").fetchone()[0]
+    name = html(acc.name if acc.name and acc.name != str(acc.uid) else "O'yinchi")
+    await tg("sendMessage", chat_id=CHANNEL, parse_mode="HTML",
+             text=f"✅ <b>TO'LOV ISBOTI</b>\n\n👤 {name} o'ynab <b>{stars} ⭐</b> Telegram yulduzi yutib oldi!\n"
+                  f"💫 Jami to'langan: {total} ⭐\n\n🎮 Siz ham o'ynang va yutib oling 👇",
+             reply_markup={"inline_keyboard": [[{"text": "🎮 O'ynash", "url": f"https://t.me/{BOT_USERNAME}?start=kanal"}]]})
+
+
 async def resolve_request(rid, ok):
     """Marks a withdraw request sent or rejected (rejected stars go back). Returns a note or None."""
     r = db.execute("SELECT * FROM reqs WHERE id=?", (rid,)).fetchone()
@@ -353,6 +370,7 @@ async def resolve_request(rid, ok):
     if ok:
         db.execute("UPDATE reqs SET status='sent' WHERE id=?", (rid,))
         note, user_msg = "✅ Yuborildi", f"✅ {r['stars']} ⭐ yulduz sizga sovg'a qilindi! O'ynashda davom eting 🎮"
+        asyncio.create_task(post_payout_proof(acc, r["stars"]))
     else:
         db.execute("UPDATE reqs SET status='rejected' WHERE id=?", (rid,))
         acc.stars += r["stars"]
@@ -1081,6 +1099,25 @@ async def on_message(c, m):
             c.send({"t": "invoice", "link": link, "item": item})
         else:
             c.toast("To'lovni ochib bo'lmadi, keyinroq urinib ko'ring")
+    elif t == "subcheck":
+        if c.acc.uid is None:
+            return c.toast("Telegram orqali kiring")
+        if c.acc.sub_bonus:
+            return c.toast("Bonus allaqachon olingan ✅")
+        if not CHANNEL:
+            return
+        member = await tg("getChatMember", chat_id=CHANNEL, user_id=c.acc.uid)
+        if member is None:
+            return c.toast("Tekshirib bo'lmadi, birozdan keyin urinib ko'ring")
+        if member.get("status") in ("member", "administrator", "creator") or member.get("is_member"):
+            c.acc.sub_bonus = 1
+            conv = c.acc.add_tokens(SUB_BONUS)
+            c.toast(f"🎁 Rahmat! +{fmt(SUB_BONUS)} token hisobingizga tushdi")
+            if conv:
+                c.toast(f"🎉 500K token → {conv} ⭐ balansga tushdi!")
+            push_acc(c.acc)
+        else:
+            c.toast("Avval kanalga obuna bo'ling, keyin tekshiring")
     elif t == "withdraw":
         if c.acc.uid is None:
             return c.toast("Telegram orqali kiring")
