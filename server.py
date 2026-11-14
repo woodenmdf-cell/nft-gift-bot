@@ -688,7 +688,7 @@ class Game:
         c = b.conn
         if c:
             c.death = {"m": b.m, "at": time.monotonic()}
-            sc = int(b.m * 10)
+            sc = b.round_bank + int(b.m * 10)
             if sc > c.acc.best:
                 c.acc.best = sc
                 c.acc.save()
@@ -701,6 +701,8 @@ class Game:
         while p.m * 10 >= BANK_STEP:
             p.m -= BANK_STEP / 10
             p.round_bank += BANK_STEP
+            if p.round_bank > p.conn.acc.best:
+                p.conn.acc.best = p.round_bank
             conv = p.conn.acc.add_tokens(BANK_STEP)
             pay_referrer(p.conn.acc, BANK_STEP)
             p.conn.toast("💰 50K token hisobingizga o'tdi!", fx="bank")
@@ -974,6 +976,10 @@ async def on_message(c, m):
             push_acc(c.acc)
     elif t == "leave":
         if p:
+            life = p.round_bank + int(p.m * 10)
+            if life > c.acc.best:
+                c.acc.best = life
+                c.acc.save()
             game.remove(p)
             c.player = None
             c.send({"t": "left", "banked": p.round_bank})

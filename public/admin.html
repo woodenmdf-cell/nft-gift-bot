@@ -187,7 +187,7 @@ function fillUser(uid){
   }
   $('udName').textContent = u.name;
   $('udSub').innerHTML = (u.username ? '@' + esc(u.username) + ' · ' : '') + 'ID ' + u.uid + (u.online ? ' · <span style="color:#2fd06a">🟢 hozir o\'ynayapti</span>' : ' · oflayn');
-  $('udGrid').innerHTML = `<div><b>${u.stars} ⭐</b>balans</div><div><b>${fmt(u.tokens)}</b>token</div><div><b>${fmt(u.best)}</b>rekord</div><div><b>${u.paid} ⭐</b>to'lagan</div><div><b>${u.refs}</b>taklif qilgan</div><div><b>${ago(u.created)}</b>qo'shilgan</div>`;
+  $('udGrid').innerHTML = `<div><b>${u.stars} ⭐</b>balans</div><div><b>${fmt(u.tokens)}</b>token</div><div><b>${fmt(u.best)}</b>rekord (1 o'yinda)</div><div><b>${u.paid} ⭐</b>to'lagan</div><div><b>${u.refs}</b>taklif qilgan</div><div><b>${ago(u.created)}</b>qo'shilgan</div>`;
   $('udPlay').classList.toggle('hidden', !u.online);
   $('udTg').textContent = u.username ? '👤 Telegram profili (@' + u.username + ')' : '👤 Telegram profili';
 }
