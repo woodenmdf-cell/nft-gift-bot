@@ -280,6 +280,9 @@ function inputDir(){
 
 // ================= online client: the server owns mass, tokens, stars and KIL =================
 const DEV_UID = (location.hash.match(/dev=(\d+)/) || [])[1];
+// opened from the admin panel: jump straight into the arena next to that player
+const JOIN = (location.hash.match(/join=(\d+)/) || [])[1];
+let joined = false;
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 let ws = null, connected = false, myId = null, lastSend = 0;
 let foods = [], players = [], me = null, popups = [];
@@ -367,6 +370,7 @@ function onMsg(m){
       break;
     case 'acc':
       acc = m;
+      if (JOIN && !joined && state === 'menu') { joined = true; send({t: 'play', name: nameVal() || acc.name, near: +JOIN}); }
       if (!document.getElementById('menu').classList.contains('hidden')) refreshMenu();
       if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
       if (killIn) updAntiBtn();

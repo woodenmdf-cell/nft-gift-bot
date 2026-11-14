@@ -942,6 +942,17 @@ async def on_message(c, m):
             c.acc.name = clean_name(m["name"], c.acc.name)
             c.acc.save()
         c.player = p = game.spawn_human(c)
+        near = m.get("near")
+        if near and c.acc.uid is not None and c.acc.uid == admin_id():
+            friend = next((q for q in game.players if q.conn and q.conn.acc.uid == int(near) and q.alive), None)
+            if friend:
+                a = random.uniform(0, 2 * math.pi)
+                d = rad(friend.m) + rad(p.m) + 10
+                p.x, p.z = friend.x + math.cos(a) * d, friend.z + math.sin(a) * d
+                game.clamp(p)
+                c.toast(f"👋 {friend.name} yonidasiz")
+            else:
+                c.toast("Bu o'yinchi hozir maydonda emas")
         c.death = None
         c.send({"t": "spawn", "id": p.id, "x": p.x, "z": p.z, "m": p.m})
     elif t == "pos" and p and p.alive:
@@ -1088,6 +1099,33 @@ def admin_overview(q=""):
     return {"ok": True, "stats": stats, "users": users, "reqs": reqs, "payments": pays, "now": now}
 
 
+AVATARS = {}          # uid -> (time, bytes or None)
+
+
+def fetch_avatar(uid):
+    photos = tg_call("getUserProfilePhotos", user_id=uid, limit=1)
+    if not photos or not photos.get("photos"):
+        return None
+    sizes = photos["photos"][0]
+    pick = next((s for s in sizes if s.get("width", 0) >= 160), sizes[-1])
+    f = tg_call("getFile", file_id=pick["file_id"])
+    with urllib.request.urlopen(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{f['file_path']}", timeout=20) as r:
+        return r.read()
+
+
+async def avatar(uid):
+    hit = AVATARS.get(uid)
+    if hit and time.time() - hit[0] < 3600:
+        return hit[1]
+    try:
+        img = await asyncio.to_thread(fetch_avatar, uid)
+    except Exception as e:
+        log.info("avatar %s: %s", uid, str(e).replace(BOT_TOKEN, "***") if BOT_TOKEN else e)
+        img = None
+    AVATARS[uid] = (time.time(), img)
+    return img
+
+
 async def admin_api(body):
     try:
         m = json.loads(body or b"{}")
@@ -1141,6 +1179,7 @@ async def http_handler(reader, writer):
         if ":" in ln:
             k, v = ln.split(":", 1)
             hdr[k.strip().lower()] = v.strip()
+    full_path = path
     path = path.split("?", 1)[0]
     if path == "/ws" and "websocket" in hdr.get("upgrade", "").lower():
         key = hdr.get("sec-websocket-key", "")
@@ -1149,6 +1188,21 @@ async def http_handler(reader, writer):
                       f"Sec-WebSocket-Accept: {acc}\r\n\r\n").encode())
         await writer.drain()
         await ws_session(reader, writer)
+        return
+    if path == "/api/avatar":
+        qs = dict(urllib.parse.parse_qsl(full_path.split("?", 1)[1] if "?" in full_path else ""))
+        img = None
+        if admin_id() is not None and admin_user(qs.get("a", "")) == admin_id() and qs.get("uid", "").isdigit():
+            img = await avatar(int(qs["uid"]))
+        if img:
+            head_ = f"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {len(img)}\r\nCache-Control: private, max-age=3600\r\nConnection: close\r\n\r\n"
+            writer.write(head_.encode() + img)
+        else:
+            writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        try:
+            await writer.drain()
+        finally:
+            writer.close()
         return
     if path == "/api/admin" and method == "POST":
         try:

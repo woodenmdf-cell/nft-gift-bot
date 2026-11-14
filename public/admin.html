@@ -40,6 +40,17 @@
   .err{background:#5a1a2a;border-radius:14px;padding:16px;text-align:center;font-weight:700}
   .status{font-size:12px;font-weight:800}
   .hidden{display:none!important}
+  .row.click{cursor:pointer}
+  .row.click:active{background:#26338a}
+  .ftr{display:flex;gap:6px;margin:-2px 0 10px}
+  .ftr button{flex:1;border:0;border-radius:10px;padding:8px;font-weight:800;font-size:12px;color:#cfd8ff;background:#1b2766}
+  .ftr button.on{background:#2fd06a;color:#06260f}
+  .ava{width:84px;height:84px;border-radius:50%;margin:0 auto 10px;background:linear-gradient(135deg,#3f7bff,#9b5cff);display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;overflow:hidden;position:relative}
+  .ava img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0}
+  .pgrid div{background:rgba(255,255,255,.08);border-radius:10px;padding:8px;text-align:center;font-size:11px}
+  .pgrid b{display:block;font-size:16px}
+  .col{display:flex;flex-direction:column;gap:8px}
   #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:9px 14px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:8;padding:16px}
   .mcard{background:#1d2f7a;border-radius:18px;padding:18px;width:min(340px,100%)}
@@ -65,6 +76,7 @@
 
   <div id="t-users" class="hidden">
     <input id="q" placeholder="🔎 Ism, @username yoki ID">
+    <div class="ftr"><button id="fAll" class="on">Hammasi</button><button id="fOn">🟢 Faqat onlayn</button></div>
     <div id="users"></div>
   </div>
 
@@ -73,6 +85,20 @@
   </div>
 </div>
 
+<div id="userDlg" class="modal hidden">
+  <div class="mcard" style="text-align:center">
+    <div class="ava" id="udAva"></div>
+    <h3 id="udName"></h3>
+    <div class="sub" id="udSub"></div>
+    <div class="pgrid" id="udGrid"></div>
+    <div class="col">
+      <button class="btn ok" id="udPlay">🎮 O'ynash — yoniga kirish</button>
+      <button class="btn" id="udTg">👤 Telegram profili</button>
+      <button class="btn gold" id="udStars">⭐ Balansni o'zgartirish</button>
+      <button class="btn" id="udClose" style="background:transparent">Yopish</button>
+    </div>
+  </div>
+</div>
 <div id="starDlg" class="modal hidden">
   <div class="mcard">
     <h3 id="sdName"></h3>
@@ -91,7 +117,7 @@ const tg = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Tele
 if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#0d1540'); tg.setBackgroundColor('#0d1540'); } catch (e) {} }
 const DEV = (location.hash.match(/dev=(\d+)/) || [])[1];
 const initData = tg ? tg.initData : (DEV ? 'dev:' + DEV : '');
-let data = null, tab = 'stats', q = '', starUid = null;
+let data = null, tab = 'stats', q = '', starUid = null, onlyOnline = false, openUid = null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(n >= 1e4 ? 0 : 1) + 'K' : String(n);
@@ -123,12 +149,13 @@ function render(){
   $('statGrid').innerHTML = cards.map(([k, v, sub, cls]) => `<div class="st ${cls || ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join('');
   $('pays').innerHTML = data.payments.length ? data.payments.map(p => `<div class="row"><div class="top"><div><div class="name">${esc(p.name || p.uid)}</div><div class="sub">${esc(ITEM[p.item] || (p.item.startsWith('skin:') ? '🎨 ' + p.item.slice(5) + ' skini' : p.item))} · ${ago(p.created)}</div></div><div class="bal"><b>+${p.stars} ⭐</b></div></div></div>`).join('') : '<div class="empty">Hali to\'lov yo\'q</div>';
 
-  $('users').innerHTML = data.users.length ? data.users.map(u => `<div class="row">
+  const list = onlyOnline ? data.users.filter(u => u.online) : data.users;
+  $('users').innerHTML = list.length ? list.map(u => `<div class="row click" data-uid="${u.uid}">
       <div class="top"><div style="min-width:0"><div class="name">${u.online ? '<span class="dot"></span>' : ''}${esc(u.name)}</div>
         <div class="sub">${u.username ? '@' + esc(u.username) + ' · ' : ''}ID ${u.uid} · ${ago(u.created)}</div></div>
         <div class="bal"><b>${u.stars} ⭐</b><div>${fmt(u.tokens)} token</div></div></div>
-      <div class="chips"><span class="chip">👑 rekord ${fmt(u.best)}</span><span class="chip">💳 to'lagan ${u.paid} ⭐</span><span class="chip">🔗 ${u.refs} do'st · +${fmt(u.ref_earned)}</span></div>
-      <div class="acts"><button class="btn gold" data-star="${u.uid}">⭐ Balansni o'zgartirish</button></div></div>`).join('') : '<div class="empty">Topilmadi</div>';
+      <div class="chips"><span class="chip">👑 rekord ${fmt(u.best)}</span><span class="chip">💳 to'lagan ${u.paid} ⭐</span><span class="chip">🔗 ${u.refs} do'st · +${fmt(u.ref_earned)}</span>${u.online ? '<span class="chip" style="background:#14502a">🟢 o\'ynayapti</span>' : ''}</div></div>`).join('') : `<div class="empty">${onlyOnline ? 'Hozir hech kim o\'ynamayapti' : 'Topilmadi'}</div>`;
+  if (openUid && !$('userDlg').classList.contains('hidden')) fillUser(openUid);
 
   const pend = data.reqs.filter(r => r.status === 'pending');
   $('reqBadge').textContent = pend.length; $('reqBadge').classList.toggle('hidden', !pend.length);
@@ -147,6 +174,40 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   ['stats', 'users', 'reqs'].forEach(t => $('t-' + t).classList.toggle('hidden', t !== tab));
 });
 let qT; $('q').oninput = e => { clearTimeout(qT); qT = setTimeout(() => { q = e.target.value.trim(); api({}); }, 350); };
+
+function fillUser(uid){
+  const u = data.users.find(x => x.uid === uid); if (!u) return;
+  const ava = $('udAva');
+  if (ava.dataset.uid !== String(uid)) {
+    ava.dataset.uid = uid;
+    ava.innerHTML = esc((u.name || '?').trim()[0] || '?').toUpperCase();
+    const img = new Image();
+    img.onload = () => ava.appendChild(img);
+    img.src = '/api/avatar?uid=' + uid + '&a=' + encodeURIComponent(initData);
+  }
+  $('udName').textContent = u.name;
+  $('udSub').innerHTML = (u.username ? '@' + esc(u.username) + ' · ' : '') + 'ID ' + u.uid + (u.online ? ' · <span style="color:#2fd06a">🟢 hozir o\'ynayapti</span>' : ' · oflayn');
+  $('udGrid').innerHTML = `<div><b>${u.stars} ⭐</b>balans</div><div><b>${fmt(u.tokens)}</b>token</div><div><b>${fmt(u.best)}</b>rekord</div><div><b>${u.paid} ⭐</b>to'lagan</div><div><b>${u.refs}</b>taklif qilgan</div><div><b>${ago(u.created)}</b>qo'shilgan</div>`;
+  $('udPlay').classList.toggle('hidden', !u.online);
+  $('udTg').textContent = u.username ? '👤 Telegram profili (@' + u.username + ')' : '👤 Telegram profili';
+}
+function openUser(uid){ openUid = uid; fillUser(uid); $('userDlg').classList.remove('hidden'); }
+$('udClose').onclick = () => { $('userDlg').classList.add('hidden'); openUid = null; };
+$('udStars').onclick = () => { const u = data.users.find(x => x.uid === openUid); starUid = openUid; $('sdName').textContent = u.name; $('sdBal').textContent = 'Hozirgi balans: ' + u.stars + ' ⭐'; $('starDlg').classList.remove('hidden'); };
+$('udTg').onclick = () => {
+  const u = data.users.find(x => x.uid === openUid); if (!u) return;
+  if (u.username) { tg && tg.openTelegramLink ? tg.openTelegramLink('https://t.me/' + u.username) : window.open('https://t.me/' + u.username); }
+  else { const link = 'tg://user?id=' + u.uid; try { tg ? tg.openLink(link) : (location.href = link); } catch (e) { location.href = link; } toast('Username yo\'q — ID: ' + u.uid); }
+};
+$('udPlay').onclick = () => {
+  // open the game in this same window and drop the admin next to that player
+  const keep = location.hash.replace(/^#/, '').replace(/&?(join|dev)=\d+/g, '');
+  const dev = DEV ? '&dev=' + DEV : '';
+  location.href = '/#' + (keep ? keep + '&' : '') + 'join=' + openUid + dev;
+};
+$('fAll').onclick = () => { onlyOnline = false; $('fAll').classList.add('on'); $('fOn').classList.remove('on'); render(); };
+$('fOn').onclick = () => { onlyOnline = true; $('fOn').classList.add('on'); $('fAll').classList.remove('on'); render(); };
+document.body.addEventListener('click', e => { const r = e.target.closest('.row.click'); if (r && !e.target.closest('button')) openUser(+r.dataset.uid); });
 
 document.body.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
