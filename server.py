@@ -90,6 +90,7 @@ for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0"):
     except sqlite3.OperationalError:
         pass                                       # column already there
 db.commit()
+CHANNEL = os.environ.get("CHANNEL", "@VIZUAL_OTZIF").strip()   # channel with the live pinned leaderboard
 REF_PCT = 10                                       # inviter gets 10% of every 50K a friend banks
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 
@@ -121,11 +122,14 @@ class Account:
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
-            db.execute("INSERT INTO users(uid,name,username,created) VALUES(?,?,?,?)", (uid, name, username, int(time.time())))
+            self.name = name or str(uid)
+            db.execute("INSERT INTO users(uid,name,username,created) VALUES(?,?,?,?)", (uid, self.name, username, int(time.time())))
             db.commit()
             r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
+        elif name and name != str(uid):                 # only a real login updates the name
+            db.execute("UPDATE users SET name=?, username=? WHERE uid=?", (name, username or r["username"], uid))
         else:
-            db.execute("UPDATE users SET name=?, username=? WHERE uid=?", (name, username, uid))
+            self.name = r["name"] or name                 # internal lookups keep the stored name
         self.tokens, self.stars, self.best = r["tokens"], r["stars"], r["best"]
         self.ref, self.ref_earned = r["ref"], r["ref_earned"] or 0
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
@@ -139,7 +143,7 @@ class Account:
             return cls(None, name)
         a = cls.cache.get(uid)
         if not a:
-            a = cls.cache[uid] = cls(uid, name or str(uid), username)
+            a = cls.cache[uid] = cls(uid, name, username)
         elif name:
             a.name = name
         return a
@@ -1248,6 +1252,74 @@ async def http_handler(reader, writer):
         writer.close()
 
 
+# ---------------------------------------------------------------- live leaderboard in the channel
+def html(t):
+    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def leaderboard_text():
+    for a in Account.cache.values():
+        a.save()
+    live = sorted((p for p in game.players if p.alive and not p.bot and p.conn and p.conn.acc.uid is not None),
+                  key=lambda p: -(p.round_bank + p.m * 10))
+    on = {p.conn.acc.uid for p in live}
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    t = time.strftime("%H:%M:%S", time.gmtime(time.time() + 5 * 3600))
+    out = ["🎮 <b>SHAR YUTAR — JONLI REYTING</b>", f"⏱ {t} (Toshkent) · har 30 soniyada yangilanadi", ""]
+    out.append(f"🔴 <b>HOZIR MAYDONDA: {len(live)} kishi</b>")
+    if live:
+        for i, p in enumerate(live[:10], 1):
+            out.append(f"{medals.get(i, f'{i}.')} {html(p.name)} — <b>{fmt(p.round_bank + int(p.m * 10))}</b>")
+    else:
+        out.append("Hozir hech kim yo'q — birinchi bo'ling! 🚀")
+    out += ["", "🏆 <b>TOP-30 · bitta o'yindagi rekord</b>"]
+    rows = db.execute("SELECT uid, name, best FROM users WHERE best>0 ORDER BY best DESC LIMIT 30").fetchall()
+    for i, r in enumerate(rows, 1):
+        out.append(f"{medals.get(i, f'{i}.')} {html(r['name'] or r['uid'])} — {fmt(r['best'])}{' 🟢' if r['uid'] in on else ''}")
+    if not rows:
+        out.append("Hali rekord yo'q")
+    out += ["", "🟢 — hozir o'ynayapti"]
+    return "\n".join(out)
+
+
+def play_url_button():
+    return {"inline_keyboard": [[{"text": "🎮 O'ynash", "url": f"https://t.me/{BOT_USERNAME}?start=kanal"}]]}
+
+
+async def channel_loop():
+    if not BOT_TOKEN or not CHANNEL:
+        return
+    await asyncio.sleep(8)                         # let the bot learn its username first
+    last = None
+    while True:
+        try:
+            text = leaderboard_text()
+            msg_id = setting("top_msg")
+            if text != last:
+                ok = False
+                if msg_id:
+                    try:
+                        await asyncio.to_thread(tg_call, "editMessageText", chat_id=CHANNEL, message_id=int(msg_id),
+                                                text=text, parse_mode="HTML", reply_markup=play_url_button())
+                        ok = True
+                    except Exception as e:
+                        err = str(e)
+                        ok = "not modified" in err
+                        if not ok:
+                            log.warning("leaderboard edit failed: %s", err.replace(BOT_TOKEN, "***"))
+                if not ok:
+                    sent = await tg("sendMessage", chat_id=CHANNEL, text=text, parse_mode="HTML",
+                                    reply_markup=play_url_button(), disable_notification=True)
+                    if sent:
+                        set_setting("top_msg", sent["message_id"])
+                        await tg("pinChatMessage", chat_id=CHANNEL, message_id=sent["message_id"], disable_notification=True)
+                        log.info("leaderboard posted and pinned in %s", CHANNEL)
+                last = text
+        except Exception:
+            log.exception("leaderboard loop")
+        await asyncio.sleep(30)
+
+
 async def game_loop():
     last = time.monotonic()
     n = 0
@@ -1278,7 +1350,7 @@ async def main():
         game.new_bot()
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
-    await asyncio.gather(server.serve_forever(), game_loop(), bot_loop())
+    await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop())
 
 
 if __name__ == "__main__":
