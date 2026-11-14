@@ -1320,6 +1320,43 @@ async def channel_loop():
         await asyncio.sleep(30)
 
 
+# ---------------------------------------------------------------- 24/7 live stream to the channel
+async def stream_feed():
+    """Runs streamer.py (draws the arena, ffmpeg -> Telegram RTMP) and keeps it fed with the game state."""
+    if not os.environ.get("STREAM_URL"):
+        return
+    import sys as _sys
+    while True:
+        proc = await asyncio.create_subprocess_exec(_sys.executable, os.path.join(HERE, "streamer.py"),
+                                                    stdin=asyncio.subprocess.PIPE)
+        log.info("live stream started")
+        n = 0
+        top = []
+        try:
+            while proc.returncode is None:
+                if n % 100 == 0:
+                    top = [[r["name"], r["best"]] for r in db.execute("SELECT name, best FROM users WHERE best>0 ORDER BY best DESC LIMIT 5")]
+                msg = {"p": [[p.id, p.name, p.skin, round(p.x, 1), round(p.z, 1), round(p.m, 1), 0 if p.bot else 1]
+                             for p in game.players if p.alive],
+                       "n": sum(1 for p in game.players if p.alive and not p.bot), "top": top}
+                if n % 10 == 0:
+                    msg["f"] = [[round(game.fx[i], 1), round(game.fz[i], 1), game.fbig[i], game.fc[i]] for i in range(FOOD_N)]
+                proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode())
+                await proc.stdin.drain()
+                n += 1
+                await asyncio.sleep(0.1)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:
+            log.exception("stream feed")
+        log.warning("live stream process ended, restarting in 10 s")
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        await asyncio.sleep(10)
+
+
 async def game_loop():
     last = time.monotonic()
     n = 0
@@ -1350,7 +1387,7 @@ async def main():
         game.new_bot()
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
-    await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop())
+    await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed())
 
 
 if __name__ == "__main__":

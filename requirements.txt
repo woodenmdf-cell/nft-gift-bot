@@ -1,1 +1,2 @@
-# no dependencies: the server uses only the Python standard library
+# the game server uses only the standard library; the live stream (streamer.py) needs Pillow + ffmpeg
+pillow
