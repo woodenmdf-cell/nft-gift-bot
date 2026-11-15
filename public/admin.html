@@ -165,6 +165,7 @@ function render(){
         <div class="sub">${r.username ? '@' + esc(r.username) + ' · ' : ''}ID ${r.uid} · ${ago(r.created)}</div></div>
         <div class="bal"><b>${r.stars} ⭐</b><div class="status">${ST[r.status] || r.status}</div></div></div>
       ${r.status === 'pending' ? `<div class="sub" style="margin-top:6px">Yulduzlarni Telegram'da sovg'a qiling, keyin «Yuborildi»ni bosing.</div>
+      <div class="acts"><button class="btn gold" data-frag="${esc(r.username || '')}" data-n="${r.stars}">⭐ Fragment orqali yuborish (test)</button></div>
       <div class="acts"><button class="btn ok" data-req="${r.id}" data-ok="1">✅ Yuborildi</button><button class="btn no" data-req="${r.id}" data-ok="0">❌ Rad etish</button></div>` : ''}</div>`).join('') : '<div class="empty">So\'rov yo\'q</div>';
 }
 
@@ -211,6 +212,16 @@ document.body.addEventListener('click', e => { const r = e.target.closest('.row.
 
 document.body.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.frag !== undefined) {
+    // Fragment can't be prefilled from a link: copy the recipient, then open the Stars purchase page
+    const user = b.dataset.frag, n = b.dataset.n;
+    if (!user) { toast("Bu o'yinchida @username yo'q — Fragment ishlamaydi, sovg'a orqali yuboring"); return; }
+    try { await navigator.clipboard.writeText('@' + user); } catch (err) {}
+    const url = 'https://fragment.com/stars/buy';
+    if (tg && tg.showAlert) tg.showAlert(`@${user} nusxalandi.\n\nFragment'da:\n1) Recipient: @${user} (joylang)\n2) Miqdor: ${n} ⭐\n3) GRAM bilan to'lang\n\nKeyin bu yerda «✅ Yuborildi»ni bosing.`, () => tg.openLink(url));
+    else { toast('@' + user + ' nusxalandi · ' + n + ' ⭐'); window.open(url, '_blank'); }
+    return;
+  }
   if (b.dataset.req) {
     const ok = b.dataset.ok === '1';
     const go = async () => { b.disabled = true; if (await api({action: 'req', id: +b.dataset.req, ok})) toast(ok ? '✅ Yuborildi deb belgilandi' : '❌ Rad etildi, ⭐ balansga qaytdi'); };
