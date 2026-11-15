@@ -46,6 +46,7 @@ MAX_M = 8000.0            # 80K tokens
 BANK_STEP = 50000         # whole 50K chunks of a round go to the account
 TOKEN_GOAL = 500000       # every 500K account tokens -> 50 stars
 GOAL_STARS = 50
+WITHDRAW_MIN = 100        # smallest withdraw request in stars
 SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 KILL_COST = ANTI_COST = REVIVE_COST = 10
 KILL_TIME = 10.0
@@ -187,7 +188,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name,
+                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -1129,8 +1130,8 @@ async def on_message(c, m):
     elif t == "withdraw":
         if c.acc.uid is None:
             return c.toast("Telegram orqali kiring")
-        if c.acc.stars < GOAL_STARS:
-            return c.toast(f"Kamida {GOAL_STARS} ⭐ kerak")
+        if c.acc.stars < WITHDRAW_MIN:
+            return c.toast(f"Yechib olish uchun kamida {WITHDRAW_MIN} ⭐ kerak")
         amount = c.acc.stars
         c.acc.stars = 0
         c.acc.save()

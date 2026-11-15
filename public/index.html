@@ -807,9 +807,10 @@ function openAcc(){
   document.getElementById('accLeft').textContent = '50 ⭐ gacha yana ' + fmt(TOKEN_GOAL - acc.tokens) + ' token qoldi';
   document.getElementById('accStars').textContent = acc.stars + ' ⭐';
   const wd = document.getElementById('wdBtn');
-  wd.disabled = acc.stars < GOAL_STARS || acc.guest;
+  const wmin = acc.wmin || 100;
+  wd.disabled = acc.stars < wmin || acc.guest;
   document.getElementById('wdHint').textContent = acc.guest ? "Mehmon rejimi: tokenlar saqlanmaydi. O'yinni Telegram bot orqali oching."
-    : acc.stars < GOAL_STARS ? "Kamida 50 ⭐ bo'lganda so'rov yuborish mumkin" : "Yulduzlar Telegram akkauntingizga sovg'a qilib yuboriladi";
+    : acc.stars < wmin ? `Kamida ${wmin} ⭐ bo'lganda so'rov yuborish mumkin (yana ${wmin - acc.stars} ⭐)` : "Yulduzlar Telegram akkauntingizga yuboriladi";
   const ref = acc.ref || {};
   show('refCard', !acc.guest && !!ref.link);
   document.getElementById('refInfo').textContent = `Do'stingiz har 50K token yig'ganda sizga +${fmt(50000 * (ref.pct || 10) / 100)} token (${ref.pct || 10}%)`;
