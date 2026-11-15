@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 W, H = 1280, 720
 FPS = int(os.environ.get("STREAM_FPS", "15"))
 URL = os.environ.get("STREAM_URL", "")
-S = 130.0
+S = float(os.environ.get("ARENA_S", "130"))
 AX, AY, AS = 40, 40, 640                     # arena square on screen
 K = AS / (2 * S)                              # pixels per world unit
 FOOD_COLORS = [(255, 77, 94), (63, 123, 255), (47, 208, 106), (255, 210, 31), (176, 92, 255), (255, 138, 31), (31, 208, 208), (255, 92, 200)]

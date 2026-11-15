@@ -86,6 +86,7 @@
   .subb{font-size:14px;font-weight:800;padding:10px 18px;border:0;border-radius:14px;color:#fff;background:linear-gradient(90deg,#2aa3ef,#7b5cff);box-shadow:0 4px 0 rgba(0,0,0,.25);animation:pulse 1.6s infinite}
   .subb b{color:#ffe14d}
   @keyframes pulse{50%{transform:scale(1.04)}}
+  #mini{position:fixed;top:calc(100px + env(safe-area-inset-top));left:10px;width:116px;height:116px;z-index:3;border-radius:14px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;z-index:9;transition:opacity .3s;opacity:0;pointer-events:none;max-width:90%;text-align:center}
 </style>
 </head>
@@ -94,6 +95,7 @@
 
 <div id="score" class="hud hidden">0<small>token</small></div>
 <button id="exitBtn" class="hidden">☰ Menyu</button>
+<canvas id="mini" class="hidden"></canvas>
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
   <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
@@ -276,7 +278,7 @@ function project(x, y, z){
 }
 
 // ---------- world ----------
-const S = 130;
+let S = 130;                 // replaced by the server's arena size on connect
 const FOOD_COLORS = ['#ff4d5e','#3f7bff','#2fd06a','#ffd21f','#b05cff','#ff8a1f','#1fd0d0','#ff5cc8'];
 const rad = m => 0.45 * Math.sqrt(m);
 const speedOf = m => 9 * Math.pow(m / 10, -0.2);
@@ -357,6 +359,7 @@ function ensurePlayer(id){
 function onMsg(m){
   switch (m.t) {
     case 'init':
+      if (m.S) S = m.S;
       foods = m.food.map(([x, z, b, c]) => ({x, z, r: b ? 0.75 : 0.38, c: FOOD_COLORS[c]}));
       break;
     case 'meta':
@@ -794,6 +797,38 @@ document.getElementById('wPlay').onclick = () => { show('watchBar', false); star
 document.getElementById('wMenu').onclick = () => openMenu();
 ['wPrev', 'wNext', 'wPlay', 'wMenu'].forEach(id => document.getElementById(id).addEventListener('pointerdown', e => e.stopPropagation()));
 
+// ---------- minimap: the whole arena in the corner, every blob a clearly visible dot ----------
+const miniCv = document.getElementById('mini'), mctx = miniCv.getContext('2d');
+const MINI = 116;
+miniCv.width = miniCv.height = MINI * 2;
+mctx.scale(2, 2);
+const skinDot = sk => !sk ? '#2fd06a' : sk.c ? sk.c : (BASE[sk.type] ? BASE[sk.type][1] : '#2fd06a');
+function drawMini(){
+  const on = state === 'play' || state === 'watch';
+  miniCv.classList.toggle('hidden', !on);
+  if (!on) return;
+  const k = (MINI - 8) / (2 * S), ox = 4, oy = 4;
+  mctx.clearRect(0, 0, MINI, MINI);
+  mctx.fillStyle = 'rgba(15,30,80,.72)'; mctx.beginPath(); mctx.roundRect(0, 0, MINI, MINI, 14); mctx.fill();
+  mctx.fillStyle = 'rgba(120,210,90,.28)'; mctx.fillRect(ox, oy, MINI - 8, MINI - 8);
+  mctx.strokeStyle = 'rgba(255,255,255,.55)'; mctx.lineWidth = 1; mctx.strokeRect(ox + .5, oy + .5, MINI - 9, MINI - 9);
+  const focus = state === 'watch' ? watchTarget() : me;
+  const list = players.filter(p => p.alive).sort((a, b) => a.m - b.m);
+  for (const p of list) {
+    if (p === focus) continue;
+    const x = ox + (p.x + S) * k, y = oy + (p.z + S) * k;
+    const r = Math.max(2.6, Math.min(9, rad(p.m) * k * 1.6));
+    mctx.fillStyle = skinDot(p.skin); mctx.beginPath(); mctx.arc(x, y, r, 0, 7); mctx.fill();
+    mctx.strokeStyle = 'rgba(0,0,0,.45)'; mctx.lineWidth = 1; mctx.stroke();
+  }
+  if (focus) {                                   // you (or the watched player) on top, with a yellow ring
+    const x = ox + (focus.x + S) * k, y = oy + (focus.z + S) * k;
+    const r = Math.max(3.6, Math.min(10, rad(focus.m) * k * 1.6));
+    mctx.fillStyle = skinDot(focus.skin); mctx.beginPath(); mctx.arc(x, y, r, 0, 7); mctx.fill();
+    mctx.strokeStyle = '#ffe14d'; mctx.lineWidth = 2.2; mctx.beginPath(); mctx.arc(x, y, r + 2.4, 0, 7); mctx.stroke();
+  }
+}
+
 function openMenu(){
   state = 'menu';
   ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg', 'watchBar'].forEach(id => show(id, false)); show('menu', true);
@@ -867,6 +902,7 @@ function frame(t){
   if (killOut) document.getElementById('killOut').textContent = `🎯 ${killOut.to}ga KIL yuborildi · ${Math.max(0, Math.ceil((killOut.end - t) / 1000))}s`;
   if (state === 'play') updHud(); else if (state === 'watch') updWatch();
   render();
+  drawMini();
   requestAnimationFrame(frame);
 }
 openMenu();
