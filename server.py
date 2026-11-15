@@ -40,8 +40,8 @@ if not PUBLIC_URL and os.environ.get("RAILWAY_PUBLIC_DOMAIN"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------- game rules
-S = 200.0                 # half-size of the arena (400 x 400)
-FOOD_N = 4200             # keeps the old food density
+S = 130.0
+FOOD_N = 1800             # keeps the old food density
 MAX_M = 8000.0            # 80K tokens
 BANK_STEP = 50000         # whole 50K chunks of a round go to the account
 TOKEN_GOAL = 1000000      # every 1M account tokens -> 100 stars (same rate: 10K tokens = 1 star)
@@ -51,8 +51,8 @@ SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 KILL_COST = ANTI_COST = REVIVE_COST = 10
 KILL_TIME = 10.0
 BOT_LIMIT = 50000         # a bot reaching this many tokens leaves the arena
-TOTAL_PLAYERS = 24        # arena is topped up with bots to this many
-MIN_BOTS = 8
+TOTAL_PLAYERS = 18        # arena is topped up with bots to this many
+MIN_BOTS = 6
 TICK = 1 / 20
 SKIN_PRICES = {"yashil": 0, "tarvuz": 15, "konfet": 15, "leopard": 20, "gulli": 25, "kamalak": 25,
                "muz": 30, "olov": 35, "lava": 45, "chaqmoq": 45, "galaktika": 50, "oltin": 75}
