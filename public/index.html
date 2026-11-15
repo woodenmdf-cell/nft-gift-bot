@@ -90,7 +90,10 @@
   #voice button{border:0;border-radius:14px;color:#fff;font:800 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
   #micBtn{flex:1;height:54px;background:rgba(15,30,80,.78);font-size:24px!important;line-height:1}
   #micBtn small{display:block;font-size:10px;font-weight:700;opacity:.8;margin-top:2px}
-  #micBtn.on{background:#e53950;transform:scale(1.06)}
+  #micBtn.on{background:#e53950;animation:micp 1.4s infinite}
+  @keyframes micp{50%{box-shadow:0 0 0 6px rgba(229,57,80,.35)}}
+  #talkers{position:fixed;top:calc(288px + env(safe-area-inset-top));left:10px;z-index:3;pointer-events:none;font:800 12px system-ui,sans-serif;color:#fff}
+  #talkers div{background:rgba(15,30,80,.72);border-radius:10px;padding:4px 8px;margin-bottom:4px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #muteBtn{width:44px;height:54px;background:rgba(15,30,80,.78);font-size:20px!important}
   #muteBtn.off{background:rgba(90,90,90,.85)}
   #mini{position:fixed;top:calc(100px + env(safe-area-inset-top));left:10px;width:116px;height:116px;z-index:3;border-radius:14px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
@@ -103,7 +106,8 @@
 <div id="score" class="hud hidden">0<small>token</small></div>
 <button id="exitBtn" class="hidden">☰ Menyu</button>
 <canvas id="mini" class="hidden"></canvas>
-<div id="voice" class="hidden"><button id="micBtn">🎤<small>bosib gapiring</small></button><button id="muteBtn">🔊</button></div>
+<div id="voice" class="hidden"><button id="micBtn">🎤<small>yoqish</small></button><button id="muteBtn">🔊</button></div>
+<div id="talkers"></div>
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
   <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
@@ -417,7 +421,7 @@ function onMsg(m){
       if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
       if (killIn) updAntiBtn();
       break;
-    case 'v': voiceIn(m.id, m.d); break;
+    case 'v': voiceIn(m.id, m.n || '', m.d); break;
     case 'toast':
       toast(m.msg);
       if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+' + (acc.goal_stars || GOAL_STARS) + ' ⭐', big: true}); haptic('heavy'); }
@@ -819,8 +823,8 @@ const skinDot = sk => !sk ? '#2fd06a' : sk.c ? sk.c : (BASE[sk.type] ? BASE[sk.t
 function drawMini(){
   const on = state === 'play' || state === 'watch';
   miniCv.classList.toggle('hidden', !on);
-  document.getElementById('voice').classList.toggle('hidden', state !== 'play');
-  if (state !== 'play' && micOn) micStop();
+  document.getElementById('voice').classList.toggle('hidden', !on);
+  if (!on && micOn) micStop();
   if (!on) return;
   const k = (MINI - 8) / (2 * S), ox = 4, oy = 4;
   mctx.clearRect(0, 0, MINI, MINI);
@@ -925,12 +929,21 @@ openMenu();
 requestAnimationFrame(frame);
 if (!inTelegram) connect();     // inside Telegram we connect once the SDK has loaded
 
-// ---------------------------------------------------------------- voice chat (push-to-talk, nearby players)
-const VRATE = 8000;
-let actx = null, micStream = null, micNode = null, micSrc = null, micOn = false, voiceMuted = false, micBuf = [], micPos = 0;
-const vQueue = new Map();                       // speaker id -> next play time
+// ---------------------------------------------------------------- voice chat (tap to open mic, everyone online hears)
+const VRATE = 16000;
+let actx = null, outGain = null, micStream = null, micNode = null, micSrc = null, micOn = false, voiceMuted = false;
+let micBuf = [], micAcc = 0, micCnt = 0, micPhase = 0, gateUntil = 0, noiseFloor = 0.004;
+const vQueue = new Map(), talkers = new Map();
 function audioCtx(){
-  if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; actx = new AC(); }
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    actx = new AC();
+    // louder, clean output: gain into a compressor so loud voices don't crackle
+    const comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.15;
+    outGain = actx.createGain(); outGain.gain.value = 2.2;
+    outGain.connect(comp); comp.connect(actx.destination);
+  }
   if (actx.state === 'suspended') actx.resume();
   return actx;
 }
@@ -946,52 +959,79 @@ function micFlush(){
   let bin = ''; for (const b of micBuf) bin += String.fromCharCode(b);
   micBuf = []; send({t: 'v', d: btoa(bin)});
 }
+function micUi(){
+  const mb = document.getElementById('micBtn');
+  mb.classList.toggle('on', micOn);
+  mb.innerHTML = micOn ? '🎙️<small>yoqiq · o\'chirish</small>' : '🎤<small>yoqish</small>';
+}
 async function micStart(){
   if (micOn) return;
   const ac = audioCtx(); if (!ac) return toast('Bu qurilmada ovoz ishlamaydi');
-  micOn = true; document.getElementById('micBtn').classList.add('on');
+  micOn = true; micUi();
   try {
-    if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
-  } catch (e) { micOn = false; document.getElementById('micBtn').classList.remove('on'); return toast('Mikrofonga ruxsat bering'); }
-  if (!micOn) return;
+    micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1}});
+  } catch (e) { micOn = false; micUi(); return toast('Mikrofonga ruxsat bering'); }
+  if (!micOn) { micStream.getTracks().forEach(t => t.stop()); micStream = null; return; }
   micSrc = ac.createMediaStreamSource(micStream);
   micNode = ac.createScriptProcessor(2048, 1, 1);
   const step = ac.sampleRate / VRATE;
   micNode.onaudioprocess = ev => {
     if (!micOn) return;
     const inp = ev.inputBuffer.getChannelData(0);
-    for (; micPos < inp.length; micPos += step) micBuf.push(mulawEnc(inp[Math.floor(micPos)] * 1.6));
-    micPos -= inp.length;
-    if (micBuf.length >= 1600) micFlush();           // ~200 ms packets
+    // loudness gate: send only while someone actually speaks (plus a short tail)
+    let e = 0; for (let i = 0; i < inp.length; i += 4) e += inp[i] * inp[i];
+    const rms = Math.sqrt(e / (inp.length / 4)), now = performance.now();
+    if (rms < noiseFloor * 2.5) noiseFloor = noiseFloor * 0.98 + rms * 0.02;
+    if (rms > Math.max(0.012, noiseFloor * 3)) gateUntil = now + 450;
+    const talking = now < gateUntil;
+    // box-filter down to 16 kHz (averaging avoids the harsh aliasing of plain sample-dropping)
+    for (let i = 0; i < inp.length; i++) {
+      micAcc += inp[i]; micCnt++; micPhase += 1;
+      if (micPhase >= step) { micPhase -= step; if (talking) micBuf.push(mulawEnc(micAcc / micCnt)); micAcc = 0; micCnt = 0; }
+    }
+    if (!talking || micBuf.length >= 3200) micFlush();     // ~200 ms packets
     ev.outputBuffer.getChannelData(0).fill(0);
   };
   micSrc.connect(micNode); micNode.connect(ac.destination);
+  toast('Mikrofon yoqildi — hamma eshitadi');
 }
 function micStop(){
-  micOn = false; document.getElementById('micBtn').classList.remove('on');
+  if (!micOn && !micStream) return;
+  micOn = false; micUi();
   if (micNode) { try { micNode.disconnect(); micSrc.disconnect(); } catch (e) {} micNode = micSrc = null; }
-  micFlush(); micPos = 0;
+  // release the mic completely, otherwise iPhones keep playback quiet (call mode)
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  micFlush();
 }
-function voiceIn(id, d){
-  const p = byId.get(id); if (p) p.talk = performance.now() + 500;
+function voiceIn(id, name, d){
+  if (state !== 'play' && state !== 'watch') return;
+  const key = id || name;
+  talkers.set(key, {name, until: performance.now() + 700}); drawTalkers();
+  const p = id && byId.get(id); if (p) p.talk = performance.now() + 600;
   if (voiceMuted) return;
   const ac = audioCtx(); if (!ac) return;
   let raw; try { raw = atob(d); } catch (e) { return; }
-  const n = raw.length, ratio = ac.sampleRate / VRATE, out = Math.floor(n * ratio);
+  const n = raw.length; if (!n) return;
+  const ratio = ac.sampleRate / VRATE, out = Math.floor(n * ratio);
   const buf = ac.createBuffer(1, out, ac.sampleRate), ch = buf.getChannelData(0);
-  for (let i = 0; i < out; i++) {                     // linear upsampling
+  for (let i = 0; i < out; i++) {
     const t = i / ratio, a = Math.floor(t), b = Math.min(n - 1, a + 1), f = t - a;
     ch[i] = MULAW[raw.charCodeAt(a)] * (1 - f) + MULAW[raw.charCodeAt(b)] * f;
   }
-  const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination);
-  const now = ac.currentTime; let at = vQueue.get(id) || 0;
-  if (at < now + 0.05 || at > now + 1.5) at = now + 0.12;   // small jitter buffer
-  src.start(at); vQueue.set(id, at + buf.duration);
+  const src = ac.createBufferSource(); src.buffer = buf; src.connect(outGain);
+  const now = ac.currentTime; let at = vQueue.get(key) || 0;
+  if (at < now + 0.03 || at > now + 1.2) at = now + 0.25;    // jitter buffer so speech doesn't stutter
+  src.start(at); vQueue.set(key, at + buf.duration);
 }
+function drawTalkers(){
+  const el = document.getElementById('talkers'), now = performance.now(), names = [];
+  for (const [k, t] of talkers) { if (t.until < now) talkers.delete(k); else names.push(t.name); }
+  el.innerHTML = names.slice(0, 4).map(n => '<div>🔊 ' + esc(n) + '</div>').join('');
+}
+setInterval(drawTalkers, 300);
 (function(){
   const mb = document.getElementById('micBtn');
-  mb.addEventListener('pointerdown', e => { e.preventDefault(); try { mb.setPointerCapture(e.pointerId); } catch (_) {} micStart(); });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) mb.addEventListener(ev, () => micOn && micStop());
+  mb.onclick = () => micOn ? micStop() : micStart();
   mb.addEventListener('contextmenu', e => e.preventDefault());
   document.getElementById('muteBtn').onclick = () => {
     voiceMuted = !voiceMuted;
@@ -999,6 +1039,7 @@ function voiceIn(id, d){
     toast(voiceMuted ? 'Boshqalar ovozi o\'chirildi' : 'Boshqalar ovozi yoqildi');
   };
   document.addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume(); }, {passive: true});
+  micUi();
 })();
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
