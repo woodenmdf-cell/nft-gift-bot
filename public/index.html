@@ -51,6 +51,42 @@
   .sk .lock{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);background:#ffb800;color:#3a2600;font-size:11px;font-weight:900;border-radius:8px;padding:1px 6px;white-space:nowrap}
   .play{margin-top:8px;font-size:22px;font-weight:900;padding:14px 56px;border:0;border-radius:18px;color:#2a2000;background:linear-gradient(#ffe766,#ffc21a);box-shadow:0 6px 0 #b98400}
   .play:active{transform:translateY(3px);box-shadow:0 3px 0 #b98400}
+  /* ---- ranks ---- */
+  .rbadge{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;clip-path:polygon(50% 0,93% 18%,93% 62%,50% 100%,7% 62%,7% 18%);background:linear-gradient(160deg,var(--c1),var(--c2));box-shadow:inset 0 0 0 3px rgba(255,255,255,.35)}
+  .rbadge::before{content:'';position:absolute;inset:9%;clip-path:inherit;background:linear-gradient(200deg,rgba(255,255,255,.45),rgba(255,255,255,0) 55%),linear-gradient(160deg,var(--c2),var(--c1))}
+  .rbadge b{position:relative;color:#fff;font-weight:900;text-shadow:0 2px 3px rgba(0,0,0,.45);line-height:1}
+  .rbadge i{position:absolute;bottom:13%;left:0;right:0;text-align:center;font-style:normal;font-weight:900;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+  #rankChip{display:flex;align-items:center;gap:10px;background:rgba(10,20,60,.45);border-radius:14px;padding:7px 12px 7px 8px;margin:-4px 0 12px;width:min(300px,86vw);text-align:left;cursor:pointer}
+  #rankChip .rn{font-weight:900;font-size:15px}
+  .rbar{height:8px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:4px}
+  .rbar>div{height:100%;border-radius:5px;background:linear-gradient(90deg,#ffe14d,#ffb300)}
+  #rankChip small{opacity:.75;font-size:11px;font-weight:700}
+  #rankOv .kcard{position:relative;overflow:hidden;padding:20px 18px 16px}
+  #rankOv .rt{font-size:13px;letter-spacing:3px;opacity:.75;font-weight:800}
+  #rkBadgeWrap{height:132px;display:flex;align-items:center;justify-content:center;margin:6px 0 2px}
+  #rkName{font-size:26px;font-weight:900;margin:2px 0 10px}
+  #rkBar{height:14px;border-radius:8px}
+  #rkBar>div{transition:width .9s cubic-bezier(.3,.7,.3,1)}
+  #rkNums{display:flex;justify-content:space-between;font-size:12px;font-weight:800;opacity:.8;margin-top:5px}
+  #rkDelta{position:absolute;top:56px;right:22px;font-size:30px;font-weight:900;color:#ffe14d;text-shadow:0 3px 0 rgba(0,0,0,.25);opacity:0}
+  #rkDelta.neg{color:#ff6b7f}
+  #rkDelta.go{animation:rpop 1.6s ease-out forwards}
+  @keyframes rpop{0%{opacity:0;transform:translateY(20px) scale(.4)}18%{opacity:1;transform:translateY(0) scale(1.35)}30%{transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:translateY(-38px) scale(1)}}
+  #rkParts{margin:12px 0 4px;font-size:13px;text-align:left}
+  #rkParts div{display:flex;justify-content:space-between;padding:4px 8px;border-radius:8px;opacity:0;transform:translateX(-12px);transition:.35s}
+  #rkParts div.in{opacity:1;transform:none}
+  #rkParts div:nth-child(odd){background:rgba(255,255,255,.07)}
+  #rkParts b{color:#ffe14d}#rkParts b.neg{color:#ff6b7f}
+  #rkUp{position:absolute;left:0;right:0;top:12px;font-size:20px;font-weight:900;color:#ffe14d;opacity:0;text-shadow:0 0 18px rgba(255,210,0,.8)}
+  #rkUp.go{animation:rkup 2.2s ease-out forwards}
+  @keyframes rkup{0%{opacity:0;transform:scale(.3)}15%{opacity:1;transform:scale(1.25)}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0}}
+  .rbadge.boom{animation:rboom .9s ease-out}
+  @keyframes rboom{0%{transform:scale(.2) rotate(-25deg);filter:brightness(3)}55%{transform:scale(1.3) rotate(6deg);filter:brightness(1.6)}100%{transform:scale(1) rotate(0);filter:none}}
+  #rkGlow{position:absolute;left:50%;top:110px;width:260px;height:260px;margin:-130px 0 0 -130px;border-radius:50%;background:radial-gradient(circle,rgba(255,225,80,.55),rgba(255,225,80,0) 65%);opacity:0;pointer-events:none}
+  #rkGlow.go{animation:rglow 1.4s ease-out}
+  @keyframes rglow{0%{opacity:0;transform:scale(.3)}30%{opacity:1}100%{opacity:0;transform:scale(1.6)}}
+  .conf{position:absolute;top:110px;left:50%;width:8px;height:12px;border-radius:2px;pointer-events:none;animation:conf 1.4s ease-out forwards}
+  @keyframes conf{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -123,6 +159,7 @@
   <h1>SHAR <span>YUTAR</span></h1>
   <div class="sub">Donachalarni ye, kattalash, kichiklarni yut!</div>
   <input id="name" maxlength="14" placeholder="Ismingiz">
+  <div id="rankChip"></div>
   <div class="skins" id="skins"></div>
   <div class="hint" id="skinHint" style="margin:-8px 0 14px;font-size:12px;opacity:.75"></div>
   <div class="menuBtns">
@@ -193,6 +230,17 @@
     <button class="ghost" id="bdCancel" style="width:100%;margin-top:10px;background:transparent">Bekor qilish</button>
   </div>
 </div>
+<div id="rankOv" class="ov hidden"><div class="kcard">
+  <div id="rkGlow"></div><div id="rkUp">⬆ RANK KO'TARILDI!</div>
+  <div class="rt">RANK</div>
+  <div id="rkBadgeWrap"></div>
+  <div id="rkName"></div>
+  <div class="rbar" id="rkBar"><div></div></div>
+  <div id="rkNums"><span id="rkInto"></span><span id="rkTotal"></span></div>
+  <div id="rkDelta"></div>
+  <div id="rkParts"></div>
+  <button class="play" id="rkOk" style="width:100%;margin-top:10px;font-size:18px;padding:12px">Davom etish</button>
+</div></div>
 <div id="killPick" class="ov hidden">
   <div class="kcard">
     <h3>🎯 KIL</h3>
@@ -382,7 +430,7 @@ function ensurePlayer(id){
   let p = byId.get(id);
   if (!p) {
     const md = meta[id] || ['?', 'yashil', 0];
-    p = {id, name: md[0], skin: skinOf(md[1]), alive: true, x: 0, z: 0, sx: 0, sz: 0, m: 10, fresh: true};
+    p = {id, name: md[0], skin: skinOf(md[1]), tier: md[3] ?? -1, alive: true, x: 0, z: 0, sx: 0, sz: 0, m: 10, fresh: true};
     byId.set(id, p);
   }
   return p;
@@ -396,7 +444,7 @@ function onMsg(m){
       break;
     case 'meta':
       meta = m.p;
-      for (const [id, md] of Object.entries(meta)) { const p = byId.get(+id); if (p) { p.name = md[0]; p.skin = skinOf(md[1]); } }
+      for (const [id, md] of Object.entries(meta)) { const p = byId.get(+id); if (p) { p.name = md[0]; p.skin = skinOf(md[1]); p.tier = md[3] ?? -1; } }
       break;
     case 's': {
       const seen = new Set();
@@ -436,7 +484,9 @@ function onMsg(m){
       document.getElementById('dKiller').textContent = m.killer + ' sizni yutib yubordi';
       document.getElementById('dBank').textContent = m.banked ? "💰 Bu o'yinda hisobga o'tdi: +" + fmt(m.banked) : "💡 50K ga yetgan tokenlargina hisobga o'tadi";
       ['boosts', 'exitBtn'].forEach(id => show(id, false)); show('dead', true);
+      if (m.rank) setTimeout(() => showRank(m.rank), 700);
       break;
+    case 'left': if (m.rank) showRank(m.rank); break;
     case 'acc':
       acc = m;
       if (resumeAfterReconnect && state === 'menu') { resumeAfterReconnect = false; send({t: 'play', name: nameVal() || acc.name}); }
@@ -649,7 +699,7 @@ function drawLabel(p){
   ctx.fillStyle = p === me ? '#ffd21f' : '#ffe9a8';
   ctx.strokeText(fmt(p.m * 10), p.P.x, y - fs * 1.05); ctx.fillText(fmt(p.m * 10), p.P.x, y - fs * 1.05);
   ctx.font = `800 ${fs * 0.9}px system-ui,sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.5)';
-  const nm = (p.talk > performance.now() ? '🔊 ' : '') + p.name;
+  const nm = (p.talk > performance.now() ? '🔊 ' : '') + (p.tier >= 0 ? RANKS[p.tier].e + ' ' : '') + p.name;
   ctx.strokeText(nm, p.P.x, y); ctx.fillText(nm, p.P.x, y);
 }
 function quad(a, b, c, d){ ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); }
@@ -797,7 +847,7 @@ document.getElementById('subBtn').onclick = () => {
   } else send({t: 'subcheck'});
 };
 function refreshMenu(){
-  renderSkins(); refreshSub();
+  renderSkins(); refreshSub(); renderRankChip();
   document.getElementById('bestTxt').textContent = acc.best ? '👑 Rekordingiz: ' + fmt(acc.best) : '';
   document.getElementById('skinHint').textContent = '🎨 Rangni bosing · Balans: ' + acc.stars + ' ⭐';
   const nm = document.getElementById('name');
@@ -1069,6 +1119,103 @@ setInterval(drawTalkers, 300);
   document.addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume(); }, {passive: true});
   micUi();
 })();
+
+// ---------------------------------------------------------------- ranks (PUBG style)
+const RANKS = [
+  {n: 'Bronza', c1: '#e9a46a', c2: '#8a4a1c', e: '🥉', s: '◆'},
+  {n: 'Kumush', c1: '#f4f7fb', c2: '#7d8798', e: '🥈', s: '◆'},
+  {n: 'Oltin', c1: '#ffe27a', c2: '#c48600', e: '🥇', s: '★'},
+  {n: 'Platina', c1: '#9ff3ec', c2: '#1f8c96', e: '💠', s: '★'},
+  {n: 'Olmos', c1: '#b8dcff', c2: '#3a5fe0', e: '💎', s: '♦'},
+  {n: 'As', c1: '#ff9be4', c2: '#8b20c9', e: '👑', s: '♛'},
+  {n: 'As Master', c1: '#ffb04a', c2: '#c3122f', e: '🔥', s: '♛'},
+];
+const RANK_COST = [60, 80, 100, 120, 150, 180, 220];
+function badgeHTML(tier, div, size){
+  const r = RANKS[tier];
+  return `<div class="rbadge" style="--c1:${r.c1};--c2:${r.c2};width:${size}px;height:${size * 1.1}px"><b style="font-size:${size * 0.38}px;margin-top:-${size * 0.12}px">${r.s}</b><i style="font-size:${size * 0.2}px">${div}</i></div>`;
+}
+function renderRankChip(){
+  const el = document.getElementById('rankChip'), r = acc && acc.rank;
+  if (!r) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = badgeHTML(r.tier, r.div, 40) +
+    `<div style="flex:1"><div class="rn">${RANKS[r.tier].n} ${r.div}</div><div class="rbar"><div style="width:${r.max ? 100 : r.into / r.need * 100}%"></div></div><small>${r.max ? 'Eng yuqori rank · ' + r.rp + ' RP' : r.into + ' / ' + r.need + ' RP'}</small></div>`;
+}
+const rIdx = r => r.tier * 5 + (5 - r.div);
+let rankAnimT = [];
+function showRank(R){
+  rankAnimT.forEach(clearTimeout); rankAnimT = [];
+  const later = (ms, fn) => rankAnimT.push(setTimeout(fn, ms));
+  const ov = document.getElementById('rankOv'), card = ov.querySelector('.kcard');
+  const bar = document.querySelector('#rkBar>div'), wrap = document.getElementById('rkBadgeWrap');
+  const setRank = (tier, div, boom) => {
+    wrap.innerHTML = badgeHTML(tier, div, 110);
+    if (boom) wrap.firstChild.classList.add('boom');
+    document.getElementById('rkName').textContent = RANKS[tier].n + ' ' + div;
+    document.getElementById('rkName').style.color = RANKS[tier].c1;
+  };
+  const setNums = (into, need) => {
+    document.getElementById('rkInto').textContent = into + ' / ' + need + ' RP';
+  };
+  const o = R.old, n = R.new;
+  setRank(o.tier, o.div); setNums(o.into, o.need);
+  document.getElementById('rkTotal').textContent = 'Jami: ' + o.rp + ' RP';
+  bar.style.transition = 'none'; bar.style.width = (o.max ? 100 : o.into / o.need * 100) + '%';
+  const d = document.getElementById('rkDelta');
+  d.className = R.delta < 0 ? 'neg' : ''; d.textContent = (R.delta >= 0 ? '+' : '') + R.delta + ' RP';
+  document.getElementById('rkUp').className = ''; document.getElementById('rkGlow').className = '';
+  card.querySelector('.rt').style.visibility = '';
+  card.querySelectorAll('.conf').forEach(e => e.remove());
+  const parts = document.getElementById('rkParts');
+  parts.innerHTML = R.parts.map(([t, v]) => `<div><span>${esc(t)}</span><b class="${v < 0 ? 'neg' : ''}">${v >= 0 ? '+' : ''}${v}</b></div>`).join('');
+  show('rankOv', true);
+  [...parts.children].forEach((el, i) => later(250 + i * 160, () => el.classList.add('in')));
+  later(600, () => { d.classList.add('go'); haptic('light'); });
+  // bar: walk division by division so every promotion gets its moment
+  let t = 1000, idx = rIdx(o);
+  const target = rIdx(n);
+  const toW = w => { bar.style.transition = ''; bar.style.width = w + '%'; };
+  if (target === idx) {
+    later(t, () => { toW(n.max ? 100 : n.into / n.need * 100); setNums(n.into, n.need); });
+  } else if (target > idx) {
+    const steps = Math.min(3, target - idx);
+    for (let k = 0; k < steps; k++) {
+      const last = k === steps - 1, ni = last ? target : idx + k + 1;
+      const tier = Math.floor(ni / 5), div = 5 - ni % 5;
+      later(t, () => toW(100));
+      later(t + 950, () => {
+        bar.style.transition = 'none'; bar.style.width = '0%';
+        setRank(tier, div, true); promoFx(card); haptic('heavy');
+        setNums(0, RANK_COST[tier]);
+      });
+      if (last) later(t + 1250, () => { toW(n.max ? 100 : n.into / n.need * 100); setNums(n.into, n.need); });
+      t += 1700;
+    }
+  } else {
+    later(t, () => { setRank(n.tier, n.div); toW(n.into / n.need * 100); setNums(n.into, n.need); });
+  }
+  later(t + 300, () => { document.getElementById('rkTotal').textContent = 'Jami: ' + n.rp + ' RP'; });
+}
+function promoFx(card){
+  const up = document.getElementById('rkUp'), gl = document.getElementById('rkGlow');
+  up.className = ''; gl.className = ''; void up.offsetWidth; up.className = 'go'; gl.className = 'go';
+  card.querySelector('.rt').style.visibility = 'hidden';
+  const cols = ['#ffe14d', '#ff5a6e', '#4aa8ff', '#5be37d', '#ff9be4', '#fff'];
+  for (let i = 0; i < 26; i++) {
+    const c = document.createElement('div'); c.className = 'conf';
+    const a = Math.random() * Math.PI * 2, r = 80 + Math.random() * 110;
+    c.style.background = cols[i % cols.length];
+    c.style.setProperty('--dx', Math.cos(a) * r + 'px'); c.style.setProperty('--dy', Math.sin(a) * r + 'px');
+    c.style.setProperty('--r', (Math.random() * 720 - 360) + 'deg');
+    card.appendChild(c); setTimeout(() => c.remove(), 1500);
+  }
+}
+document.getElementById('rkOk').onclick = () => { rankAnimT.forEach(clearTimeout); show('rankOv', false); };
+document.getElementById('rankChip').onclick = () => {
+  if (!acc || !acc.rank) return;
+  toast(RANKS.map(r => r.e + ' ' + r.n).join(' → '));
+};
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>

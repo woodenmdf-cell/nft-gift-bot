@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS payments(charge_id TEXT PRIMARY KEY, uid INTEGER, ite
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 """)
 db.commit()
-for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0"):
+for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0", "rp INTEGER DEFAULT 0"):
     try:
         db.execute(f"ALTER TABLE users ADD COLUMN {col}")
     except sqlite3.OperationalError:
@@ -112,6 +112,57 @@ def admin_id():
     return int(ADMIN_ENV) if ADMIN_ENV.isdigit() else (int(setting("admin")) if setting("admin") else None)
 
 
+# ---------------------------------------------------------------- ranks (PUBG style)
+# (name, RP needed per division); every tier has 5 divisions: 5 -> 1
+RANK_TIERS = [("Bronza", 60), ("Kumush", 80), ("Oltin", 100), ("Platina", 120),
+              ("Olmos", 150), ("As", 180), ("As Master", 220)]
+RANK_DIVS = 5
+
+
+def tier_start(t):
+    return sum(c * RANK_DIVS for _, c in RANK_TIERS[:t])
+
+
+def rank_info(rp):
+    rp = max(0, int(rp))
+    left = rp
+    for t, (name, cost) in enumerate(RANK_TIERS):
+        for d in range(RANK_DIVS):
+            last = t == len(RANK_TIERS) - 1 and d == RANK_DIVS - 1
+            if left < cost or last:
+                return {"rp": rp, "tier": t, "div": RANK_DIVS - d, "name": f"{name} {RANK_DIVS - d}",
+                        "into": left if not last else min(left, cost), "need": cost, "max": last and left >= cost}
+            left -= cost
+
+
+def round_rp(p, tier):
+    """RP for one finished round: playing, score, players eaten, best place."""
+    secs = time.monotonic() - p.t0
+    score = max(p.peak, p.round_bank + int(p.m * 10))
+    parts = []
+    if secs < 20:                                   # instant leave: nothing either way
+        return 0, [["Juda qisqa o'yin", 0]]
+    parts.append(["O'yin", 3])
+    if score >= 2000:
+        parts.append([f"Ochko {score // 1000}K", min(40, score // 2000)])
+    if p.eaten:
+        parts.append([f"Yutilgan o'yinchi ×{p.eaten}", min(30, p.eaten * 6)])
+    pl = p.best_place
+    if pl == 1:
+        parts.append(["TOP-1 ga chiqdingiz", 25])
+    elif pl <= 3:
+        parts.append([f"TOP-{pl} ga chiqdingiz", 15])
+    elif pl <= 10:
+        parts.append([f"TOP-10 ichida", 6])
+    total = sum(v for _, v in parts)
+    # high ranks have to earn it: a weak round costs points (never drops a whole tier)
+    if tier >= 5 and score < 3000:
+        parts, total = [["Kuchsiz o'yin", -8]], -8
+    elif tier >= 4 and score < 1500:
+        parts, total = [["Kuchsiz o'yin", -4]], -4
+    return total, parts
+
+
 class Account:
     """A player's persistent wallet. Guests (no Telegram login) live only in memory."""
     cache = {}
@@ -122,6 +173,7 @@ class Account:
         if uid is None:
             self.tokens, self.stars, self.owned, self.skin, self.best = 0, 0, ["yashil"], "yashil", 0
             self.ref, self.ref_earned, self.sub_bonus = None, 0, 0
+            self.rp = 0
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
@@ -136,6 +188,7 @@ class Account:
         self.tokens, self.stars, self.best = r["tokens"], r["stars"], r["best"]
         self.ref, self.ref_earned = r["ref"], r["ref_earned"] or 0
         self.sub_bonus = r["sub_bonus"] or 0
+        self.rp = r["rp"] or 0
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
         if "yashil" not in self.owned:
             self.owned.insert(0, "yashil")
@@ -155,8 +208,8 @@ class Account:
     def save(self):
         if self.uid is None:
             return
-        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=? WHERE uid=?",
-                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.sub_bonus, self.uid))
+        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=?, rp=? WHERE uid=?",
+                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.sub_bonus, self.rp, self.uid))
         db.commit()
 
     def add_tokens(self, n):
@@ -176,6 +229,14 @@ class Account:
         rows = db.execute("SELECT stars, status, created FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
         return [{"stars": r["stars"], "status": STATUS.get(r["status"], r["status"]), "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
 
+    def finish_round(self, p):
+        """Adds the round's RP and returns what the client animates."""
+        old = rank_info(self.rp)
+        delta, parts = round_rp(p, old["tier"])
+        self.rp = max(tier_start(old["tier"]), self.rp + delta)
+        self.save()
+        return {"old": old, "new": rank_info(self.rp), "delta": self.rp - old["rp"], "parts": parts}
+
     def ref_count(self):
         if self.uid is None:
             return 0
@@ -188,7 +249,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
+                "best": self.best, "rank": rank_info(self.rp), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -480,6 +541,10 @@ class Player:
         self.last_pos = time.monotonic()
         self.round_bank = 0
         self.respawn_at = 0.0
+        self.t0 = time.monotonic()      # round stats for rank points
+        self.peak = 0
+        self.eaten = 0
+        self.best_place = 99
 
 
 class Game:
@@ -693,6 +758,8 @@ class Game:
                     continue
                 if math.hypot(a.x - b.x, a.z - b.z) < ra + rad(b.m):
                     a.m = min(MAX_M, a.m + b.m)
+                    if not b.bot:
+                        a.eaten += 1
                     self.kill_blob(b, a)
         for p in self.players:
             if p.alive and p.m > 150:
@@ -707,6 +774,11 @@ class Game:
         for p in self.players:
             if p.alive and not p.bot:
                 self.bank(p)
+                p.peak = max(p.peak, p.round_bank + int(p.m * 10))
+        if self.ticks % 10 == 0:
+            for i, p in enumerate(sorted(self.alive(), key=lambda q: -q.m)):
+                if not p.bot and i + 1 < p.best_place:
+                    p.best_place = i + 1
         self.tick_kills(now)
         self.ticks += 1
         if self.ticks % 10 == 0:
@@ -729,7 +801,9 @@ class Game:
             if sc > c.acc.best:
                 c.acc.best = sc
                 c.acc.save()
-            c.send({"t": "dead", "killer": by.name, "score": sc, "best": c.acc.best, "banked": b.round_bank})
+            c.send({"t": "dead", "killer": by.name, "score": sc, "best": c.acc.best, "banked": b.round_bank,
+                    "rank": c.acc.finish_round(b)})
+            push_acc(c.acc)
         self.remove(b)
         if c:
             c.player = None
@@ -822,7 +896,7 @@ class Game:
         return json.dumps(msg, separators=(",", ":"))
 
     def meta_msg(self):
-        return json.dumps({"t": "meta", "p": {p.id: [p.name, p.skin, 0 if p.bot else 1] for p in self.players}},
+        return json.dumps({"t": "meta", "p": {p.id: [p.name, p.skin, 0 if p.bot else 1, (p.id * 7) % 5 if p.bot or not p.conn else rank_info(p.conn.acc.rp)["tier"]] for p in self.players}},
                           separators=(",", ":"), ensure_ascii=False)
 
 
@@ -1056,6 +1130,10 @@ async def on_message(c, m):
         if "x" in m:
             p.x, p.z = float(m["x"]), float(m["z"])
             c.send({"t": "fix", "x": p.x, "z": p.z})
+        if "rp" in m:
+            c.acc.rp = int(m["rp"])
+        if "t0" in m:
+            p.t0 -= float(m["t0"])
         if "stars" in m:
             c.acc.stars = int(m["stars"])
             c.acc.save()
@@ -1068,7 +1146,8 @@ async def on_message(c, m):
                 c.acc.save()
             game.remove(p)
             c.player = None
-            c.send({"t": "left", "banked": p.round_bank})
+            c.send({"t": "left", "banked": p.round_bank, "rank": c.acc.finish_round(p)})
+            push_acc(c.acc)
     elif t == "v" and c.acc:                      # voice chat: 16 kHz mu-law, base64, heard by everyone online
         d = m.get("d")
         if not isinstance(d, str) or not 0 < len(d) <= 7000:
