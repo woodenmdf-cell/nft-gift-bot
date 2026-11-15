@@ -8,7 +8,7 @@
   :root{--sat:env(safe-area-inset-top)}
   /* tablets (iPad) in fullscreen: everything a bit bigger */
   @media (min-width:700px) and (min-height:600px){
-    #score,#board,#exitBtn,#mini,#voice,#talkers,#boosts,#killAlert,#killOut,#watchBar,#toast,.screen>*,.ov>*{zoom:1.3}
+    #score,#board,#exitBtn,#mini,#voice,#camBtns,#talkers,#boosts,#killAlert,#killOut,#watchBar,#toast,.screen>*,.ov>*{zoom:1.3}
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   html,body{margin:0;height:100%;overflow:hidden;background:#8ec9ff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:none}
@@ -135,6 +135,9 @@
   @keyframes micp{50%{box-shadow:0 0 0 6px rgba(229,57,80,.35)}}
   #talkers{position:fixed;top:calc(288px + var(--sat));left:10px;z-index:3;pointer-events:none;font:800 12px system-ui,sans-serif;color:#fff}
   #talkers div{background:rgba(15,30,80,.72);border-radius:10px;padding:4px 8px;margin-bottom:4px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #camBtns{position:fixed;right:10px;top:calc(250px + var(--sat));z-index:3;display:flex;flex-direction:column;gap:8px}
+  #camBtns button{width:50px;height:50px;border:0;border-radius:50%;background:rgba(15,30,80,.72);color:#fff;font-size:24px;font-weight:900;box-shadow:0 4px 14px rgba(0,0,0,.25);touch-action:none;-webkit-user-select:none;user-select:none}
+  #camBtns button:active{background:rgba(229,57,80,.85)}
   #muteBtn{width:44px;height:54px;background:rgba(15,30,80,.78);font-size:20px!important}
   #muteBtn.off{background:rgba(90,90,90,.85)}
   #mini{position:fixed;top:calc(100px + var(--sat));left:10px;width:116px;height:116px;z-index:3;border-radius:14px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
@@ -149,6 +152,7 @@
 <canvas id="mini" class="hidden"></canvas>
 <div id="voice" class="hidden"><button id="micBtn">🎤<small>yoqish</small></button><button id="muteBtn">🔊</button></div>
 <div id="talkers"></div>
+<div id="camBtns" class="hidden"><button id="camL">⟲</button><button id="camR">⟳</button></div>
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
   <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
@@ -348,13 +352,36 @@ function resize(){
 window.addEventListener('resize', resize); resize();
 
 const PITCH = 0.5, SP = Math.sin(PITCH), CP = Math.cos(PITCH);
-const cam = {x:0, y:20, z:20, dist:18, cy:0};
-function project(x, y, z){
-  const vx = x - cam.x, vy = y - cam.y, vz = z - cam.z;
-  const depth = -vy * SP - vz * CP;
+const cam = {x:0, y:20, z:20, dist:18, cy:0, yaw:0, yawT:0};
+let YC = 1, YS = 0;            // cos / sin of the camera's yaw (turned around the vertical axis)
+// world -> camera space (lx: right, ly: up, lz: towards the viewer)
+function toCam(x, y, z){
+  const vx = x - cam.x, vz = z - cam.z;
+  return {lx: vx * YC - vz * YS, ly: y - cam.y, lz: vx * YS + vz * YC};
+}
+function projC(c){
+  const depth = -c.ly * SP - c.lz * CP;
   if (depth < 0.5) return null;
-  const sy = vy * CP - vz * SP, s = F / depth;
-  return {x: W/2 + vx * s, y: cam.cy - sy * s, s, d: depth};
+  const sy = c.ly * CP - c.lz * SP, s = F / depth;
+  return {x: W/2 + c.lx * s, y: cam.cy - sy * s, s, d: depth};
+}
+function project(x, y, z){ return projC(toCam(x, y, z)); }
+// a ground polygon, cut where it passes behind the camera
+function groundPoly(pts){
+  const cs = pts.map(([x, z]) => { const c = toCam(x, 0, z); c.dp = -c.ly * SP - c.lz * CP; return c; });
+  const out = [];
+  for (let i = 0; i < cs.length; i++) {
+    const a = cs[i], b = cs[(i + 1) % cs.length], ina = a.dp >= 0.6, inb = b.dp >= 0.6;
+    if (ina) out.push(a);
+    if (ina !== inb) {
+      const t = (0.6 - a.dp) / (b.dp - a.dp);
+      out.push({lx: a.lx + (b.lx - a.lx) * t, ly: a.ly + (b.ly - a.ly) * t, lz: a.lz + (b.lz - a.lz) * t});
+    }
+  }
+  const ps = out.map(projC).filter(Boolean);
+  if (ps.length < 3) return false;
+  ctx.beginPath(); ctx.moveTo(ps[0].x, ps[0].y); for (let i = 1; i < ps.length; i++) ctx.lineTo(ps[i].x, ps[i].y); ctx.closePath();
+  return true;
 }
 
 // ---------- world ----------
@@ -367,10 +394,20 @@ const fmt = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'K' : String
 // ---------- input: drag-anywhere joystick + keys ----------
 const joy = {on:false, ox:0, oy:0, x:0, y:0};
 const keys = {};
-cv.addEventListener('pointerdown', e => { joy.on = true; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; });
-window.addEventListener('pointermove', e => { if (joy.on) { joy.x = e.clientX; joy.y = e.clientY; } });
-window.addEventListener('pointerup', () => { joy.on = false; });
-window.addEventListener('pointercancel', () => { joy.on = false; });
+// first finger = joystick; a second finger (or any finger while watching) turns the camera
+const turn = {id: null, x: 0};
+const TURN_SPEED = 0.008;
+cv.addEventListener('pointerdown', e => {
+  if (state === 'play' && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; }
+  else if (turn.id === null) { turn.id = e.pointerId; turn.x = e.clientX; }
+});
+window.addEventListener('pointermove', e => {
+  if (joy.on && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
+  else if (e.pointerId === turn.id) { cam.yawT -= (e.clientX - turn.x) * TURN_SPEED; turn.x = e.clientX; }
+});
+const pEnd = e => { if (e.pointerId === joy.id) { joy.on = false; joy.id = null; } if (e.pointerId === turn.id) turn.id = null; };
+window.addEventListener('pointerup', pEnd);
+window.addEventListener('pointercancel', pEnd);
 window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 function inputDir(){
@@ -379,10 +416,12 @@ function inputDir(){
   if (keys['arrowright'] || keys['d']) dx += 1;
   if (keys['arrowup'] || keys['w']) dz -= 1;
   if (keys['arrowdown'] || keys['s']) dz += 1;
-  if (dx || dz) { const l = Math.hypot(dx, dz); return {x: dx/l, z: dz/l, k: 1}; }
+  // screen directions -> world directions for the current camera angle
+  const toWorld = (sx, sz, k) => ({x: sx * YC + sz * YS, z: -sx * YS + sz * YC, k});
+  if (dx || dz) { const l = Math.hypot(dx, dz); return toWorld(dx/l, dz/l, 1); }
   if (joy.on) {
     const jx = joy.x - joy.ox, jy = joy.y - joy.oy, l = Math.hypot(jx, jy);
-    if (l > 6) return {x: jx/l, z: jy/l, k: Math.min(1, l / 50)};
+    if (l > 6) return toWorld(jx/l, jy/l, Math.min(1, l / 50));
   }
   return {x:0, z:0, k:0};
 }
@@ -712,60 +751,64 @@ function render(){
   const tr = focus ? rad(focus.m) : 3;
   const wantDist = 16 + tr * 5;
   cam.dist += (wantDist - cam.dist) * 0.05;
-  cam.x += (tx - cam.x) * 0.25;
-  const camZTarget = tz + cam.dist * CP;
-  cam.z += (camZTarget - cam.z) * 0.25;
+  if (keys['q']) cam.yawT += 0.035;
+  if (keys['e']) cam.yawT -= 0.035;
+  if (state === 'menu') cam.yawT += 0.0015;                       // slow orbit behind the menu
+  cam.yaw += (cam.yawT - cam.yaw) * 0.22;
+  YC = Math.cos(cam.yaw); YS = Math.sin(cam.yaw);
+  const back = cam.dist * CP;
+  cam.x += (tx + YS * back - cam.x) * 0.25;
+  cam.z += (tz + YC * back - cam.z) * 0.25;
   cam.y = cam.dist * SP;
   cam.cy = H * 0.56;
 
-  // sky
+  // sky, then plain ground up to the horizon (outside the arena)
   const sky = ctx.createLinearGradient(0, 0, 0, H);
   sky.addColorStop(0, '#6fb6ff'); sky.addColorStop(1, '#cfe8ff');
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  const horizon = cam.cy - F * SP / CP;
+  ctx.fillStyle = '#6fbf3c'; ctx.fillRect(0, Math.max(0, horizon), W, H);
 
-  // floor
-  const far = 70 + tr * 7;
-  const zNear = cam.z - 2, zFar = cam.z - cam.dist * CP - far;
-  const xHalf = (cam.dist + far) * (W / 2) / F * 1.15 + 4;
-  const x0 = Math.max(-S, cam.x - xHalf), x1 = Math.min(S, cam.x + xHalf);
-  const z0 = Math.max(-S, zFar), z1 = Math.min(S, zNear);
-  if (x1 > x0 && z1 > z0) {
-    // plain floor reaches the back wall so distant blobs always stand on grass
-    const xf = Math.max(-S, cam.x - xHalf * 3), xg = Math.min(S, cam.x + xHalf * 3);
-    const a = project(xf, 0, -S), b = project(xg, 0, -S), c = project(xg, 0, z1), d = project(xf, 0, z1);
-    if (a && b && c && d) { ctx.fillStyle = '#8fe04a'; quad(a, b, c, d); ctx.fill(); }
-    const T = 4 * Math.pow(2, Math.max(0, Math.floor(Math.log2(tr / 7))));
-    ctx.fillStyle = '#7ccf3a';
-    const i0 = Math.floor(x0 / T), i1 = Math.ceil(x1 / T), j0 = Math.floor(z0 / T), j1 = Math.ceil(z1 / T);
-    for (let j = j0; j < j1; j++) {
-      const za = Math.max(z0, j * T), zb = Math.min(z1, (j + 1) * T);
-      if (zb <= za) continue;
-      for (let i = i0; i < i1; i++) {
-        if (((i + j) & 1) !== 0) continue;
-        const xa = Math.max(x0, i * T), xb = Math.min(x1, (i + 1) * T);
-        if (xb <= xa) continue;
-        const p1 = project(xa, 0, za), p2 = project(xb, 0, za), p3 = project(xb, 0, zb), p4 = project(xa, 0, zb);
-        if (!p1 || !p2 || !p3 || !p4) continue;
-        quad(p1, p2, p3, p4); ctx.fill();
-      }
+  // arena floor
+  const far = 70 + tr * 7, R = cam.dist + far;
+  if (groundPoly([[-S, -S], [S, -S], [S, S], [-S, S]])) { ctx.fillStyle = '#8fe04a'; ctx.fill(); }
+  const T = 4 * Math.pow(2, Math.max(0, Math.floor(Math.log2(tr / 7))));
+  const x0 = Math.max(-S, tx - R), x1 = Math.min(S, tx + R), z0 = Math.max(-S, tz - R), z1 = Math.min(S, tz + R);
+  const maxDepth = R + cam.dist, half = W / (2 * F);
+  ctx.fillStyle = '#7ccf3a';
+  for (let j = Math.floor(z0 / T); j < Math.ceil(z1 / T); j++) {
+    for (let i = Math.floor(x0 / T); i < Math.ceil(x1 / T); i++) {
+      if (((i + j) & 1) !== 0) continue;
+      const xa = Math.max(x0, i * T), xb = Math.min(x1, (i + 1) * T), za = Math.max(z0, j * T), zb = Math.min(z1, (j + 1) * T);
+      if (xb <= xa || zb <= za) continue;
+      const c = toCam((xa + xb) / 2, 0, (za + zb) / 2), dp = -c.ly * SP - c.lz * CP;
+      if (dp < 1 || dp > maxDepth || Math.abs(c.lx) > dp * half * 1.25 + T) continue;    // off screen
+      const p1 = project(xa, 0, za), p2 = project(xb, 0, za), p3 = project(xb, 0, zb), p4 = project(xa, 0, zb);
+      if (!p1 || !p2 || !p3 || !p4) continue;
+      quad(p1, p2, p3, p4); ctx.fill();
     }
   }
-  // back & side walls
+  // walls on all four sides; the ones between the camera and the player are skipped so they never hide you
   const WH = 8;
   ctx.lineWidth = 1;
+  const fc = toCam(tx, 0, tz), focusDepth = -fc.ly * SP - fc.lz * CP;
   const wall = (ax, az, bx, bz) => {
+    const mc = toCam((ax + bx) / 2, 0, (az + bz) / 2), dp = -mc.ly * SP - mc.lz * CP;
+    if (dp < focusDepth || dp > maxDepth * 1.6 || Math.abs(mc.lx) > dp * half * 1.3 + 6) return;
     const p1 = project(ax, 0, az), p2 = project(bx, 0, bz), p3 = project(bx, WH, bz), p4 = project(ax, WH, az);
     if (!p1 || !p2 || !p3 || !p4) return;
     quad(p1, p2, p3, p4); ctx.fillStyle = 'rgba(70,120,220,.55)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.moveTo(p4.x, p4.y); ctx.lineTo(p3.x, p3.y); ctx.stroke();
   };
-  for (let x = Math.floor(Math.max(-S, cam.x - xHalf * 3) / 6) * 6; x < Math.min(S, cam.x + xHalf * 3); x += 6) wall(Math.max(x, -S), -S, Math.min(x + 6, S), -S);
-  for (const sx of [-S, S]) if (Math.abs(cam.x - sx) < xHalf * 3 + 10) for (let z = -S; z < z1; z += 6) wall(sx, z, sx, Math.min(z + 6, z1));
+  for (let v = -S; v < S; v += 6) {
+    const w = Math.min(v + 6, S);
+    wall(v, -S, w, -S); wall(w, S, v, S); wall(-S, w, -S, v); wall(S, v, S, w);
+  }
 
   // entities, far to near
   const vis = [];
   for (const f of foods) {
-    if (f.x < x0 - 2 || f.x > x1 + 2 || f.z < z0 - 2 || f.z > z1) continue;
+    if (Math.abs(f.x - tx) > R || Math.abs(f.z - tz) > R) continue;
     const P = project(f.x, 0, f.z); if (!P || P.x < -20 || P.x > W + 20 || P.y < -20 || P.y > H + 20) continue;
     f.P = P; vis.push(f);
   }
@@ -899,6 +942,8 @@ function drawMini(){
   const on = state === 'play' || state === 'watch';
   miniCv.classList.toggle('hidden', !on);
   document.getElementById('voice').classList.toggle('hidden', !on);
+  document.getElementById('camBtns').classList.toggle('hidden', !on);
+  if (camHold) cam.yawT += camHold * 0.04;
   if (!on && micOn) micStop();
   if (!on) return;
   const k = (MINI - 8) / (2 * S), ox = 4, oy = 4;
@@ -920,6 +965,10 @@ function drawMini(){
     const r = Math.max(3.6, Math.min(10, rad(focus.m) * k * 1.6));
     mctx.fillStyle = skinDot(focus.skin); mctx.beginPath(); mctx.arc(x, y, r, 0, 7); mctx.fill();
     mctx.strokeStyle = '#ffe14d'; mctx.lineWidth = 2.2; mctx.beginPath(); mctx.arc(x, y, r + 2.4, 0, 7); mctx.stroke();
+    // where the camera looks
+    const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), L = r + 13, sp = 0.45;
+    mctx.fillStyle = 'rgba(255,225,77,.35)'; mctx.beginPath(); mctx.moveTo(x, y);
+    mctx.arc(x, y, L, Math.atan2(fz, fx) - sp, Math.atan2(fz, fx) + sp); mctx.closePath(); mctx.fill();
   }
 }
 
@@ -1216,6 +1265,15 @@ document.getElementById('rankChip').onclick = () => {
   if (!acc || !acc.rank) return;
   toast(RANKS.map(r => r.e + ' ' + r.n).join(' → '));
 };
+
+// camera turn buttons: hold to keep turning
+let camHold = 0;
+for (const [id, dir] of [['camL', 1], ['camR', -1]]) {
+  const b = document.getElementById(id);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); camHold = dir; try { b.setPointerCapture(e.pointerId); } catch (_) {} });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => { camHold = 0; });
+  b.addEventListener('contextmenu', e => e.preventDefault());
+}
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>
