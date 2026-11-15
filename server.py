@@ -975,6 +975,10 @@ def load_resume():
     set_setting("resume", "{}")
 
 
+VOICE_R = 45.0          # how far a voice carries (arena is 260 wide)
+VOICE_BPS = 15000       # base64 chars per second one speaker may send (~11 kB/s audio)
+
+
 BLANK_CH = set("\u3164\u115f\u1160\uffa0\u2800\u180e\u17b4\u17b5")
 
 
@@ -1061,6 +1065,22 @@ async def on_message(c, m):
             game.remove(p)
             c.player = None
             c.send({"t": "left", "banked": p.round_bank})
+    elif t == "v" and p and p.alive:               # push-to-talk voice: 8 kHz mu-law, base64
+        d = m.get("d")
+        if not isinstance(d, str) or not 0 < len(d) <= 4000:
+            return
+        now = time.monotonic()
+        c.vbudget = min(VOICE_BPS * 2, getattr(c, "vbudget", VOICE_BPS * 2) + (now - getattr(c, "vlast", now)) * VOICE_BPS)
+        c.vlast = now
+        if c.vbudget < len(d):
+            return
+        c.vbudget -= len(d)
+        out = json.dumps({"t": "v", "id": p.id, "d": d}, separators=(",", ":"))
+        hear = VOICE_R + rad(p.m)
+        for o in list(conns):
+            q = o.player
+            if o is not c and q and q.alive and (q.x - p.x) ** 2 + (q.z - p.z) ** 2 < (hear + rad(q.m)) ** 2:
+                o.send_raw(out)
     elif t == "speed" and p and p.alive:
         if p.speed_t > 0:
             return

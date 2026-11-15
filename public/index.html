@@ -86,6 +86,13 @@
   .subb{font-size:14px;font-weight:800;padding:10px 18px;border:0;border-radius:14px;color:#fff;background:linear-gradient(90deg,#2aa3ef,#7b5cff);box-shadow:0 4px 0 rgba(0,0,0,.25);animation:pulse 1.6s infinite}
   .subb b{color:#ffe14d}
   @keyframes pulse{50%{transform:scale(1.04)}}
+  #voice{position:fixed;top:calc(226px + env(safe-area-inset-top));left:10px;width:116px;display:flex;gap:8px;z-index:3}
+  #voice button{border:0;border-radius:14px;color:#fff;font:800 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
+  #micBtn{flex:1;height:54px;background:rgba(15,30,80,.78);font-size:24px!important;line-height:1}
+  #micBtn small{display:block;font-size:10px;font-weight:700;opacity:.8;margin-top:2px}
+  #micBtn.on{background:#e53950;transform:scale(1.06)}
+  #muteBtn{width:44px;height:54px;background:rgba(15,30,80,.78);font-size:20px!important}
+  #muteBtn.off{background:rgba(90,90,90,.85)}
   #mini{position:fixed;top:calc(100px + env(safe-area-inset-top));left:10px;width:116px;height:116px;z-index:3;border-radius:14px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;z-index:9;transition:opacity .3s;opacity:0;pointer-events:none;max-width:90%;text-align:center}
 </style>
@@ -96,6 +103,7 @@
 <div id="score" class="hud hidden">0<small>token</small></div>
 <button id="exitBtn" class="hidden">☰ Menyu</button>
 <canvas id="mini" class="hidden"></canvas>
+<div id="voice" class="hidden"><button id="micBtn">🎤<small>bosib gapiring</small></button><button id="muteBtn">🔊</button></div>
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
   <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
@@ -409,6 +417,7 @@ function onMsg(m){
       if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
       if (killIn) updAntiBtn();
       break;
+    case 'v': voiceIn(m.id, m.d); break;
     case 'toast':
       toast(m.msg);
       if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+' + (acc.goal_stars || GOAL_STARS) + ' ⭐', big: true}); haptic('heavy'); }
@@ -611,7 +620,8 @@ function drawLabel(p){
   ctx.fillStyle = p === me ? '#ffd21f' : '#ffe9a8';
   ctx.strokeText(fmt(p.m * 10), p.P.x, y - fs * 1.05); ctx.fillText(fmt(p.m * 10), p.P.x, y - fs * 1.05);
   ctx.font = `800 ${fs * 0.9}px system-ui,sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.5)';
-  ctx.strokeText(p.name, p.P.x, y); ctx.fillText(p.name, p.P.x, y);
+  const nm = (p.talk > performance.now() ? '🔊 ' : '') + p.name;
+  ctx.strokeText(nm, p.P.x, y); ctx.fillText(nm, p.P.x, y);
 }
 function quad(a, b, c, d){ ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); }
 
@@ -809,6 +819,8 @@ const skinDot = sk => !sk ? '#2fd06a' : sk.c ? sk.c : (BASE[sk.type] ? BASE[sk.t
 function drawMini(){
   const on = state === 'play' || state === 'watch';
   miniCv.classList.toggle('hidden', !on);
+  document.getElementById('voice').classList.toggle('hidden', state !== 'play');
+  if (state !== 'play' && micOn) micStop();
   if (!on) return;
   const k = (MINI - 8) / (2 * S), ox = 4, oy = 4;
   mctx.clearRect(0, 0, MINI, MINI);
@@ -861,6 +873,7 @@ function openAcc(){
   box.innerHTML = acc.reqs.length ? acc.reqs.map(r => `<div class="req"><span>${r.stars} ⭐ · ${r.date}</span><span>${r.status}</span></div>`).join('') : '<div class="hint">Hali so\'rov yo\'q</div>';
 }
 function startGame(){
+  try { audioCtx(); } catch (e) {}
   if (!connected) { toast('Serverga ulanmoqda...'); return; }
   store.set('name', nameVal());
   send({t: 'play', name: nameVal()});
@@ -911,6 +924,82 @@ function frame(t){
 openMenu();
 requestAnimationFrame(frame);
 if (!inTelegram) connect();     // inside Telegram we connect once the SDK has loaded
+
+// ---------------------------------------------------------------- voice chat (push-to-talk, nearby players)
+const VRATE = 8000;
+let actx = null, micStream = null, micNode = null, micSrc = null, micOn = false, voiceMuted = false, micBuf = [], micPos = 0;
+const vQueue = new Map();                       // speaker id -> next play time
+function audioCtx(){
+  if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; actx = new AC(); }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function mulawEnc(x){
+  let v = Math.max(-1, Math.min(1, x)) * 32635, sign = v < 0 ? 0x80 : 0; if (sign) v = -v;
+  v += 132; let e = 7; for (let m = 0x4000; (v & m) === 0 && e > 0; m >>= 1) e--;
+  return ~(sign | (e << 4) | ((v >> (e + 3)) & 0x0F)) & 0xFF;
+}
+const MULAW = new Float32Array(256);
+for (let i = 0; i < 256; i++) { const u = ~i & 0xFF, e = (u >> 4) & 7; let v = (((u & 0x0F) << 3) + 132) << e; v -= 132; MULAW[i] = ((u & 0x80) ? -v : v) / 32768; }
+function micFlush(){
+  if (!micBuf.length) return;
+  let bin = ''; for (const b of micBuf) bin += String.fromCharCode(b);
+  micBuf = []; send({t: 'v', d: btoa(bin)});
+}
+async function micStart(){
+  if (micOn) return;
+  const ac = audioCtx(); if (!ac) return toast('Bu qurilmada ovoz ishlamaydi');
+  micOn = true; document.getElementById('micBtn').classList.add('on');
+  try {
+    if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+  } catch (e) { micOn = false; document.getElementById('micBtn').classList.remove('on'); return toast('Mikrofonga ruxsat bering'); }
+  if (!micOn) return;
+  micSrc = ac.createMediaStreamSource(micStream);
+  micNode = ac.createScriptProcessor(2048, 1, 1);
+  const step = ac.sampleRate / VRATE;
+  micNode.onaudioprocess = ev => {
+    if (!micOn) return;
+    const inp = ev.inputBuffer.getChannelData(0);
+    for (; micPos < inp.length; micPos += step) micBuf.push(mulawEnc(inp[Math.floor(micPos)] * 1.6));
+    micPos -= inp.length;
+    if (micBuf.length >= 1600) micFlush();           // ~200 ms packets
+    ev.outputBuffer.getChannelData(0).fill(0);
+  };
+  micSrc.connect(micNode); micNode.connect(ac.destination);
+}
+function micStop(){
+  micOn = false; document.getElementById('micBtn').classList.remove('on');
+  if (micNode) { try { micNode.disconnect(); micSrc.disconnect(); } catch (e) {} micNode = micSrc = null; }
+  micFlush(); micPos = 0;
+}
+function voiceIn(id, d){
+  const p = byId.get(id); if (p) p.talk = performance.now() + 500;
+  if (voiceMuted) return;
+  const ac = audioCtx(); if (!ac) return;
+  let raw; try { raw = atob(d); } catch (e) { return; }
+  const n = raw.length, ratio = ac.sampleRate / VRATE, out = Math.floor(n * ratio);
+  const buf = ac.createBuffer(1, out, ac.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < out; i++) {                     // linear upsampling
+    const t = i / ratio, a = Math.floor(t), b = Math.min(n - 1, a + 1), f = t - a;
+    ch[i] = MULAW[raw.charCodeAt(a)] * (1 - f) + MULAW[raw.charCodeAt(b)] * f;
+  }
+  const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination);
+  const now = ac.currentTime; let at = vQueue.get(id) || 0;
+  if (at < now + 0.05 || at > now + 1.5) at = now + 0.12;   // small jitter buffer
+  src.start(at); vQueue.set(id, at + buf.duration);
+}
+(function(){
+  const mb = document.getElementById('micBtn');
+  mb.addEventListener('pointerdown', e => { e.preventDefault(); try { mb.setPointerCapture(e.pointerId); } catch (_) {} micStart(); });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) mb.addEventListener(ev, () => micOn && micStop());
+  mb.addEventListener('contextmenu', e => e.preventDefault());
+  document.getElementById('muteBtn').onclick = () => {
+    voiceMuted = !voiceMuted;
+    const b = document.getElementById('muteBtn'); b.textContent = voiceMuted ? '🔇' : '🔊'; b.classList.toggle('off', voiceMuted);
+    toast(voiceMuted ? 'Boshqalar ovozi o\'chirildi' : 'Boshqalar ovozi yoqildi');
+  };
+  document.addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume(); }, {passive: true});
+})();
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>
