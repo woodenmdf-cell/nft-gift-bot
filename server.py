@@ -14,6 +14,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html as htmlmod
 import json
 import logging
 import math
@@ -117,6 +118,7 @@ def admin_id():
 RANK_TIERS = [("Bronza", 60), ("Kumush", 80), ("Oltin", 100), ("Platina", 120),
               ("Olmos", 150), ("As", 180), ("As Master", 220)]
 RANK_DIVS = 5
+RANK_EMOJI = ["🥉", "🥈", "🥇", "💠", "💎", "👑", "🔥"]
 
 
 def tier_start(t):
@@ -303,7 +305,8 @@ def play_keyboard():
     if not PUBLIC_URL:
         return None
     return {"inline_keyboard": [[{"text": "🎮 O'ynash", "web_app": {"url": PUBLIC_URL}}],
-                                [{"text": "👁 Kuzatish (jonli)", "web_app": {"url": PUBLIC_URL + "/?watch=1"}}]]}
+                                [{"text": "🏆 Rank TOP", "web_app": {"url": PUBLIC_URL + "/?tops=1"}},
+                                 {"text": "👁 Kuzatish", "web_app": {"url": PUBLIC_URL + "/?watch=1"}}]]}
 
 
 async def bot_loop():
@@ -316,6 +319,7 @@ async def bot_loop():
         BOT_USERNAME = me["username"]
     log.info("bot @%s started, web app: %s", me and me.get("username"), PUBLIC_URL or "(no PUBLIC_URL yet)")
     await tg("setMyCommands", commands=[{"command": "start", "description": "O'yinni ochish"},
+                                        {"command": "top", "description": "🏆 Rank TOP"},
                                         {"command": "ref", "description": "Do'stlarni taklif qilish"},
                                         {"command": "admin", "description": "Admin panel"}])
     if PUBLIC_URL:
@@ -363,6 +367,19 @@ async def handle_update(u):
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
                       f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
+    elif text.startswith("/top"):
+        lines = ["🏆 <b>Rank TOP</b>\n"]
+        for ti, (name, _) in enumerate(RANK_TIERS[::-1]):
+            ti = len(RANK_TIERS) - 1 - ti
+            lo, hi = tier_start(ti), tier_start(ti + 1) if ti + 1 < len(RANK_TIERS) else 10 ** 9
+            rows = db.execute("SELECT name, rp FROM users WHERE rp>=? AND rp<? AND rp>0 ORDER BY rp DESC LIMIT 3", (lo, hi)).fetchall()
+            if rows:
+                lines.append(f"{RANK_EMOJI[ti]} <b>{name}</b>")
+                lines += [f"   {i + 1}. {htmlmod.escape((r['name'] or 'O`yinchi')[:16])} — {rank_info(r['rp'])['name']} · {r['rp']} RP" for i, r in enumerate(rows)]
+        if len(lines) == 1:
+            lines.append("Hali hech kim rank olmagan. Birinchi bo'ling! 💪")
+        kb = {"inline_keyboard": [[{"text": "🏆 To'liq TOP", "web_app": {"url": PUBLIC_URL + "/?tops=1"}}]]} if PUBLIC_URL else None
+        await tg("sendMessage", chat_id=chat, text="\n".join(lines), parse_mode="HTML", reply_markup=kb)
     elif text.startswith("/ref"):
         acc = Account.get(frm["id"], frm.get("first_name", ""), frm.get("username", ""))
         await tg("sendMessage", chat_id=chat, disable_web_page_preview=True,

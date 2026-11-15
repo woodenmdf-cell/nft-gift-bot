@@ -455,6 +455,7 @@ const JOIN = (location.hash.match(/join=(\d+)/) || [])[1];
 let joined = false;
 let resumeAfterReconnect = false;   // the connection dropped mid-game: go straight back in once it is back
 const WATCH = /[?&#]watch=1/.test(location.search + location.hash);
+const TOPS = /[?&#]tops=1/.test(location.search + location.hash);
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 let ws = null, connected = false, myId = null, lastSend = 0;
 let foods = [], players = [], me = null, popups = [];
@@ -552,6 +553,7 @@ function onMsg(m){
       acc = m;
       if (resumeAfterReconnect && state === 'menu') { resumeAfterReconnect = false; send({t: 'play', name: nameVal() || acc.name}); }
       if (WATCH && !joined && state === 'menu') { joined = true; openWatch(); }
+      if (TOPS && !joined && state === 'menu') { joined = true; openTops(); }
       if (JOIN && !joined && state === 'menu') { joined = true; send({t: 'play', name: nameVal() || acc.name, near: +JOIN}); }
       if (!document.getElementById('menu').classList.contains('hidden')) refreshMenu();
       if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
