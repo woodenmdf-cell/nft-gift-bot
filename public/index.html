@@ -5,13 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Shar Yutar</title>
 <style>
+  :root{--sat:env(safe-area-inset-top)}
+  /* tablets (iPad) in fullscreen: everything a bit bigger */
+  @media (min-width:700px) and (min-height:600px){
+    #score,#board,#exitBtn,#mini,#voice,#talkers,#boosts,#killAlert,#killOut,#watchBar,#toast,.screen>*,.ov>*{zoom:1.3}
+  }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   html,body{margin:0;height:100%;overflow:hidden;background:#8ec9ff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:none}
   canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
   .hud{position:fixed;pointer-events:none;z-index:2}
-  #score{top:calc(10px + env(safe-area-inset-top));left:10px;background:rgba(20,40,90,.55);color:#fff;font-weight:800;padding:6px 12px;border-radius:12px;font-size:15px}
+  #score{top:calc(10px + var(--sat));left:10px;background:rgba(20,40,90,.55);color:#fff;font-weight:800;padding:6px 12px;border-radius:12px;font-size:15px}
   #score small{display:block;font-weight:600;opacity:.8;font-size:11px}
-  #board{top:calc(10px + env(safe-area-inset-top));right:10px;background:rgba(20,40,90,.85);color:#fff;border-radius:12px;padding:6px 8px;font-size:12px;min-width:130px}
+  #board{top:calc(10px + var(--sat));right:10px;background:rgba(20,40,90,.85);color:#fff;border-radius:12px;padding:6px 8px;font-size:12px;min-width:130px}
   #board div{display:flex;justify-content:space-between;gap:10px;padding:1px 2px;white-space:nowrap}
   #board .me{color:#ffe14d;font-weight:800}
   #board .sep{opacity:.5;justify-content:center}
@@ -25,12 +30,12 @@
   .kcard h3{margin:0 0 4px;font-size:22px}
   .krow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(255,255,255,.1);border-radius:12px;padding:10px 12px;margin-top:8px;font-weight:800}
   .krow button{border:0;border-radius:10px;padding:8px 12px;font-weight:900;color:#fff;background:linear-gradient(#ff5a6e,#d81f3c)}
-  #killAlert{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:7;width:min(350px,94vw);background:linear-gradient(#e8344f,#a3122a);color:#fff;border-radius:18px;padding:14px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.35);animation:shake .4s 2}
+  #killAlert{position:fixed;left:50%;top:calc(110px + var(--sat));transform:translateX(-50%);z-index:7;width:min(350px,94vw);background:linear-gradient(#e8344f,#a3122a);color:#fff;border-radius:18px;padding:14px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.35);animation:shake .4s 2}
   #killAlert .cd{font-size:44px;font-weight:900;line-height:1.1}
   #killAlert button{width:100%;margin-top:8px;border:0;border-radius:12px;padding:12px;font-size:17px;font-weight:900}
   #antiBtn{color:#10306b;background:linear-gradient(#bfe3ff,#6fb8ff);box-shadow:0 4px 0 #2d6fb8}
   #antiTg{color:#fff;background:rgba(255,255,255,.18);font-size:14px!important;padding:9px!important}
-  #killOut{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:4;background:rgba(160,20,45,.9);color:#fff;font-weight:900;border-radius:12px;padding:8px 14px;font-size:14px;pointer-events:none;white-space:nowrap}
+  #killOut{position:fixed;left:50%;top:calc(110px + var(--sat));transform:translateX(-50%);z-index:4;background:rgba(160,20,45,.9);color:#fff;font-weight:900;border-radius:12px;padding:8px 14px;font-size:14px;pointer-events:none;white-space:nowrap}
   @keyframes shake{0%,100%{transform:translateX(-50%)}25%{transform:translateX(calc(-50% - 6px))}75%{transform:translateX(calc(-50% + 6px))}}
   .bbtn .tag{background:rgba(255,255,255,.25);border-radius:8px;padding:1px 6px;font-size:11px}
   .bbtn.on{filter:saturate(.3) brightness(1.1)}
@@ -55,7 +60,7 @@
   .menuBtns{display:flex;flex-direction:column;gap:12px;align-items:center}
   .accb{font-size:20px;font-weight:900;padding:12px 44px;border:0;border-radius:18px;color:#fff;background:linear-gradient(#5fd57a,#22a33f);box-shadow:0 6px 0 #16752b}
   .accb:active{transform:translateY(3px);box-shadow:0 3px 0 #16752b}
-  #exitBtn{position:fixed;top:calc(62px + env(safe-area-inset-top));left:10px;z-index:3;border:0;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12px;color:#fff;background:rgba(20,40,90,.7)}
+  #exitBtn{position:fixed;top:calc(62px + var(--sat));left:10px;z-index:3;border:0;border-radius:10px;padding:6px 10px;font-weight:800;font-size:12px;color:#fff;background:rgba(20,40,90,.7)}
   .card{background:rgba(255,255,255,.1);border-radius:16px;padding:14px 16px;width:min(340px,92vw);margin:6px 0;text-align:left}
   .card .k{opacity:.75;font-size:13px}
   .card .v{font-size:26px;font-weight:900;margin-top:2px}
@@ -66,7 +71,7 @@
   .wd:disabled{filter:grayscale(1);opacity:.55;box-shadow:none}
   .req{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid rgba(255,255,255,.1)}
   .req:first-child{border-top:0}
-  .scrollscr{justify-content:flex-start;overflow-y:auto;padding-top:calc(30px + env(safe-area-inset-top))}
+  .scrollscr{justify-content:flex-start;overflow-y:auto;padding-top:calc(30px + var(--sat))}
   .bbtn.dis{filter:grayscale(1);opacity:.5}
   #net{position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:9;background:rgba(0,0,0,.7);color:#fff;font-size:13px;padding:6px 12px;border-radius:10px;pointer-events:none}
   .reflink{margin-top:8px;background:rgba(0,0,0,.25);border-radius:10px;padding:9px 10px;font-size:12px;word-break:break-all;user-select:text;-webkit-user-select:text}
@@ -86,17 +91,17 @@
   .subb{font-size:14px;font-weight:800;padding:10px 18px;border:0;border-radius:14px;color:#fff;background:linear-gradient(90deg,#2aa3ef,#7b5cff);box-shadow:0 4px 0 rgba(0,0,0,.25);animation:pulse 1.6s infinite}
   .subb b{color:#ffe14d}
   @keyframes pulse{50%{transform:scale(1.04)}}
-  #voice{position:fixed;top:calc(226px + env(safe-area-inset-top));left:10px;width:116px;display:flex;gap:8px;z-index:3}
+  #voice{position:fixed;top:calc(226px + var(--sat));left:10px;width:116px;display:flex;gap:8px;z-index:3}
   #voice button{border:0;border-radius:14px;color:#fff;font:800 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
   #micBtn{flex:1;height:54px;background:rgba(15,30,80,.78);font-size:24px!important;line-height:1}
   #micBtn small{display:block;font-size:10px;font-weight:700;opacity:.8;margin-top:2px}
   #micBtn.on{background:#e53950;animation:micp 1.4s infinite}
   @keyframes micp{50%{box-shadow:0 0 0 6px rgba(229,57,80,.35)}}
-  #talkers{position:fixed;top:calc(288px + env(safe-area-inset-top));left:10px;z-index:3;pointer-events:none;font:800 12px system-ui,sans-serif;color:#fff}
+  #talkers{position:fixed;top:calc(288px + var(--sat));left:10px;z-index:3;pointer-events:none;font:800 12px system-ui,sans-serif;color:#fff}
   #talkers div{background:rgba(15,30,80,.72);border-radius:10px;padding:4px 8px;margin-bottom:4px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #muteBtn{width:44px;height:54px;background:rgba(15,30,80,.78);font-size:20px!important}
   #muteBtn.off{background:rgba(90,90,90,.85)}
-  #mini{position:fixed;top:calc(100px + env(safe-area-inset-top));left:10px;width:116px;height:116px;z-index:3;border-radius:14px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  #mini{position:fixed;top:calc(100px + var(--sat));left:10px;width:116px;height:116px;z-index:3;border-radius:14px;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;z-index:9;transition:opacity .3s;opacity:0;pointer-events:none;max-width:90%;text-align:center}
 </style>
 </head>
@@ -229,6 +234,21 @@ function initTg(){
   if (!w || !w.initData) return;
   tg = w;
   try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch(e){}
+  // iPad / tablets: Telegram opens mini apps in a small window, so ask for fullscreen
+  const big = Math.min(screen.width, screen.height) >= 600;
+  const mobileOs = /ios|android/.test(tg.platform || '');
+  try {
+    if (big && mobileOs && tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && tg.requestFullscreen) tg.requestFullscreen();
+  } catch(e){}
+  // keep our top HUD below Telegram's own close / menu buttons in fullscreen
+  const syncInsets = () => {
+    const a = tg.safeAreaInset || {}, c = tg.contentSafeAreaInset || {};
+    const top = (a.top || 0) + (c.top || 0);
+    if (tg.isFullscreen && top) document.documentElement.style.setProperty('--sat', top + 'px');
+    else document.documentElement.style.removeProperty('--sat');
+  };
+  try { ['fullscreenChanged', 'safeAreaChanged', 'contentSafeAreaChanged'].forEach(ev => tg.onEvent(ev, syncInsets)); } catch(e){}
+  syncInsets();
   const u = tg.initDataUnsafe && tg.initDataUnsafe.user;
   const inp = document.getElementById('name');
   if (u && !inp.value) inp.value = u.first_name || u.username || '';
