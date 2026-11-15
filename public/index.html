@@ -364,8 +364,8 @@ function haptic(kind){ if (!tg || !tg.HapticFeedback) return; try { kind === 'er
 // ---------- canvas & camera ----------
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, F = 600;
-function resize(){
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
+function resize(keepDpr){
+  if (keepDpr !== true) DPR = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth; H = window.innerHeight;
   cv.width = W * DPR; cv.height = H * DPR;
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -374,7 +374,7 @@ function resize(){
 window.addEventListener('resize', resize); resize();
 
 const PITCH = 0.5, SP = Math.sin(PITCH), CP = Math.cos(PITCH);
-const cam = {x:0, y:20, z:20, dist:18, cy:0, yaw:0, yawT:0};
+const cam = {x:0, y:20, z:20, dist:18, cy:0, yaw:0, yawT:0, zoom:1, zoomT:1};
 let YC = 1, YS = 0;            // cos / sin of the camera's yaw (turned around the vertical axis)
 // world -> camera space (lx: right, ly: up, lz: towards the viewer)
 function toCam(x, y, z){
@@ -416,20 +416,53 @@ const fmt = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'K' : String
 // ---------- input: drag-anywhere joystick + keys ----------
 const joy = {on:false, ox:0, oy:0, x:0, y:0};
 const keys = {};
-// first finger = joystick; a second finger (or any finger while watching) turns the camera
+// one finger = joystick (while watching: turns the camera); two fingers = pinch to zoom + twist to turn
+const ptrs = new Map();
 const turn = {id: null, x: 0};
 const TURN_SPEED = 0.008;
+let pinch = null, gestureLock = false;         // gestureLock: ignore the finger left over after a pinch
+const ZMIN = 0.55, ZMAX = 2.4;
+function pinchState(){
+  const [a, b] = [...ptrs.values()];
+  return {d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x)};
+}
 cv.addEventListener('pointerdown', e => {
-  if (state === 'play' && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; }
-  else if (turn.id === null) { turn.id = e.pointerId; turn.x = e.clientX; }
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  if (ptrs.size === 2) {                        // second finger: start pinch, drop joystick / one-finger turn
+    joy.on = false; joy.id = null; turn.id = null; gestureLock = true;
+    pinch = {...pinchState(), z: cam.zoomT, yaw: cam.yawT};
+    return;
+  }
+  if (ptrs.size > 2 || gestureLock) return;
+  if (state === 'play') { joy.on = true; joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; }
+  else { turn.id = e.pointerId; turn.x = e.clientX; }
 });
 window.addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId); if (!p) return;
+  p.x = e.clientX; p.y = e.clientY;
+  if (pinch && ptrs.size === 2) {
+    const st = pinchState();
+    if (pinch.d > 10) cam.zoomT = Math.max(ZMIN, Math.min(ZMAX, pinch.z * pinch.d / Math.max(10, st.d)));   // fingers apart = closer
+    let da = st.ang - pinch.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
+    cam.yawT = pinch.yaw - da;
+    return;
+  }
   if (joy.on && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
   else if (e.pointerId === turn.id) { cam.yawT -= (e.clientX - turn.x) * TURN_SPEED; turn.x = e.clientX; }
 });
-const pEnd = e => { if (e.pointerId === joy.id) { joy.on = false; joy.id = null; } if (e.pointerId === turn.id) turn.id = null; };
+const pEnd = e => {
+  ptrs.delete(e.pointerId);
+  if (e.pointerId === joy.id) { joy.on = false; joy.id = null; }
+  if (e.pointerId === turn.id) turn.id = null;
+  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0) gestureLock = false;
+};
 window.addEventListener('pointerup', pEnd);
 window.addEventListener('pointercancel', pEnd);
+// iOS: keep Safari's own page pinch-zoom out of the way
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+// mouse wheel / trackpad zoom on computers
+cv.addEventListener('wheel', e => { e.preventDefault(); cam.zoomT = Math.max(ZMIN, Math.min(ZMAX, cam.zoomT * Math.exp(e.deltaY * 0.0012))); }, {passive: false});
 window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 function inputDir(){
@@ -509,6 +542,15 @@ function onMsg(m){
       for (const [id, md] of Object.entries(meta)) { const p = byId.get(+id); if (p) { p.name = md[0]; p.skin = skinOf(md[1]); p.tier = md[3] ?? -1; } }
       break;
     case 's': {
+      // place each snapshot on the server's own timeline, so late / bunched packets still play back evenly
+      const arr = performance.now();
+      let sampleT = arr;
+      if (m.ts !== undefined) {
+        const off = arr - m.ts;
+        if (clockOff === null || off < clockOff || Math.abs(off - clockOff) > 3000) clockOff = off;
+        else clockOff += 0.002;                  // let the estimate drift up slowly if the route gets slower
+        sampleT = m.ts + clockOff;
+      }
       const seen = new Set();
       for (const [id, x, z, mass, sp] of m.p) {
         const p = ensurePlayer(id); seen.add(id); p.alive = true;
@@ -518,10 +560,12 @@ function onMsg(m){
           if (dm >= 0.9) popups.push({x: me.x, z: me.z - rad(me.m), t: 0, txt: '+' + fmt(dm * 10)});
           me.m = mass; speedLeft = sp;
         } else {
-          // remember velocity so the blob keeps gliding if the next snapshot is late
-          const nowT = performance.now(), ds = p.st ? (nowT - p.st) / 1000 : 0;
-          if (ds > 0.03 && ds < 0.6) { p.evx = (x - p.rx) / ds; p.evz = (z - p.rz) / ds; } else { p.evx = p.evz = 0; }
-          p.rx = x; p.rz = z; p.st = nowT; p.sx = x; p.sz = z; p.m = mass;
+          // keep a short history: blobs are drawn slightly in the past, gliding between real positions
+          const buf = p.buf || (p.buf = []);
+          const nowT = sampleT;
+          if (buf.length && Math.hypot(x - buf[buf.length - 1].x, z - buf[buf.length - 1].z) > 25) buf.length = 0;   // teleport/respawn
+          buf.push({t: nowT, x, z}); if (buf.length > 12) buf.shift();
+          p.sx = x; p.sz = z; p.m = mass;
         }
       }
       for (const id of [...byId.keys()]) if (!seen.has(id) && id !== myId) byId.delete(id);
@@ -537,7 +581,7 @@ function onMsg(m){
       ['menu', 'dead', 'acc', 'watchBar'].forEach(id => show(id, false));
       ['score', 'board', 'boosts', 'exitBtn'].forEach(id => show(id, true));
       break;
-    case 'fix': if (me) { me.x = m.x; me.z = m.z; } break;
+    case 'fix': if (me) { me.fixX = m.x - me.x; me.fixZ = m.z - me.z; } break;
     case 'dead':
       state = 'dead'; haptic('err'); cancelKillUi();
       if (me) byId.delete(me.id); me = null; myId = null;
@@ -774,16 +818,18 @@ function render(){
   const tx = focus ? focus.x : Math.sin(perf / 9000) * 40;
   const tz = focus ? focus.z : Math.cos(perf / 9000) * 40;
   const tr = focus ? rad(focus.m) : 3;
-  const wantDist = 16 + tr * 5;
-  cam.dist += (wantDist - cam.dist) * 0.05;
+  const ez = r => 1 - Math.pow(1 - r, fdt * 60);      // same feel at 30, 60 or 120 fps
+  cam.zoom += (cam.zoomT - cam.zoom) * ez(0.2);
+  const wantDist = (16 + tr * 5) * (state === 'menu' ? 1 : cam.zoom);
+  cam.dist += (wantDist - cam.dist) * ez(0.08);
   if (keys['q']) cam.yawT += 0.035;
   if (keys['e']) cam.yawT -= 0.035;
   if (state === 'menu') cam.yawT += 0.0015;                       // slow orbit behind the menu
-  cam.yaw += (cam.yawT - cam.yaw) * 0.22;
+  cam.yaw += (cam.yawT - cam.yaw) * ez(0.2);
   YC = Math.cos(cam.yaw); YS = Math.sin(cam.yaw);
   const back = cam.dist * CP;
-  cam.x += (tx + YS * back - cam.x) * 0.25;
-  cam.z += (tz + YC * back - cam.z) * 0.25;
+  cam.x += (tx + YS * back - cam.x) * ez(0.3);
+  cam.z += (tz + YC * back - cam.z) * ez(0.3);
   cam.y = cam.dist * SP;
   cam.cy = H * 0.56;
 
@@ -795,7 +841,7 @@ function render(){
   ctx.fillStyle = '#6fbf3c'; ctx.fillRect(0, Math.max(0, horizon), W, H);
 
   // arena floor
-  const far = 70 + tr * 7, R = cam.dist + far;
+  const far = (70 + tr * 7) * Math.max(1, cam.zoom), R = cam.dist + far;
   if (groundPoly([[-S, -S], [S, -S], [S, S], [-S, S]])) { ctx.fillStyle = '#8fe04a'; ctx.fill(); }
   const T = 4 * Math.pow(2, Math.max(0, Math.floor(Math.log2(tr / 7))));
   const x0 = Math.max(-S, tx - R), x1 = Math.min(S, tx + R), z0 = Math.max(-S, tz - R), z1 = Math.min(S, tz + R);
@@ -840,7 +886,7 @@ function render(){
   for (const p of players) {
     if (!p.alive) continue;
     const P = project(p.x, 0, p.z); if (!P) continue;
-    p.P = P; p.r = rad(p.m); vis.push(p);
+    p.P = P; p.r = rad(p.vm ?? p.m); vis.push(p);
   }
   vis.sort((a, b) => b.P.d - a.P.d);
   for (const e of vis) drawBlob(e, e.name === undefined);
@@ -1060,13 +1106,47 @@ document.getElementById('bKill').onclick = e => { e.stopPropagation(); openKill(
 
 // ---------- loop ----------
 let last = performance.now(), perf = 0;
+let clockOff = null;
+const INTERP_MS = 220;            // others are shown this far behind the server clock (absorbs mobile network jitter)
+let fdt = 1 / 60, ftAvg = 16, ftN = 0;
 function frame(t){
-  const dt = Math.min(0.05, (t - last) / 1000); last = t; perf = t;
+  const raw = t - last;
+  const dt = Math.min(0.05, raw / 1000); last = t; perf = t; fdt = dt || 1 / 60;
+  // slow phone: lower the canvas resolution a little so it stays fluid
+  if (raw > 0 && raw < 200 && state === 'play') {
+    ftAvg += (raw - ftAvg) * 0.05;
+    if (++ftN > 120 && ftAvg > 24 && DPR > 1.25) { DPR = Math.max(1.25, DPR - 0.25); resize(true); ftN = 0; }
+  }
+  if (me && (me.fixX || me.fixZ)) {               // server correction: glide over ~0.15 s instead of jumping
+    const g = Math.min(1, dt * 7);
+    me.x += me.fixX * g; me.z += me.fixZ * g; me.fixX *= 1 - g; me.fixZ *= 1 - g;
+    if (Math.abs(me.fixX) + Math.abs(me.fixZ) < 0.01) me.fixX = me.fixZ = 0;
+  }
   if (state === 'play' && me) moveMe(dt);
   const k = Math.min(1, dt * 10);
-  for (const p of players) if (p !== me) {
-    if (p.st && t - p.st < 300 && p.evx !== undefined) { p.sx += p.evx * dt; p.sz += p.evz * dt; }
-    p.x += (p.sx - p.x) * k; p.z += (p.sz - p.z) * k;
+  const rt = t - INTERP_MS;
+  for (const p of players) {
+    p.vm = p.vm === undefined ? p.m : p.vm + (p.m - p.vm) * Math.min(1, dt * 8);    // size grows softly
+    if (p === me) continue;
+    const b = p.buf;
+    if (!b || !b.length) { p.x += (p.sx - p.x) * k; p.z += (p.sz - p.z) * k; continue; }
+    let tx, tz;
+    if (rt <= b[0].t) { tx = b[0].x; tz = b[0].z; }
+    else {
+      let i = b.length - 1;
+      while (i > 0 && b[i - 1].t > rt) i--;
+      const a = b[i - 1], c = b[i];
+      if (a && c && rt <= c.t) {                                           // between two real positions
+        const f = (rt - a.t) / Math.max(1, c.t - a.t);
+        tx = a.x + (c.x - a.x) * f; tz = a.z + (c.z - a.z) * f;
+      } else {                                                              // late packet: keep gliding a little
+        const l = b[b.length - 1], q = b[b.length - 2] || l, span = Math.max(1, l.t - q.t);
+        const ex = Math.min(220, rt - l.t) / span;
+        tx = l.x + (l.x - q.x) * ex; tz = l.z + (l.z - q.z) * ex;
+      }
+    }
+    const kk = Math.min(1, dt * 18);
+    p.x += (tx - p.x) * kk; p.z += (tz - p.z) * kk;
   }
   popups = popups.filter(p => (p.t += dt) < 0.9);
   if (speedLeft > 0) speedLeft -= dt;

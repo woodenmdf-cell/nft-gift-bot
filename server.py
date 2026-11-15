@@ -908,7 +908,7 @@ class Game:
 
     def state_msg(self):
         msg = {"t": "s", "p": [[p.id, round(p.x, 1), round(p.z, 1), round(p.m, 1), int(p.speed_t + 0.99)] for p in self.players if p.alive],
-               "f": self.fchanges}
+               "f": self.fchanges, "ts": int(time.monotonic() * 1000) % 100000000}   # server clock for smooth playback
         self.fchanges = []
         return json.dumps(msg, separators=(",", ":"))
 
