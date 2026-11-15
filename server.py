@@ -577,15 +577,20 @@ class Game:
     def human_pos(self, p, x, z):
         """Clients move their own blob; the server only accepts what the speed allows."""
         now = time.monotonic()
-        dt = min(0.5, now - p.last_pos)
+        dt = min(1.0, now - p.last_pos)
         p.last_pos = now
-        maxd = speed_of(p.m) * (2 if p.speed_t > 0 else 1) * dt * 1.5 + 0.8
+        # movement allowance builds up over time, so packets that arrive bunched together
+        # on a shaky mobile network are not clipped (clipping made blobs jump back = "lag")
+        v = speed_of(p.m) * (2 if p.speed_t > 0 else 1)
+        p.mbudget = min(v * 1.5 + 3, getattr(p, "mbudget", v) + v * dt * 1.3)
         dx, dz = x - p.x, z - p.z
         d = math.hypot(dx, dz)
         corrected = False
+        maxd = p.mbudget
         if d > maxd:
             dx, dz = dx / d * maxd, dz / d * maxd
-            corrected = d > maxd + 3
+            corrected = d > maxd + 6
+        p.mbudget = max(0.0, p.mbudget - min(d, maxd))
         if dt > 0:
             p.vx, p.vz = dx / dt, dz / dt
         p.x += dx

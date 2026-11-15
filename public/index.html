@@ -387,7 +387,12 @@ function onMsg(m){
           const dm = mass - me.m;
           if (dm >= 0.9) popups.push({x: me.x, z: me.z - rad(me.m), t: 0, txt: '+' + fmt(dm * 10)});
           me.m = mass; speedLeft = sp;
-        } else { p.sx = x; p.sz = z; p.m = mass; }
+        } else {
+          // remember velocity so the blob keeps gliding if the next snapshot is late
+          const nowT = performance.now(), ds = p.st ? (nowT - p.st) / 1000 : 0;
+          if (ds > 0.03 && ds < 0.6) { p.evx = (x - p.rx) / ds; p.evz = (z - p.rz) / ds; } else { p.evx = p.evz = 0; }
+          p.rx = x; p.rz = z; p.st = nowT; p.sx = x; p.sz = z; p.m = mass;
+        }
       }
       for (const id of [...byId.keys()]) if (!seen.has(id) && id !== myId) byId.delete(id);
       players = [...byId.values()];
@@ -915,7 +920,10 @@ function frame(t){
   const dt = Math.min(0.05, (t - last) / 1000); last = t; perf = t;
   if (state === 'play' && me) moveMe(dt);
   const k = Math.min(1, dt * 10);
-  for (const p of players) if (p !== me) { p.x += (p.sx - p.x) * k; p.z += (p.sz - p.z) * k; }
+  for (const p of players) if (p !== me) {
+    if (p.st && t - p.st < 300 && p.evx !== undefined) { p.sx += p.evx * dt; p.sz += p.evz * dt; }
+    p.x += (p.sx - p.x) * k; p.z += (p.sz - p.z) * k;
+  }
   popups = popups.filter(p => (p.t += dt) < 0.9);
   if (speedLeft > 0) speedLeft -= dt;
   if (killIn) document.getElementById('kaCd').textContent = Math.max(0, Math.ceil((killIn.end - t) / 1000));
