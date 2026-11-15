@@ -975,9 +975,17 @@ def load_resume():
     set_setting("resume", "{}")
 
 
+BLANK_CH = set("\u3164\u115f\u1160\uffa0\u2800\u180e\u17b4\u17b5")
+
+
 def clean_name(s, default):
-    s = "".join(ch for ch in (s or "") if ch.isprintable()).strip()[:14]
-    return s or default
+    import unicodedata
+    s = "".join(ch for ch in (s or "") if ch.isprintable() and ch not in BLANK_CH
+                and unicodedata.category(ch) not in ("Cf", "Zl", "Zp")).strip()[:14]
+    # names made only of spaces/combining marks show up as nothing on screen
+    if not any(unicodedata.category(ch)[0] in "LNSP" for ch in s):
+        return default if default == "O'yinchi" else clean_name(default, "O'yinchi")
+    return s
 
 
 async def on_message(c, m):

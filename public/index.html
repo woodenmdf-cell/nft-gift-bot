@@ -597,12 +597,12 @@ function drawBlob(e, simple){
   paintDome(ctx, e.skin, P.x, P.y, R, sa, ca, R > 5);
 }
 function drawLabel(p){
-  const R = p.r * p.P.s; if (R < 4) return;
-  // hidden behind a nearer blob: no label
+  const R = p.r * p.P.s; if (R < 2.5 || p.P.y < -40 || p.P.y > H + 40) return;
+  // only skip when the whole blob is swallowed from view by a nearer, bigger one
   for (const q of players) {
     if (q === p || !q.alive || !q.P || q.P.d >= p.P.d) continue;
     const Rq = q.r * q.P.s;
-    if (Rq > R && Math.hypot((p.P.x - q.P.x) / Rq, (p.P.y - q.P.y) / (Rq * 0.85)) < 1) return;
+    if (Rq > R * 1.5 && Math.hypot(p.P.x - q.P.x, p.P.y - q.P.y) + R < Rq * 0.8) return;
   }
   const horiz = Math.hypot(p.x - cam.x, p.z - cam.z), ca = Math.cos(Math.atan2(cam.y, horiz));
   const y = p.P.y - R * ca - 8, fs = Math.max(11, Math.min(26, R * 0.32 + 9));
@@ -686,7 +686,10 @@ function render(){
     p.P = P; p.r = rad(p.m); vis.push(p);
   }
   vis.sort((a, b) => b.P.d - a.P.d);
-  for (const e of vis) { const isFood = e.name === undefined; drawBlob(e, isFood); if (!isFood) drawLabel(e); }
+  for (const e of vis) drawBlob(e, e.name === undefined);
+  // names on top of every blob, so a nearer ball never paints over them
+  for (const e of vis) if (e.name !== undefined && e !== me) drawLabel(e);
+  if (me && me.alive && me.P && vis.includes(me)) drawLabel(me);
   ctx.textAlign = 'center'; ctx.lineJoin = 'round';
 
   // "+N" popups
