@@ -140,7 +140,7 @@
   <div class="card">
     <div class="k">Balans</div>
     <div class="v" id="accStars">0 ⭐</div>
-    <div class="hint">Har 500K token avtomatik 50 ⭐ ga aylanib, balansga tushadi.</div>
+    <div class="hint" id="goalHint">Har 1M token avtomatik 100 ⭐ ga aylanib, balansga tushadi.</div>
     <button class="wd" id="wdBtn">⭐ Yulduzga aylantirish</button>
     <div class="hint" id="wdHint"></div>
   </div>
@@ -321,7 +321,7 @@ let acc = {tokens: 0, stars: 0, owned: ['yashil'], skin: 'yashil', reqs: [], bes
 let state = 'menu', speedLeft = 0, killIn = null, killOut = null;
 const SKIN_BY_ID = Object.fromEntries(SKINS.map(s => [s.id, s]));
 const skinOf = id => SKIN_BY_ID[id] || (id && id[0] === '#' ? {type: 'solid', c: id} : SKINS[0]);
-const KILL_COST = 10, ANTI_COST = 10, TOKEN_GOAL = 500000, GOAL_STARS = 50;
+const KILL_COST = 10, ANTI_COST = 10, TOKEN_GOAL = 1000000, GOAL_STARS = 100;
 
 function send(o){ if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 const nameVal = () => document.getElementById('name').value.trim().slice(0, 14);
@@ -408,7 +408,7 @@ function onMsg(m){
       break;
     case 'toast':
       toast(m.msg);
-      if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+50 ⭐', big: true}); haptic('heavy'); }
+      if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+' + (acc.goal_stars || GOAL_STARS) + ' ⭐', big: true}); haptic('heavy'); }
       break;
     case 'speedOn':
       speedLeft = m.sec; toast('⚡ 30 soniya 2x tezlik!'); haptic('medium');
@@ -802,9 +802,11 @@ function openMenu(){
 function openAcc(){
   show('menu', false); show('acc', true);
   document.getElementById('accName').textContent = '👤 ' + (acc.name || '') + (acc.guest ? ' (mehmon)' : '');
-  document.getElementById('accTok').textContent = acc.tokens.toLocaleString('ru-RU').replace(/,/g, ' ') + ' / 500K';
-  document.getElementById('accBar').style.width = Math.min(100, acc.tokens / TOKEN_GOAL * 100) + '%';
-  document.getElementById('accLeft').textContent = '50 ⭐ gacha yana ' + fmt(TOKEN_GOAL - acc.tokens) + ' token qoldi';
+  const goal = acc.goal || TOKEN_GOAL, gst = acc.goal_stars || GOAL_STARS;
+  document.getElementById('accTok').textContent = acc.tokens.toLocaleString('ru-RU').replace(/,/g, ' ') + ' / ' + (goal >= 1e6 ? goal / 1e6 + 'M' : fmt(goal));
+  document.getElementById('accBar').style.width = Math.min(100, acc.tokens / goal * 100) + '%';
+  document.getElementById('accLeft').textContent = gst + ' ⭐ gacha yana ' + fmt(goal - acc.tokens) + ' token qoldi';
+  document.getElementById('goalHint').textContent = `Har ${goal >= 1e6 ? goal / 1e6 + 'M' : fmt(goal)} token avtomatik ${gst} ⭐ ga aylanib, balansga tushadi.`;
   document.getElementById('accStars').textContent = acc.stars + ' ⭐';
   const wd = document.getElementById('wdBtn');
   const wmin = acc.wmin || 100;

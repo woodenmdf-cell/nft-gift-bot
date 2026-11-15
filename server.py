@@ -44,8 +44,8 @@ S = 130.0                 # half-size of the arena
 FOOD_N = 1800
 MAX_M = 8000.0            # 80K tokens
 BANK_STEP = 50000         # whole 50K chunks of a round go to the account
-TOKEN_GOAL = 500000       # every 500K account tokens -> 50 stars
-GOAL_STARS = 50
+TOKEN_GOAL = 1000000      # every 1M account tokens -> 100 stars (same rate: 10K tokens = 1 star)
+GOAL_STARS = 100
 WITHDRAW_MIN = 100        # smallest withdraw request in stars
 SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 KILL_COST = ANTI_COST = REVIVE_COST = 10
@@ -160,7 +160,7 @@ class Account:
         db.commit()
 
     def add_tokens(self, n):
-        """Returns how many stars were credited by crossing 500K."""
+        """Returns how many stars were credited by crossing TOKEN_GOAL."""
         self.tokens += n
         conv = 0
         while self.tokens >= TOKEN_GOAL:
@@ -188,7 +188,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN,
+                "best": self.best, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -298,7 +298,7 @@ async def handle_update(u):
             await register_ref(frm, int(arg[4:]))
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
-                      "• Har 50K token hisobingizga o'tadi\n• Har 500K token = 50 ⭐\n"
+                      "• Har 50K token hisobingizga o'tadi\n• Har 1M token = 100 ⭐\n"
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
                       f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
@@ -739,7 +739,7 @@ class Game:
             pay_referrer(p.conn.acc, BANK_STEP)
             p.conn.toast("💰 50K token hisobingizga o'tdi!", fx="bank")
             if conv:
-                p.conn.toast(f"🎉 500K token → {conv} ⭐ balansga tushdi!", fx="stars")
+                p.conn.toast(f"🎉 1M token → {conv} ⭐ balansga tushdi!", fx="stars")
             push_acc(p.conn.acc)
         if p.m < 10:
             p.m = 10
@@ -832,7 +832,7 @@ def pay_referrer(acc, banked):
         if c.acc is inv:
             c.toast(f"👥 {acc.name} 50K yig'di — sizga +{fmt(bonus)} token!")
             if conv:
-                c.toast(f"🎉 500K token → {conv} ⭐ balansga tushdi!", fx="stars")
+                c.toast(f"🎉 1M token → {conv} ⭐ balansga tushdi!", fx="stars")
     push_acc(inv)
 
 
@@ -1123,7 +1123,7 @@ async def on_message(c, m):
             conv = c.acc.add_tokens(SUB_BONUS)
             c.toast(f"🎁 Rahmat! +{fmt(SUB_BONUS)} token hisobingizga tushdi")
             if conv:
-                c.toast(f"🎉 500K token → {conv} ⭐ balansga tushdi!")
+                c.toast(f"🎉 1M token → {conv} ⭐ balansga tushdi!")
             push_acc(c.acc)
         else:
             c.toast("Avval kanalga obuna bo'ling, keyin tekshiring")
