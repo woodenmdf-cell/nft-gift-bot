@@ -87,6 +87,20 @@
   @keyframes rglow{0%{opacity:0;transform:scale(.3)}30%{opacity:1}100%{opacity:0;transform:scale(1.6)}}
   .conf{position:absolute;top:110px;left:50%;width:8px;height:12px;border-radius:2px;pointer-events:none;animation:conf 1.4s ease-out forwards}
   @keyframes conf{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
+  #topTabs{display:flex;gap:8px;overflow-x:auto;width:min(420px,96vw);padding:4px 2px 10px;scrollbar-width:none}
+  #topTabs::-webkit-scrollbar{display:none}
+  #topTabs button{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;border:0;border-radius:14px;padding:8px 8px 6px;min-width:66px;background:rgba(255,255,255,.1);color:#fff;font-weight:800;font-size:11px}
+  #topTabs button.on{background:rgba(255,225,77,.25);box-shadow:inset 0 0 0 2px #ffe14d}
+  #topTabs button small{opacity:.7;font-size:10px}
+  #topHead{display:flex;align-items:center;gap:12px;width:min(420px,96vw);margin:2px 0 8px;text-align:left}
+  #topHead .tn{font-size:22px;font-weight:900}
+  #topList{width:min(420px,96vw)}
+  .trow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;margin-bottom:6px;background:rgba(255,255,255,.08);text-align:left;font-weight:800}
+  .trow.me{background:rgba(255,225,77,.22);box-shadow:inset 0 0 0 2px #ffe14d}
+  .trow .pl{width:28px;text-align:center;font-size:16px;font-weight:900;opacity:.9}
+  .trow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trow .rp{color:#ffe14d;font-size:13px;white-space:nowrap}
+  .tempty{opacity:.7;padding:24px 8px;font-weight:700}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -169,7 +183,7 @@
   <div class="menuBtns">
     <button class="play" id="playBtn">▶ O'YNASH</button>
     <button class="accb" id="accBtn">💰 HISOB</button>
-    <button class="watchb" id="watchBtn">👁 KUZATISH</button>
+    <div style="display:flex;gap:10px"><button class="watchb" id="watchBtn" style="padding:10px 18px">👁 KUZATISH</button><button class="watchb" id="topsBtn" style="padding:10px 18px">🏆 TOP</button></div>
     <button class="subb hidden" id="subBtn">📢 Kanalga obuna bo'ling · <b>+20K 🎁</b></button>
   </div>
   <div class="best" id="bestTxt"></div>
@@ -186,6 +200,14 @@
     <button class="ghost" id="againBtn">Qaytadan boshlash</button>
     <button class="ghost" id="menuBtn">Menyu</button>
   </div>
+</div>
+<div id="tops" class="screen scrollscr hidden">
+  <h1 style="font-size:30px;margin-bottom:6px">🏆 <span>RANK TOP</span></h1>
+  <div class="sub" id="topsMine"></div>
+  <div id="topTabs"></div>
+  <div id="topHead"></div>
+  <div id="topList"></div>
+  <button class="ghost" id="topsBack" style="margin:14px 0 20px">← Orqaga</button>
 </div>
 <div id="acc" class="screen scrollscr hidden">
   <h1 style="font-size:32px">💰 <span>HISOB</span></h1>
@@ -536,6 +558,7 @@ function onMsg(m){
       if (killIn) updAntiBtn();
       break;
     case 'v': voiceIn(m.id, m.n || '', m.d); break;
+    case 'tops': topsData = m; renderTops(); break;
     case 'toast':
       toast(m.msg);
       if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+' + (acc.goal_stars || GOAL_STARS) + ' ⭐', big: true}); haptic('heavy'); }
@@ -974,7 +997,7 @@ function drawMini(){
 
 function openMenu(){
   state = 'menu';
-  ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg', 'watchBar'].forEach(id => show(id, false)); show('menu', true);
+  ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg', 'watchBar', 'tops'].forEach(id => show(id, false)); show('menu', true);
   cancelKillUi(); refreshMenu();
 }
 function openAcc(){
@@ -1274,6 +1297,33 @@ for (const [id, dir] of [['camL', 1], ['camR', -1]]) {
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => { camHold = 0; });
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
+
+// ---------------------------------------------------------------- rank tops
+let topsData = null, topTier = 0;
+function openTops(){
+  show('menu', false); show('tops', true);
+  topTier = acc && acc.rank ? acc.rank.tier : 0;
+  document.getElementById('topList').innerHTML = '<div class="tempty">Yuklanmoqda...</div>';
+  send({t: 'tops'});
+}
+function renderTops(){
+  if (!topsData) return;
+  const tabs = document.getElementById('topTabs');
+  tabs.innerHTML = RANKS.map((r, i) => `<button data-t="${i}" class="${i === topTier ? 'on' : ''}">${badgeHTML(i, '', 30)}${r.n}<small>${topsData.tiers[i].count} ta</small></button>`).join('');
+  tabs.querySelectorAll('button').forEach(b => b.onclick = () => { topTier = +b.dataset.t; renderTops(); });
+  const on = tabs.querySelector('.on'); if (on) on.scrollIntoView({inline: 'center', block: 'nearest'});
+  const T = topsData.tiers[topTier], R = RANKS[topTier];
+  document.getElementById('topHead').innerHTML = badgeHTML(topTier, '', 46) +
+    `<div><div class="tn" style="color:${R.c1}">${R.e} ${R.n}</div><div style="opacity:.75;font-size:12px;font-weight:700">${T.count} o'yinchi · TOP-30</div></div>`;
+  const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1;
+  document.getElementById('topList').innerHTML = T.list.length ? T.list.map((p, i) =>
+    `<div class="trow ${p.me ? 'me' : ''}"><div class="pl">${medal(i)}</div>${badgeHTML(topTier, p.div, 30)}<div class="nm">${esc(p.name)}${p.me ? ' (siz)' : ''}<div style="font-size:11px;opacity:.7">${R.n} ${p.div}</div></div><div class="rp">${p.rp} RP</div></div>`).join('')
+    : `<div class="tempty">Bu rankda hali hech kim yo'q.<br>Birinchi bo'ling! 💪</div>`;
+  const m = topsData.mine;
+  document.getElementById('topsMine').textContent = m ? `Siz: ${RANKS[m.tier].e} ${RANKS[m.tier].n} rankida ${m.place}-o'rindasiz` : "O'ynang va rankingizni ko'taring!";
+}
+document.getElementById('topsBtn').onclick = openTops;
+document.getElementById('topsBack').onclick = () => { show('tops', false); openMenu(); };
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>

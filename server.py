@@ -1180,6 +1180,21 @@ async def on_message(c, m):
             c.acc.stars -= ANTI_COST
             c.acc.save()
             push_acc(c.acc)
+    elif t == "tops":                               # leaderboard of every rank tier
+        tiers = []
+        for ti in range(len(RANK_TIERS)):
+            lo, hi = tier_start(ti), tier_start(ti + 1) if ti + 1 < len(RANK_TIERS) else 10 ** 9
+            rows = db.execute("SELECT uid, name, rp FROM users WHERE rp>=? AND rp<? AND rp>0 ORDER BY rp DESC, uid LIMIT 30", (lo, hi)).fetchall()
+            cnt = db.execute("SELECT COUNT(*) c FROM users WHERE rp>=? AND rp<? AND rp>0", (lo, hi)).fetchone()["c"]
+            tiers.append({"count": cnt, "list": [{"me": r["uid"] == c.acc.uid, "name": (r["name"] or "O'yinchi")[:16],
+                                                    "rp": r["rp"], "div": rank_info(r["rp"])["div"]} for r in rows]})
+        mine = None
+        if c.acc.uid is not None and c.acc.rp > 0:
+            ri = rank_info(c.acc.rp)
+            hi = tier_start(ri["tier"] + 1) if ri["tier"] + 1 < len(RANK_TIERS) else 10 ** 9
+            place = db.execute("SELECT COUNT(*) c FROM users WHERE rp>? AND rp<?", (c.acc.rp, hi)).fetchone()["c"] + 1
+            mine = {"tier": ri["tier"], "place": place}
+        c.send({"t": "tops", "tiers": tiers, "mine": mine})
     elif t == "skin":
         sid = m.get("id")
         if sid not in SKIN_PRICES:
