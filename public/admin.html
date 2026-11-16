@@ -140,7 +140,7 @@ function render(){
     ['👥 O\'yinchilar', s.users, `bugun +${s.new_today}`],
     ['🟢 Hozir o\'ynayapti', s.online, `${s.bots} ta bot maydonda`],
     ['💰 Stars to\'lovlari', s.paid_total + ' ⭐', `bugun ${s.paid_today} ⭐ · ${s.payments_n} ta`, 'good'],
-    ['🎁 Yuborilgan ⭐', s.sent_stars + ' ⭐', 'so\'rovlar bo\'yicha'],
+    ['🎁 Berilgan sovg\'alar', s.sent_stars + ' ⭐', 'so\'rovlar bo\'yicha'],
     ['⏳ Kutilayotgan so\'rov', s.pending_n, `${s.pending_stars} ⭐`, s.pending_n ? 'warn' : ''],
     ['⭐ Balanslardagi jami', s.stars_balance + ' ⭐', 'yechib olinishi mumkin', s.stars_balance ? 'warn' : ''],
     ['🪙 Hisoblardagi token', fmt(s.tokens), 'har 1M = 100 ⭐'],
@@ -160,12 +160,13 @@ function render(){
   const pend = data.reqs.filter(r => r.status === 'pending');
   $('reqBadge').textContent = pend.length; $('reqBadge').classList.toggle('hidden', !pend.length);
   const ST = {pending: '⏳ Kutilmoqda', sent: '✅ Yuborildi', rejected: '❌ Rad etildi'};
+  const GIFT = {tort: '🎂 Tort', raketa: '🚀 Raketa', kubok: '🏆 Kubok', uzuk: '💍 Uzuk'};
   $('reqs').innerHTML = data.reqs.length ? data.reqs.map(r => `<div class="row">
       <div class="top"><div style="min-width:0"><div class="name">#${r.id} · ${esc(r.name || r.uid)}</div>
         <div class="sub">${r.username ? '@' + esc(r.username) + ' · ' : ''}ID ${r.uid} · ${ago(r.created)}</div></div>
-        <div class="bal"><b>${r.stars} ⭐</b><div class="status">${ST[r.status] || r.status}</div></div></div>
-      ${r.status === 'pending' ? `<div class="sub" style="margin-top:6px">Yulduzlarni Telegram'da sovg'a qiling, keyin «Yuborildi»ni bosing.</div>
-      <div class="acts"><button class="btn gold" data-frag="${esc(r.username || '')}" data-n="${r.stars}">⭐ Fragment orqali yuborish (test)</button></div>
+        <div class="bal"><b>${GIFT[r.gift] || r.stars + ' ⭐'}</b><div>${r.stars} ⭐</div><div class="status">${ST[r.status] || r.status}</div></div></div>
+      ${r.status === 'pending' ? `<div class="sub" style="margin-top:6px">${GIFT[r.gift] ? 'Shu sovg\'ani o\'yinchiga Telegram\'da yuboring yoki botga yubortiring.' : 'Eski yulduz so\'rovi — qo\'lda yuboring.'}</div>
+      ${GIFT[r.gift] ? `<div class="acts"><button class="btn gold" data-bot="${r.id}">🤖 Bot yuborsin (bot ⭐ balansidan)</button></div>` : ''}
       <div class="acts"><button class="btn ok" data-req="${r.id}" data-ok="1">✅ Yuborildi</button><button class="btn no" data-req="${r.id}" data-ok="0">❌ Rad etish</button></div>` : ''}</div>`).join('') : '<div class="empty">So\'rov yo\'q</div>';
 }
 
@@ -212,20 +213,15 @@ document.body.addEventListener('click', e => { const r = e.target.closest('.row.
 
 document.body.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.frag !== undefined) {
-    // Fragment can't be prefilled from a link: copy the recipient, then open the Stars purchase page
-    const user = b.dataset.frag, n = b.dataset.n;
-    if (!user) { toast("Bu o'yinchida @username yo'q — Fragment ishlamaydi, sovg'a orqali yuboring"); return; }
-    try { await navigator.clipboard.writeText('@' + user); } catch (err) {}
-    const url = 'https://fragment.com/stars/buy';
-    if (tg && tg.showAlert) tg.showAlert(`@${user} nusxalandi.\n\nFragment'da:\n1) Recipient: @${user} (joylang)\n2) Miqdor: ${n} ⭐\n3) GRAM bilan to'lang\n\nKeyin bu yerda «✅ Yuborildi»ni bosing.`, () => tg.openLink(url));
-    else { toast('@' + user + ' nusxalandi · ' + n + ' ⭐'); window.open(url, '_blank'); }
+  if (b.dataset.bot) {
+    const go = async () => { b.disabled = true; if (await api({action: 'botgift', id: +b.dataset.bot})) toast('🤖 Sovg\'a bot orqali yuborildi'); else b.disabled = false; };
+    if (tg && tg.showConfirm) tg.showConfirm('Sovg\'ani bot o\'z ⭐ balansidan yuborsinmi?', y => y && go()); else go();
     return;
   }
   if (b.dataset.req) {
     const ok = b.dataset.ok === '1';
     const go = async () => { b.disabled = true; if (await api({action: 'req', id: +b.dataset.req, ok})) toast(ok ? '✅ Yuborildi deb belgilandi' : '❌ Rad etildi, ⭐ balansga qaytdi'); };
-    if (tg && tg.showConfirm) tg.showConfirm(ok ? 'Yulduzlarni yubordingizmi?' : 'So\'rovni rad etasizmi? ⭐ o\'yinchi balansiga qaytadi.', y => y && go()); else go();
+    if (tg && tg.showConfirm) tg.showConfirm(ok ? 'Sovg\'ani yubordingizmi?' : 'So\'rovni rad etasizmi? ⭐ o\'yinchi balansiga qaytadi.', y => y && go()); else go();
   } else if (b.dataset.star) {
     starUid = +b.dataset.star; const u = data.users.find(x => x.uid === starUid);
     $('sdName').textContent = u.name; $('sdBal').textContent = 'Hozirgi balans: ' + u.stars + ' ⭐'; $('starDlg').classList.remove('hidden');

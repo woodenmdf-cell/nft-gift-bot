@@ -101,6 +101,12 @@
   .trow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .trow .rp{color:#ffe14d;font-size:13px;white-space:nowrap}
   .tempty{opacity:.7;padding:24px 8px;font-weight:700}
+  #giftGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+  .gcard{border:0;border-radius:16px;padding:12px 8px 10px;background:rgba(255,255,255,.12);color:#fff;display:flex;flex-direction:column;align-items:center;gap:4px;font-weight:900;font-size:15px}
+  .gcard .ge{font-size:46px;line-height:1.1;filter:drop-shadow(0 4px 6px rgba(0,0,0,.3))}
+  .gcard .gp{background:linear-gradient(#ffe27a,#ffb300);color:#4a3200;border-radius:10px;padding:3px 10px;font-size:13px}
+  .gcard:disabled{opacity:.45}
+  .gcard:not(:disabled):active{transform:scale(.96)}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -223,7 +229,8 @@
     <div class="k">Balans</div>
     <div class="v" id="accStars">0 ⭐</div>
     <div class="hint" id="goalHint">Har 1M token avtomatik 100 ⭐ ga aylanib, balansga tushadi.</div>
-    <button class="wd" id="wdBtn">⭐ Yulduzga aylantirish</button>
+    <div class="k" style="margin-top:12px">🎁 Sovg'a olish</div>
+    <div id="giftGrid"></div>
     <div class="hint" id="wdHint"></div>
   </div>
   <div class="card" id="refCard">
@@ -1057,11 +1064,12 @@ function openAcc(){
   document.getElementById('accLeft').textContent = gst + ' ⭐ gacha yana ' + fmt(goal - acc.tokens) + ' token qoldi';
   document.getElementById('goalHint').textContent = `Har ${goal >= 1e6 ? goal / 1e6 + 'M' : fmt(goal)} token avtomatik ${gst} ⭐ ga aylanib, balansga tushadi.`;
   document.getElementById('accStars').textContent = acc.stars + ' ⭐';
-  const wd = document.getElementById('wdBtn');
-  const wmin = acc.wmin || 100;
-  wd.disabled = acc.stars < wmin || acc.guest;
+  const gifts = acc.gifts || [];
+  document.getElementById('giftGrid').innerHTML = gifts.map(g =>
+    `<button class="gcard" data-gift="${g.id}" ${acc.guest || acc.stars < g.price ? 'disabled' : ''}><span class="ge">${g.emoji}</span>${esc(g.title)}<span class="gp">${g.price} ⭐</span></button>`).join('');
+  const cheapest = gifts.length ? Math.min(...gifts.map(g => g.price)) : 50;
   document.getElementById('wdHint').textContent = acc.guest ? "Mehmon rejimi: tokenlar saqlanmaydi. O'yinni Telegram bot orqali oching."
-    : acc.stars < wmin ? `Kamida ${wmin} ⭐ bo'lganda so'rov yuborish mumkin (yana ${wmin - acc.stars} ⭐)` : "Yulduzlar Telegram akkauntingizga yuboriladi";
+    : acc.stars < cheapest ? `Sovg'a olish uchun kamida ${cheapest} ⭐ kerak (yana ${cheapest - acc.stars} ⭐)` : "Sovg'ani tanlang — u Telegram profilingizga yuboriladi";
   const ref = acc.ref || {};
   show('refCard', !acc.guest && !!ref.link);
   document.getElementById('refInfo').textContent = `Do'stingiz har 50K token yig'ganda sizga +${fmt(50000 * (ref.pct || 10) / 100)} token (${ref.pct || 10}%)`;
@@ -1069,7 +1077,7 @@ function openAcc(){
   document.getElementById('refCount').textContent = ref.count || 0;
   document.getElementById('refEarned').textContent = fmt(ref.earned || 0);
   const box = document.getElementById('accReqs');
-  box.innerHTML = acc.reqs.length ? acc.reqs.map(r => `<div class="req"><span>${r.stars} ⭐ · ${r.date}</span><span>${r.status}</span></div>`).join('') : '<div class="hint">Hali so\'rov yo\'q</div>';
+  box.innerHTML = acc.reqs.length ? acc.reqs.map(r => `<div class="req"><span>${esc(r.gift || r.stars + ' ⭐')} · ${r.date}</span><span>${r.status}</span></div>`).join('') : '<div class="hint">Hali so\'rov yo\'q</div>';
 }
 function startGame(){
   try { audioCtx(); } catch (e) {}
@@ -1094,7 +1102,13 @@ document.getElementById('refCopy').onclick = () => {
   navigator.clipboard.writeText(link).then(() => toast('✅ Havola nusxalandi'), () => toast(link));
 };
 document.getElementById('accBack').onclick = openMenu;
-document.getElementById('wdBtn').onclick = () => send({t: 'withdraw'});
+document.getElementById('giftGrid').addEventListener('click', e => {
+  const b = e.target.closest('.gcard'); if (!b || b.disabled) return;
+  const g = (acc.gifts || []).find(x => x.id === b.dataset.gift); if (!g) return;
+  const go = () => send({t: 'withdraw', gift: g.id});
+  const q = `${g.emoji} ${g.title} sovg'asini olasizmi?\nBalansdan ${g.price} ⭐ yechiladi.`;
+  if (tg && tg.showConfirm) tg.showConfirm(q, y => y && go()); else if (confirm(q)) go();
+});
 document.getElementById('exitBtn').onclick = e => {
   e.stopPropagation(); send({t: 'leave'});
   if (me) byId.delete(me.id); me = null; myId = null;

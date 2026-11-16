@@ -47,7 +47,7 @@ MAX_M = 8000.0            # 80K tokens
 BANK_STEP = 50000         # whole 50K chunks of a round go to the account
 TOKEN_GOAL = 1000000      # every 1M account tokens -> 100 stars (same rate: 10K tokens = 1 star)
 GOAL_STARS = 100
-WITHDRAW_MIN = 100        # smallest withdraw request in stars
+WITHDRAW_MIN = 50        # smallest withdraw request in stars
 SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 KILL_COST = ANTI_COST = REVIVE_COST = 10
 KILL_TIME = 10.0
@@ -92,6 +92,20 @@ for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DE
         db.execute(f"ALTER TABLE users ADD COLUMN {col}")
     except sqlite3.OperationalError:
         pass                                       # column already there
+try:
+    db.execute("ALTER TABLE reqs ADD COLUMN gift TEXT")
+except sqlite3.OperationalError:
+    pass
+# payouts are Telegram gifts (no plain Stars any more): id -> (title, price in ⭐, emoji Telegram uses for it)
+PAY_GIFTS = {"tort": ("Tort", 50, "🎂"), "raketa": ("Raketa", 50, "🚀"),
+             "kubok": ("Kubok", 100, "🏆"), "uzuk": ("Uzuk", 100, "💍")}
+
+
+def gift_label(g, stars=0):
+    if g in PAY_GIFTS:
+        t, _, e = PAY_GIFTS[g]
+        return f"{e} {t}"
+    return f"{stars} ⭐"
 db.commit()
 CHANNEL = os.environ.get("CHANNEL", "@VIZUAL_OTZIF").strip()   # channel with the live pinned leaderboard
 SUB_BONUS = 20000                                 # tokens for subscribing to the channel (once)
@@ -228,8 +242,8 @@ class Account:
     def reqs(self):
         if self.uid is None:
             return []
-        rows = db.execute("SELECT stars, status, created FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
-        return [{"stars": r["stars"], "status": STATUS.get(r["status"], r["status"]), "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
+        rows = db.execute("SELECT stars, status, created, gift FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
+        return [{"stars": r["stars"], "gift": gift_label(r["gift"], r["stars"]), "status": STATUS.get(r["status"], r["status"]), "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
 
     def finish_round(self, p):
         """Adds the round's RP and returns what the client animates."""
@@ -251,7 +265,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "rank": rank_info(self.rp), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
+                "best": self.best, "rank": rank_info(self.rp), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -363,7 +377,7 @@ async def handle_update(u):
             await register_ref(frm, int(arg[4:]))
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
-                      "• Har 50K token hisobingizga o'tadi\n• Har 1M token = 100 ⭐\n"
+                      "• Har 50K token hisobingizga o'tadi\n• Har 1M token = 100 ⭐\n• ⭐ larni 🎂🚀🏆💍 Telegram sovg'alariga almashtiring\n"
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
                       f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
@@ -429,16 +443,39 @@ async def register_ref(frm, inviter):
         push_acc(inv)
 
 
-async def post_payout_proof(acc, stars):
+async def post_payout_proof(acc, stars, gift=None):
     """Real payouts are the best advert: announce each one in the channel."""
     if not CHANNEL:
         return
     total = db.execute("SELECT COALESCE(SUM(stars),0) FROM reqs WHERE status='sent'").fetchone()[0]
     name = html(acc.name if acc.name and acc.name != str(acc.uid) else "O'yinchi")
     await tg("sendMessage", chat_id=CHANNEL, parse_mode="HTML",
-             text=f"✅ <b>TO'LOV ISBOTI</b>\n\n👤 {name} o'ynab <b>{stars} ⭐</b> Telegram yulduzi yutib oldi!\n"
-                  f"💫 Jami to'langan: {total} ⭐\n\n🎮 Siz ham o'ynang va yutib oling 👇",
+             text=f"✅ <b>TO'LOV ISBOTI</b>\n\n👤 {name} o'ynab <b>{gift_label(gift, stars)}</b> Telegram sovg'asini yutib oldi!\n"
+                  f"💫 Jami berilgan sovg'alar: {total} ⭐\n\n🎮 Siz ham o'ynang va yutib oling 👇",
              reply_markup={"inline_keyboard": [[{"text": "🎮 O'ynash", "url": f"https://t.me/{BOT_USERNAME}?start=kanal"}]]})
+
+
+async def bot_send_gift(rid):
+    """Sends the requested gift from the bot's own Star balance. Returns (ok, message)."""
+    r = db.execute("SELECT * FROM reqs WHERE id=?", (rid,)).fetchone()
+    if not r or r["status"] != "pending":
+        return False, "So'rov allaqachon ko'rib chiqilgan"
+    if r["gift"] not in PAY_GIFTS:
+        return False, "Bu eski yulduz so'rovi — qo'lda yuboring"
+    title, price, emoji = PAY_GIFTS[r["gift"]]
+    gifts = await tg("getAvailableGifts")
+    pick = None
+    for g in (gifts or {}).get("gifts", []):
+        if g.get("star_count") == price and (g.get("sticker") or {}).get("emoji") == emoji:
+            pick = g
+            break
+    if not pick:
+        return False, f"{emoji} {title} sovg'asi Telegram ro'yxatida topilmadi — qo'lda yuboring"
+    res = await tg("sendGift", user_id=r["uid"], gift_id=pick["id"], text="Shar Yutar o'yinidan sovg'a 🎮")
+    if res is None:
+        return False, "Bot sovg'ani yubora olmadi (botda ⭐ yetmasligi mumkin) — qo'lda yuboring"
+    await resolve_request(rid, True)
+    return True, f"🤖 {emoji} {title} bot orqali yuborildi"
 
 
 async def resolve_request(rid, ok):
@@ -449,13 +486,14 @@ async def resolve_request(rid, ok):
     acc = Account.get(r["uid"])
     if ok:
         db.execute("UPDATE reqs SET status='sent' WHERE id=?", (rid,))
-        note, user_msg = "✅ Yuborildi", f"✅ {r['stars']} ⭐ yulduz sizga sovg'a qilindi! O'ynashda davom eting 🎮"
-        asyncio.create_task(post_payout_proof(acc, r["stars"]))
+        lbl = gift_label(r["gift"], r["stars"])
+        note, user_msg = "✅ Yuborildi", f"✅ {lbl} sovg'asi sizga yuborildi! Telegram profilingizni tekshiring 🎁\nO'ynashda davom eting 🎮"
+        asyncio.create_task(post_payout_proof(acc, r["stars"], r["gift"]))
     else:
         db.execute("UPDATE reqs SET status='rejected' WHERE id=?", (rid,))
         acc.stars += r["stars"]
         acc.save()
-        note, user_msg = "❌ Rad etildi (⭐ balansga qaytarildi)", f"❌ {r['stars']} ⭐ so'rovingiz rad etildi, yulduzlar balansingizga qaytarildi."
+        note, user_msg = "❌ Rad etildi (⭐ balansga qaytarildi)", f"❌ {gift_label(r['gift'], r['stars'])} so'rovingiz rad etildi, {r['stars']} ⭐ balansingizga qaytarildi."
     db.commit()
     if r["admin_chat"] and r["admin_msg"]:
         await tg("editMessageReplyMarkup", chat_id=r["admin_chat"], message_id=r["admin_msg"], reply_markup={"inline_keyboard": []})
@@ -471,6 +509,10 @@ async def handle_callback(q):
         await tg("answerCallbackQuery", callback_query_id=q["id"], text="Faqat admin")
         return
     action, rid = data.split(":", 1)
+    if action == "bot":
+        okk, msg = await bot_send_gift(int(rid))
+        await tg("answerCallbackQuery", callback_query_id=q["id"], text=msg, show_alert=not okk)
+        return
     note = await resolve_request(int(rid), action == "ok")
     await tg("answerCallbackQuery", callback_query_id=q["id"], text=note or "Allaqachon ko'rib chiqilgan")
 
@@ -521,7 +563,7 @@ def push_acc(acc):
             c.send(acc.public())
 
 
-async def notify_admin_request(rid, acc, stars):
+async def notify_admin_request(rid, acc, stars, gift=None):
     adm = admin_id()
     if not adm:
         log.warning("withdraw request %s but no admin set (send /admin to the bot)", rid)
@@ -531,9 +573,11 @@ async def notify_admin_request(rid, acc, stars):
     if r and r["username"]:
         who += f" (@{r['username']})"
     sent = await tg("sendMessage", chat_id=adm,
-             text=f"⭐ Yulduz so'rovi #{rid}\n👤 {who}\n🆔 {acc.uid}\n💫 {stars} ⭐\n\n"
-                  f"Yulduzlarni sovg'a qilib yuboring, keyin «Yuborildi»ni bosing.",
-             reply_markup={"inline_keyboard": [[{"text": "✅ Yuborildi", "callback_data": f"ok:{rid}"},
+             text=f"🎁 Sovg'a so'rovi #{rid}\n👤 {who}\n🆔 {acc.uid}\n🎁 {gift_label(gift, stars)} ({stars} ⭐)\n\n"
+                  f"Shu sovg'ani o'yinchiga yuboring, keyin «Yuborildi»ni bosing.\n"
+                  f"«🤖 Bot yuborsin» — sovg'ani bot o'z ⭐ balansidan avtomatik yuboradi.",
+             reply_markup={"inline_keyboard": [[{"text": "🤖 Bot yuborsin", "callback_data": f"bot:{rid}"}],
+                                               [{"text": "✅ Yuborildi", "callback_data": f"ok:{rid}"},
                                                 {"text": "❌ Rad etish", "callback_data": f"no:{rid}"}]]})
     if sent:
         db.execute("UPDATE reqs SET admin_chat=?, admin_msg=? WHERE id=?", (adm, sent["message_id"], rid))
@@ -1272,17 +1316,20 @@ async def on_message(c, m):
     elif t == "withdraw":
         if c.acc.uid is None:
             return c.toast("Telegram orqali kiring")
-        if c.acc.stars < WITHDRAW_MIN:
-            return c.toast(f"Yechib olish uchun kamida {WITHDRAW_MIN} ⭐ kerak")
-        amount = c.acc.stars
-        c.acc.stars = 0
+        gift = m.get("gift")
+        if gift not in PAY_GIFTS:
+            return c.toast("Sovg'ani tanlang")
+        title, price, emoji = PAY_GIFTS[gift]
+        if c.acc.stars < price:
+            return c.toast(f"{emoji} {title} uchun balansda {price} ⭐ kerak")
+        c.acc.stars -= price
         c.acc.save()
-        cur = db.execute("INSERT INTO reqs(uid,stars,status,created) VALUES(?,?,?,?)",
-                         (c.acc.uid, amount, "pending", int(time.time())))
+        cur = db.execute("INSERT INTO reqs(uid,stars,status,created,gift) VALUES(?,?,?,?,?)",
+                         (c.acc.uid, price, "pending", int(time.time()), gift))
         db.commit()
         push_acc(c.acc)
-        c.toast("So'rov yuborildi! Admin tez orada yulduzlarni yuboradi")
-        asyncio.create_task(notify_admin_request(cur.lastrowid, c.acc, amount))
+        c.toast(f"So'rov yuborildi! {emoji} {title} tez orada Telegram'ingizga keladi")
+        asyncio.create_task(notify_admin_request(cur.lastrowid, c.acc, price, gift))
 
 
 # ---------------------------------------------------------------- admin app API
@@ -1329,7 +1376,7 @@ def admin_overview(q=""):
     sql += " ORDER BY u.stars DESC, u.tokens DESC LIMIT 300"
     users = [dict(r) | {"online": r["uid"] in on} for r in db.execute(sql, args)]
     reqs = [dict(r) for r in db.execute(
-        "SELECT q.id, q.uid, q.stars, q.status, q.created, u.name, u.username FROM reqs q LEFT JOIN users u ON u.uid=q.uid "
+        "SELECT q.id, q.uid, q.stars, q.gift, q.status, q.created, u.name, u.username FROM reqs q LEFT JOIN users u ON u.uid=q.uid "
         "ORDER BY (q.status='pending') DESC, q.id DESC LIMIT 50")]
     pays = [dict(r) for r in db.execute(
         "SELECT p.uid, p.item, p.stars, p.created, u.name FROM payments p LEFT JOIN users u ON u.uid=p.uid ORDER BY p.created DESC LIMIT 30")]
@@ -1375,7 +1422,11 @@ async def admin_api(body):
     if uid != adm:
         return {"ok": False, "error": "Bu panel faqat admin uchun"}
     act = m.get("action", "overview")
-    if act == "req":
+    if act == "botgift":
+        okk, msg = await bot_send_gift(int(m.get("id", 0)))
+        if not okk:
+            return {"ok": False, "error": msg}
+    elif act == "req":
         note = await resolve_request(int(m.get("id", 0)), bool(m.get("ok")))
         if not note:
             return {"ok": False, "error": "So'rov allaqachon ko'rib chiqilgan"}
