@@ -66,7 +66,7 @@ BOT_NAMES = ["Sardor", "Jasur", "Malika", "Dilnoza", "ProGamer", "Shoxrux", "Azi
              "Sevara", "Doston", "Xurshid", "Gulnoza", "Otabek", "King777", "Bahrom", "Javohir", "Sitora"]
 
 
-EAT_RATIO = 1.1        # the eater needs at least 10% more mass
+EAT_RATIO = 1.01       # 1% bigger is enough to swallow
 EAT_OVERLAP = 1.0      # swallowed the moment the balls touch (edge to edge)
 
 
