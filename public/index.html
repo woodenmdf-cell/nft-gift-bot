@@ -828,7 +828,7 @@ function drawBlob(e, simple){
   const horiz = Math.hypot(e.x - cam.x, e.z - cam.z), va = Math.atan2(cam.y, horiz);
   const sa = Math.sin(va), ca = Math.cos(va);
   ctx.fillStyle = 'rgba(0,40,0,.18)';
-  ctx.beginPath(); ctx.ellipse(P.x + R * 0.1, P.y + R * sa * 0.25, R * 1.08, R * sa * 1.1, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(P.x + R * 0.04, P.y + R * sa * 0.12, R * 0.97, R * sa * 0.97, 0, 0, Math.PI * 2); ctx.fill();
   if (simple) {
     domePath(ctx, P.x, P.y, R, sa, ca);
     const g = ctx.createRadialGradient(P.x - R * 0.35, P.y - R * ca * 0.55, 0, P.x, P.y, R * 1.2);
@@ -1167,7 +1167,7 @@ onTap('bKill', () => openKill());
 // ---------- loop ----------
 let last = performance.now(), perf = 0;
 let clockOff = null;
-const INTERP_MS = 150;            // others are shown this far behind the server clock (absorbs mobile network jitter)
+const INTERP_MS = 0;               // others are drawn where they are NOW (predicted from their latest movement)            // others are shown this far behind the server clock (absorbs mobile network jitter)
 let fdt = 1 / 60, ftAvg = 16, ftN = 0;
 // ---------- graphics / frame-rate settings (PUBG style) ----------
 const GFX = {auto: ['Avto', 'moslashadi'], smooth: ['Silliq', 'tez'], balanced: ['Balans', ''], hd: ['HD', 'tiniq']};
@@ -1229,11 +1229,11 @@ function frame(t){
         tx = a.x + (c.x - a.x) * f; tz = a.z + (c.z - a.z) * f;
       } else {                                                              // late packet: keep gliding a little
         const l = b[b.length - 1], q = b[b.length - 2] || l, span = Math.max(1, l.t - q.t);
-        const ex = Math.min(220, rt - l.t) / span;
+        const ex = Math.min(250, rt - l.t) / span;
         tx = l.x + (l.x - q.x) * ex; tz = l.z + (l.z - q.z) * ex;
       }
     }
-    const kk = Math.min(1, dt * 18);
+    const kk = Math.min(1, dt * 14);
     p.x += (tx - p.x) * kk; p.z += (tz - p.z) * kk;
   }
   popups = popups.filter(p => (p.t += dt) < 0.9);
