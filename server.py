@@ -822,7 +822,7 @@ class Game:
             ra = rad(a.m)
             for b in alive:
                 # the clearly bigger ball (10%+) swallows the smaller one as soon as they touch
-                if a is b or not b.alive or a.m < b.m * EAT_RATIO:
+                if a is b or not b.alive or a.m < b.m * EAT_RATIO - 1e-6:
                     continue
                 if math.hypot(a.x - b.x, a.z - b.z) < ra + rad(b.m) * EAT_OVERLAP:
                     a.m = min(MAX_M, a.m + b.m)
