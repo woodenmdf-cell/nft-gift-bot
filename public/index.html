@@ -577,7 +577,7 @@ function connect(){
     connected = true; netEl.classList.add('hidden');
     const hello = {t: 'hello', initData: tg ? tg.initData : '', name: nameVal()};
     if (DEV_UID) hello.dev_uid = +DEV_UID;
-    if (APP) { hello.app = 1; const sess = store.get('session', ''); if (sess) hello.session = sess; }
+    if (APP) { hello.app = 1; const sess = store.get('session', ''); if (sess) hello.session = sess; else if (store.get('loginCode', '')) hello.login_code = store.get('loginCode', ''); }
     send(hello);
     if (state === 'menu') send({t: 'ad', where: 'menu'});
   };
@@ -680,8 +680,8 @@ function onMsg(m){
       break;
     case 'v': voiceIn(m.id, m.n || '', m.d); break;
     case 'tops': topsData = m; renderTops(); break;
-    case 'applogin': openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
-    case 'session': store.set('session', m.token); break;
+    case 'applogin': store.set('loginCode', m.code); openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
+    case 'session': store.set('session', m.token); store.set('loginCode', ''); break;
     case 'ad': showAd(m); break;
     case 'toast':
       toast(m.msg);

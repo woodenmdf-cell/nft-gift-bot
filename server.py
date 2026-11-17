@@ -1494,6 +1494,12 @@ async def on_message(c, m):
             default = user.get("first_name") or uname or "O'yinchi"
         elif DEV and isinstance(m.get("dev_uid"), int):
             uid, uname, default = m["dev_uid"], "", f"Dev{m['dev_uid']}"
+        elif isinstance(m.get("login_code"), str) and m["login_code"] in LOGIN_DONE:
+            tok, _ = LOGIN_DONE.pop(m["login_code"])
+            row = db.execute("SELECT s.uid, u.username, u.name FROM sessions s JOIN users u ON u.uid=s.uid WHERE s.token=?", (tok,)).fetchone()
+            uid, uname, default = (row["uid"], row["username"] or "", row["name"]) if row else (None, "", "Mehmon")
+            if row:
+                c.send({"t": "session", "token": tok})
         elif isinstance(m.get("session"), str) and (row := db.execute(
                 "SELECT s.uid, u.username, u.name FROM sessions s JOIN users u ON u.uid=s.uid WHERE s.token=?", (m["session"][:64],)).fetchone()):
             uid, uname, default = row["uid"], row["username"] or "", row["name"] or "O'yinchi"      # store app login
@@ -1722,11 +1728,12 @@ async def on_message(c, m):
 
 APP_BLOCKED = {"invoice", "withdraw", "kill", "anti", "v"}
 LOGIN_CODES = {}            # code -> (conn, created)
+LOGIN_DONE = {}             # code -> (session token, time): picked up when the app reconnects
 
 
 async def finish_app_login(code, frm, chat):
     hit = LOGIN_CODES.pop(code, None)
-    if not hit or time.time() - hit[1] > 600 or hit[0].closed:
+    if not hit or time.time() - hit[1] > 600:
         return await tg("sendMessage", chat_id=chat, text="⌛ Kod eskirgan. Ilovada «Telegram orqali kirish»ni qayta bosing.")
     c = hit[0]
     uid = frm["id"]
@@ -1734,6 +1741,10 @@ async def finish_app_login(code, frm, chat):
     token = secrets.token_urlsafe(32)
     db.execute("INSERT INTO sessions VALUES(?,?,?)", (token, uid, int(time.time())))
     db.commit()
+    LOGIN_DONE[code] = (token, time.time())          # the phone may have dropped the connection while in Telegram
+    await tg("sendMessage", chat_id=chat, text="✅ Shar Yutar ilovasiga kirdingiz! Ilovaga qayting 🎮")
+    if c.closed:
+        return
     if c.player:                                     # the guest round goes on under the real account
         c.player.name = acc.name
         game.meta_dirty = True
@@ -1741,7 +1752,6 @@ async def finish_app_login(code, frm, chat):
     c.send({"t": "session", "token": token})
     c.send(acc.public())
     c.toast(f"✅ Xush kelibsiz, {acc.name}!")
-    await tg("sendMessage", chat_id=chat, text="✅ Shar Yutar ilovasiga kirdingiz! Ilovaga qayting 🎮")
 
 
 async def delete_account(uid):
