@@ -643,6 +643,21 @@ AD_FORBIDDEN = [
 ]
 AD_UZ_MARKERS = re.compile(r"o['ʻ‘’`]|g['ʻ‘’`]|ў|ғ|қ|ҳ|\b(va|uchun|bilan|bor|yangi|eng|sizga|siz|biz|bizning|chegirma|buyurtma|bepul|"
                            r"qiling|bo['ʻ‘’`]ling|kanal|obuna|endi|hozir|faqat|sotuv|narx|so['ʻ‘’`]m|ва|учун|билан|янги|энг|сизга|ҳозир|нарх|сўм)\b", re.I)
+AD_UZ_SUFFIX = re.compile(r"\b[a-z]{2,}(lar|larga|larni|larda|ga|da|dan|ni|ning|miz|imiz|ingiz|siz|lik|chi|moqda|yapmiz|yapti|ing|ish|gan|ib)\b", re.I)
+AD_RU = re.compile(r"[ыщ]|\b(и|в|на|для|это|как|все|только|наш|ваш|купить|скидка|бесплатно|заказ|подпишись|подписывайтесь|лучший|новый|новые|канал|сейчас)\b", re.I)
+AD_EN = re.compile(r"\b(the|and|for|your|our|now|free|get|buy|best|new|with|join|subscribe|sale|off|only|today)\b", re.I)
+
+
+def ad_is_uzbek(text):
+    """Uzbek (Latin or Cyrillic, with or without apostrophes) passes; clearly Russian or English text does not."""
+    words = re.findall(r"[^\W\d_]+", text)
+    if not words:
+        return False
+    uz = len(AD_UZ_MARKERS.findall(text)) + len(AD_UZ_SUFFIX.findall(text))
+    foreign = len(AD_RU.findall(text)) + len(AD_EN.findall(text))
+    return uz >= 1 and uz >= foreign * 0.5
+
+
 ad_drafts = {}               # uid -> {"step":..., ...} while an ad is being written in the bot
 ad_shown = {}                # (ad, uid) -> last time it counted as a view
 
@@ -651,7 +666,7 @@ def ad_check(title, body, url):
     """Automatic law check. Returns a list of problems (empty = fine)."""
     text = f"{title}\n{body}\n{url}".lower()
     probs = [why for rx, why in AD_FORBIDDEN if re.search(rx, text)]
-    if not AD_UZ_MARKERS.search(f"{title} {body}"):
+    if not ad_is_uzbek(f"{title} {body}"):
         probs.append("reklama davlat tilida (o'zbek tilida) bo'lishi shart — «Reklama to'g'risida»gi qonun, 6-modda")
     if not re.match(r"^(https://[\w.-]+\.[a-z]{2,}(/\S*)?|https?://t\.me/\S+|t\.me/\S+|@\w{4,})$", url.strip(), re.I):
         probs.append("havola noto'g'ri: https://... , t.me/... yoki @username bo'lsin")
