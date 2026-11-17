@@ -122,6 +122,10 @@
   .adBox .tag{position:absolute;top:-8px;left:10px;background:#ffb300;color:#3a2700;font-size:10px;font-weight:900;border-radius:6px;padding:1px 6px}
   .adBox .go{flex:none;background:#2a78e0;color:#fff;font-weight:900;font-size:12px;border-radius:10px;padding:7px 10px}
   .adSell{font-size:11px;opacity:.7;margin-top:6px;text-decoration:underline;cursor:pointer}
+  body.app .tgOnly{display:none!important}
+  body.app #skins{display:flex;justify-content:center}
+  body:not(.app) .appOnly{display:none!important}
+  #loginBox{text-align:center;margin:-2px 0 10px}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -191,7 +195,7 @@
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
   <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
-  <button class="bbtn kill" id="bKill">🎯 KIL <span class="tag">10 ⭐</span></button>
+  <button class="bbtn kill tgOnly" id="bKill">🎯 KIL <span class="tag">10 ⭐</span></button>
 </div>
 
 <div id="menu" class="screen">
@@ -199,6 +203,8 @@
   <h1>SHAR <span>YUTAR</span></h1>
   <div class="sub">Donachalarni ye, kattalash, kichiklarni yut!</div>
   <input id="name" maxlength="14" placeholder="Ismingiz">
+  <div id="loginBox" class="hidden"><button class="ghost" id="loginBtn" style="background:#2aa3e0;font-size:15px;padding:11px 20px">✈️ Telegram orqali kirish</button>
+    <div class="hint" style="font-size:11px;opacity:.75;margin-top:4px">Natijalaringiz va rankingiz saqlanadi</div></div>
   <div id="rankChip"></div>
   <div class="skins" id="skins"></div>
   <div class="hint" id="skinHint" style="margin:-8px 0 14px;font-size:12px;opacity:.75"></div>
@@ -220,7 +226,7 @@
   <div class="stat" id="dBank" style="color:#ffe14d;font-size:15px;font-weight:800"></div>
   <div class="adBox hidden" id="adDead"></div>
   <div class="btnrow">
-    <button class="rev" id="revBtn">❤️ Davom etish · 10 ⭐</button>
+    <button class="rev tgOnly" id="revBtn">❤️ Davom etish · 10 ⭐</button>
     <button class="ghost" id="againBtn">Qaytadan boshlash</button>
     <button class="ghost" id="menuBtn">Menyu</button>
   </div>
@@ -243,7 +249,7 @@
     <div class="hint" id="accLeft"></div>
     <div class="hint">O'yinda har 50K token yig'ilganda avtomatik hisobga o'tadi. 50K ga yetmagani o'tmaydi.</div>
   </div>
-  <div class="card">
+  <div class="card tgOnly">
     <div class="k">Balans</div>
     <div class="v" id="accStars">0 ⭐</div>
     <div class="hint" id="goalHint">Har 1M token avtomatik 100 ⭐ ga aylanib, balansga tushadi.</div>
@@ -264,9 +270,18 @@
       <div class="refstat"><b id="refEarned">0</b><span>topilgan token</span></div>
     </div>
   </div>
-  <div class="card">
+  <div class="card tgOnly">
     <div class="k">So'rovlarim</div>
     <div id="accReqs" style="margin-top:6px"></div>
+  </div>
+  <div class="card appOnly" id="appAcct">
+    <div class="k">👤 Akkaunt</div>
+    <div class="hint" id="appAcctInfo"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="ghost" id="appLogout" style="padding:10px 14px;font-size:14px">↩ Chiqish</button>
+      <button class="ghost" id="appDelete" style="padding:10px 14px;font-size:14px;background:rgba(232,52,79,.35)">🗑 Akkauntni o'chirish</button>
+    </div>
+    <div class="hint" style="margin-top:8px"><a href="/privacy" style="color:#bcd">Maxfiylik siyosati</a> · <a href="/terms" style="color:#bcd">Shartlar</a></div>
   </div>
   <button class="ghost" id="accBack" style="margin-top:10px">← Orqaga</button>
 </div>
@@ -362,6 +377,9 @@ function initTg(){
   if (u && !inp.value) inp.value = u.first_name || u.username || '';
 }
 const inTelegram = /tgWebApp/.test(location.hash + location.search) || !!window.TelegramWebviewProxy;
+// Play Store / App Store build (Capacitor loads the page with ?app=1): no Stars purchases, no prizes, no voice chat
+const APP = /[?&#]app=1/.test(location.search + location.hash) || !!window.Capacitor;
+if (APP) document.body.classList.add('app');
 if (inTelegram) {
   const sc = document.createElement('script');
   sc.src = 'https://telegram.org/js/telegram-web-app.js';
@@ -559,6 +577,7 @@ function connect(){
     connected = true; netEl.classList.add('hidden');
     const hello = {t: 'hello', initData: tg ? tg.initData : '', name: nameVal()};
     if (DEV_UID) hello.dev_uid = +DEV_UID;
+    if (APP) { hello.app = 1; const sess = store.get('session', ''); if (sess) hello.session = sess; }
     send(hello);
     if (state === 'menu') send({t: 'ad', where: 'menu'});
   };
@@ -661,6 +680,8 @@ function onMsg(m){
       break;
     case 'v': voiceIn(m.id, m.n || '', m.d); break;
     case 'tops': topsData = m; renderTops(); break;
+    case 'applogin': openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
+    case 'session': store.set('session', m.token); break;
     case 'ad': showAd(m); break;
     case 'toast':
       toast(m.msg);
@@ -980,6 +1001,7 @@ function skinPreview(s){
 function renderSkins(){
   const box = document.getElementById('skins'); box.innerHTML = '';
   for (const s of SKINS) {
+    if (APP && !acc.owned.includes(s.id)) continue;      // store build: nothing to buy
     const d = document.createElement('div');
     d.className = 'sk' + (s.id === acc.skin ? ' sel' : '');
     d.style.backgroundImage = skinPreview(s); d.style.backgroundSize = '100% 100%'; d.style.backgroundRepeat = 'no-repeat'; d.style.backgroundOrigin = 'border-box';
@@ -1020,7 +1042,8 @@ document.getElementById('subBtn').onclick = () => {
 function refreshMenu(){
   renderSkins(); refreshSub(); renderRankChip();
   document.getElementById('bestTxt').textContent = acc.best ? '👑 Rekordingiz: ' + fmt(acc.best) : '';
-  document.getElementById('skinHint').textContent = '🎨 Rangni bosing · Balans: ' + acc.stars + ' ⭐';
+  document.getElementById('skinHint').textContent = APP ? '🎨 Rangingiz' : '🎨 Rangni bosing · Balans: ' + acc.stars + ' ⭐';
+  if (APP) show('loginBox', !!acc.guest);
   const nm = document.getElementById('name');
   if (!nm.value && acc.name && acc.name !== 'Mehmon') nm.value = acc.name;
 }
@@ -1069,7 +1092,7 @@ const skinDot = sk => !sk ? '#2fd06a' : sk.c ? sk.c : (BASE[sk.type] ? BASE[sk.t
 function drawMini(){
   const on = state === 'play' || state === 'watch';
   miniCv.classList.add('hidden');                // mini map removed
-  document.getElementById('voice').classList.toggle('hidden', !on);
+  document.getElementById('voice').classList.toggle('hidden', !on || APP);
   document.getElementById('camBtns').classList.toggle('hidden', !on);
   if (camHold) cam.yawT += camHold * 0.04;
   if (!on && micOn) micStop();
@@ -1112,7 +1135,9 @@ function openAcc(){
   const goal = acc.goal || TOKEN_GOAL, gst = acc.goal_stars || GOAL_STARS;
   document.getElementById('accTok').textContent = acc.tokens.toLocaleString('ru-RU').replace(/,/g, ' ') + ' / ' + (goal >= 1e6 ? goal / 1e6 + 'M' : fmt(goal));
   document.getElementById('accBar').style.width = Math.min(100, acc.tokens / goal * 100) + '%';
-  document.getElementById('accLeft').textContent = gst + ' ⭐ gacha yana ' + fmt(goal - acc.tokens) + ' token qoldi';
+  document.getElementById('accLeft').textContent = APP ? '' : gst + ' ⭐ gacha yana ' + fmt(goal - acc.tokens) + ' token qoldi';
+  if (APP) document.getElementById('appAcctInfo').textContent = acc.guest ? "Siz mehmon rejimidasiz. Natijalarni saqlash uchun menyuda «Telegram orqali kirish»ni bosing." : `Telegram akkaunti: ${acc.name}`;
+  if (APP) { show('appLogout', !acc.guest); show('appDelete', !acc.guest); }
   document.getElementById('goalHint').textContent = `Har ${goal >= 1e6 ? goal / 1e6 + 'M' : fmt(goal)} token avtomatik ${gst} ⭐ ga aylanib, balansga tushadi.`;
   document.getElementById('accStars').textContent = acc.stars + ' ⭐';
   const gifts = acc.gifts || [];
@@ -1544,6 +1569,7 @@ applyGfx();
 
 // ---------------------------------------------------------------- sponsor banners (sold through the bot: /reklama)
 function openExt(url){
+  if (APP && !tg) { location.href = url; return; }      // the app hands other sites to the phone (Telegram / browser)
   if (tg && /^https:\/\/t\.me\//.test(url) && tg.openTelegramLink) tg.openTelegramLink(url);
   else if (tg && tg.openLink) tg.openLink(url);
   else window.open(url, '_blank');
@@ -1561,6 +1587,14 @@ function showAd(a){
     box.after(sell);
   }
 }
+
+// ---------------------------------------------------------------- store app: sign in with Telegram, sign out, delete account
+document.getElementById('loginBtn').onclick = () => send({t: 'applogin'});
+document.getElementById('appLogout').onclick = () => { send({t: 'logout', session: store.get('session', '')}); store.set('session', ''); toast('Chiqdingiz'); };
+document.getElementById('appDelete').onclick = () => {
+  if (!confirm("Akkauntingiz, tokenlar va rank butunlay o'chiriladi. Bu qaytarib bo'lmaydi. Davom etasizmi?")) return;
+  send({t: 'delete_account'}); store.set('session', '');
+};
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>

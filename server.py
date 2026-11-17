@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS ads(id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER
   stars INTEGER DEFAULT 0, charge TEXT, reason TEXT, created INTEGER, started INTEGER, finished INTEGER);
 CREATE TABLE IF NOT EXISTS ad_seen(ad INTEGER, uid INTEGER, clicked INTEGER DEFAULT 0, PRIMARY KEY(ad, uid));
 CREATE TABLE IF NOT EXISTS advertisers(uid INTEGER PRIMARY KEY, phone TEXT, name TEXT, username TEXT, created INTEGER);
+CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid INTEGER, created INTEGER);
 """)
 db.commit()
 # payouts are Telegram gifts (no plain Stars any more): id -> (title, price in ⭐, emoji Telegram uses for it)
@@ -396,12 +397,17 @@ async def handle_update(u):
             await register_ref(frm, int(arg[4:]))
         if arg == "reklama":
             return await ad_start(chat, frm)
+        if arg.startswith("login_"):
+            return await finish_app_login(arg[6:], frm, chat)
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
                       "• Har 50K token hisobingizga o'tadi\n• Har 1M token = 100 ⭐\n• ⭐ larni 🎂🚀🏆💍 Telegram sovg'alariga almashtiring\n"
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
                       f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
+    elif text.startswith("/ochirish"):
+        await tg("sendMessage", chat_id=chat, text="⚠️ Akkauntingiz, tokenlar, ⭐ balans va rank butunlay o'chiriladi. Bu qaytarib bo'lmaydi.",
+                 reply_markup={"inline_keyboard": [[{"text": "🗑 Ha, o'chirish", "callback_data": "delme:1"}]]})
     elif text.startswith("/reklamalarim"):
         await ad_my_stats(chat, frm["id"])
     elif text.startswith("/reklama"):
@@ -532,6 +538,11 @@ async def handle_callback(q):
     data, frm = q.get("data", ""), q.get("from", {})
     if data.startswith("adpkg:"):
         await ad_choose_package(q, frm)
+        return
+    if data.startswith("delme:"):
+        await delete_account(frm["id"])
+        await tg("answerCallbackQuery", callback_query_id=q["id"], text="O'chirildi")
+        await tg("sendMessage", chat_id=frm["id"], text="🗑 Akkauntingiz va ma'lumotlaringiz o'chirildi.")
         return
     if data.startswith("adnew:"):
         await tg("answerCallbackQuery", callback_query_id=q["id"])
@@ -1483,8 +1494,12 @@ async def on_message(c, m):
             default = user.get("first_name") or uname or "O'yinchi"
         elif DEV and isinstance(m.get("dev_uid"), int):
             uid, uname, default = m["dev_uid"], "", f"Dev{m['dev_uid']}"
+        elif isinstance(m.get("session"), str) and (row := db.execute(
+                "SELECT s.uid, u.username, u.name FROM sessions s JOIN users u ON u.uid=s.uid WHERE s.token=?", (m["session"][:64],)).fetchone()):
+            uid, uname, default = row["uid"], row["username"] or "", row["name"] or "O'yinchi"      # store app login
         else:
             uid, uname, default = None, "", "Mehmon"
+        c.app = bool(m.get("app"))                     # Play Store / App Store build: no Stars, no prizes
         c.acc = Account.get(uid, clean_name(m.get("name"), default), uname)
         if uid is not None and m.get("name"):
             c.acc.name = clean_name(m.get("name"), default)
@@ -1495,7 +1510,24 @@ async def on_message(c, m):
         return
     if not c.acc:
         return
+    if getattr(c, "app", False) and (t in APP_BLOCKED or (t == "skin" and m.get("buy"))):
+        return c.toast("Bu imkoniyat ilovada mavjud emas")
     p = c.player
+    if t == "applogin":                             # store app: log in through the Telegram bot with a one-time code
+        code = secrets.token_hex(4)
+        LOGIN_CODES[code] = (c, time.time())
+        return c.send({"t": "applogin", "code": code, "bot": BOT_USERNAME})
+    if t == "logout" and c.acc.uid is not None:
+        if isinstance(m.get("session"), str):
+            db.execute("DELETE FROM sessions WHERE token=?", (m["session"][:64],))
+            db.commit()
+        c.acc = Account.get(None, "Mehmon")
+        return c.send(c.acc.public())
+    if t == "delete_account" and c.acc.uid is not None:
+        await delete_account(c.acc.uid)
+        c.acc = Account.get(None, "Mehmon")
+        c.send(c.acc.public())
+        return c.toast("Akkauntingiz va barcha ma'lumotlaringiz o'chirildi")
     if t == "play":
         if p:
             return
@@ -1686,6 +1718,40 @@ async def on_message(c, m):
         push_acc(c.acc)
         c.toast(f"So'rov yuborildi! {emoji} {title} tez orada Telegram'ingizga keladi")
         asyncio.create_task(notify_admin_request(cur.lastrowid, c.acc, price, gift))
+
+
+APP_BLOCKED = {"invoice", "withdraw", "kill", "anti", "v"}
+LOGIN_CODES = {}            # code -> (conn, created)
+
+
+async def finish_app_login(code, frm, chat):
+    hit = LOGIN_CODES.pop(code, None)
+    if not hit or time.time() - hit[1] > 600 or hit[0].closed:
+        return await tg("sendMessage", chat_id=chat, text="⌛ Kod eskirgan. Ilovada «Telegram orqali kirish»ni qayta bosing.")
+    c = hit[0]
+    uid = frm["id"]
+    acc = Account.get(uid, frm.get("first_name", ""), frm.get("username", ""))
+    token = secrets.token_urlsafe(32)
+    db.execute("INSERT INTO sessions VALUES(?,?,?)", (token, uid, int(time.time())))
+    db.commit()
+    if c.player:                                     # the guest round goes on under the real account
+        c.player.name = acc.name
+        game.meta_dirty = True
+    c.acc = acc
+    c.send({"t": "session", "token": token})
+    c.send(acc.public())
+    c.toast(f"✅ Xush kelibsiz, {acc.name}!")
+    await tg("sendMessage", chat_id=chat, text="✅ Shar Yutar ilovasiga kirdingiz! Ilovaga qayting 🎮")
+
+
+async def delete_account(uid):
+    """Store rules: players can delete their account and data from inside the app or through the bot."""
+    for tbl, col in (("users", "uid"), ("sessions", "uid"), ("ad_seen", "uid")):
+        db.execute(f"DELETE FROM {tbl} WHERE {col}=?", (uid,))
+    db.execute("UPDATE reqs SET uid=0 WHERE uid=?", (uid,))
+    db.commit()
+    Account.cache.pop(uid, None)
+    log.info("account %s deleted on request", uid)
 
 
 # ---------------------------------------------------------------- admin app API
@@ -1882,6 +1948,10 @@ async def http_handler(reader, writer):
         status = "200 OK"
     elif path in ("/", "/index.html"):
         with open(INDEX, "rb") as f:
+            body, ctype = f.read(), "text/html; charset=utf-8"
+        status = "200 OK"
+    elif path in ("/privacy", "/terms", "/delete-account"):
+        with open(os.path.join(HERE, "public", path.strip("/") + ".html"), "rb") as f:
             body, ctype = f.read(), "text/html; charset=utf-8"
         status = "200 OK"
     elif path == "/favicon.ico":
