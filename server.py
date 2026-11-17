@@ -2012,10 +2012,21 @@ def play_url_button():
     return {"inline_keyboard": [[{"text": "🎮 O'ynash", "url": f"https://t.me/{BOT_USERNAME}?start=kanal"}]]}
 
 
+CHANNEL_LEADERBOARD = False      # owner asked to stop posting the live rating to the channel
+
+
 async def channel_loop():
     if not BOT_TOKEN or not CHANNEL:
         return
     await asyncio.sleep(8)                         # let the bot learn its username first
+    if not CHANNEL_LEADERBOARD:
+        msg_id = setting("top_msg")                # remove the old pinned rating once
+        if msg_id:
+            await tg("unpinChatMessage", chat_id=CHANNEL, message_id=int(msg_id))
+            ok = await tg("deleteMessage", chat_id=CHANNEL, message_id=int(msg_id))
+            log.info("channel leaderboard removed: %s", ok)
+            set_setting("top_msg", "")
+        return
     last = None
     while True:
         try:
