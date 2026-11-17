@@ -67,7 +67,7 @@ BOT_NAMES = ["Sardor", "Jasur", "Malika", "Dilnoza", "ProGamer", "Shoxrux", "Azi
 
 
 EAT_RATIO = 1.1        # the eater needs at least 10% more mass
-EAT_OVERLAP = 0.25     # ...and must cover the smaller ball until only a quarter of its radius sticks out
+EAT_OVERLAP = 1.0      # swallowed the moment the balls touch (edge to edge)
 
 
 def rad(m):
@@ -821,8 +821,7 @@ class Game:
                 continue
             ra = rad(a.m)
             for b in alive:
-                # fair swallowing: you must be clearly bigger (10%+) and actually overlap the other ball,
-                # not just brush its edge (with network delay an edge touch looked like eating from afar)
+                # the clearly bigger ball (10%+) swallows the smaller one as soon as they touch
                 if a is b or not b.alive or a.m < b.m * EAT_RATIO:
                     continue
                 if math.hypot(a.x - b.x, a.z - b.z) < ra + rad(b.m) * EAT_OVERLAP:
