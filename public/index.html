@@ -107,6 +107,14 @@
   .gcard .gp{background:linear-gradient(#ffe27a,#ffb300);color:#4a3200;border-radius:10px;padding:3px 10px;font-size:13px}
   .gcard:disabled{opacity:.45}
   .gcard:not(:disabled):active{transform:scale(.96)}
+  #setBtn{position:absolute;top:calc(14px + var(--sat));right:14px;width:46px;height:46px;border:0;border-radius:14px;background:rgba(255,255,255,.14);font-size:24px;z-index:2}
+  #setOv .stk{display:block;width:auto;height:auto;font-size:13px;font-weight:800;opacity:.85;margin:14px 0 6px}
+  .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
+  .seg button{border:0;border-radius:12px;padding:10px 4px;font-weight:900;font-size:13px;color:#fff;background:rgba(255,255,255,.1);line-height:1.15}
+  .seg button small{display:block;font-size:10px;font-weight:700;opacity:.7}
+  .seg button.on{background:linear-gradient(#ffd84d,#ffaa00);color:#3a2700}
+  .seg button:disabled{opacity:.3}
+  #fpsLbl{position:fixed;top:calc(12px + var(--sat));left:50%;transform:translateX(-50%);z-index:4;font:800 12px system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.45);padding:3px 8px;border-radius:8px;pointer-events:none}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -180,6 +188,7 @@
 </div>
 
 <div id="menu" class="screen">
+  <button id="setBtn" title="Sozlamalar">⚙️</button>
   <h1>SHAR <span>YUTAR</span></h1>
   <div class="sub">Donachalarni ye, kattalash, kichiklarni yut!</div>
   <input id="name" maxlength="14" placeholder="Ismingiz">
@@ -274,6 +283,15 @@
   <div id="rkParts"></div>
   <button class="play" id="rkOk" style="width:100%;margin-top:10px;font-size:18px;padding:12px">Davom etish</button>
 </div></div>
+<div id="setOv" class="ov hidden"><div class="kcard" style="text-align:left">
+  <h3 style="text-align:center">⚙️ Sozlamalar</h3>
+  <div class="stk">🎨 Grafika</div><div class="seg" id="segGfx"></div>
+  <div class="stk">🎞 Kadr tezligi (FPS)</div><div class="seg" id="segFps"></div>
+  <div class="hint" id="fpsHint" style="margin-top:6px;font-size:12px;opacity:.75"></div>
+  <div class="stk">📊 FPS hisoblagich</div><div class="seg" id="segShow"></div>
+  <button class="play" id="setOk" style="width:100%;margin-top:16px;font-size:18px;padding:12px">Saqlash</button>
+</div></div>
+<div id="fpsLbl" class="hidden"></div>
 <div id="killPick" class="ov hidden">
   <div class="kcard">
     <h3>🎯 KIL</h3>
@@ -372,7 +390,10 @@ function haptic(kind){ if (!tg || !tg.HapticFeedback) return; try { kind === 'er
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, F = 600;
 function resize(keepDpr){
-  if (keepDpr !== true) DPR = Math.min(window.devicePixelRatio || 1, 2);
+  if (keepDpr !== true) {                     // respect the chosen graphics level (gfx may not be set up yet)
+    const dev = window.devicePixelRatio || 1, cap = {smooth: 1, balanced: 1.5, hd: 3}[gfx];
+    DPR = cap ? Math.min(dev, cap) : Math.min(dev, 2);
+  }
   W = window.innerWidth; H = window.innerHeight;
   cv.width = W * DPR; cv.height = H * DPR;
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -423,32 +444,44 @@ const fmt = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'K' : String
 // ---------- input: drag-anywhere joystick + keys ----------
 const joy = {on:false, ox:0, oy:0, x:0, y:0};
 const keys = {};
-// one finger = joystick (while watching: turns the camera); two fingers = pinch to zoom + twist to turn
+// Touch controls:
+//  * the joystick finger is never interrupted by anything else on screen;
+//  * a second finger while steering = drag left/right to turn the camera;
+//  * two fingers put down together (not steering yet) = pinch to zoom + twist to turn;
+//  * while watching, one finger turns the camera.
 const ptrs = new Map();
 const turn = {id: null, x: 0};
 const TURN_SPEED = 0.008;
-let pinch = null, gestureLock = false;         // gestureLock: ignore the finger left over after a pinch
+let pinch = null;
 const ZMIN = 0.55, ZMAX = 2.4;
-function pinchState(){
-  const [a, b] = [...ptrs.values()];
-  return {d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x)};
-}
+function pinchState(a, b){ return {d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x)}; }
 cv.addEventListener('pointerdown', e => {
-  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
-  if (ptrs.size === 2) {                        // second finger: start pinch, drop joystick / one-finger turn
-    joy.on = false; joy.id = null; turn.id = null; gestureLock = true;
-    pinch = {...pinchState(), z: cam.zoomT, yaw: cam.yawT};
+  const now = performance.now();
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY, t: now});
+  if (pinch) return;
+  // second finger arrives almost together with the first and the first hasn't steered yet -> pinch
+  const other = [...ptrs.entries()].find(([id]) => id !== e.pointerId);
+  if (other) {
+    const [oid, op] = other;
+    const fresh = now - op.t < 250 && (!joy.on || Math.hypot(joy.x - joy.ox, joy.y - joy.oy) < 12);
+    if (fresh) {
+      if (joy.id === oid) { joy.on = false; joy.id = null; }
+      if (turn.id === oid) turn.id = null;
+      pinch = {a: oid, b: e.pointerId, ...pinchState(op, ptrs.get(e.pointerId)), z: cam.zoomT, yaw: cam.yawT};
+      return;
+    }
+    if (turn.id === null) { turn.id = e.pointerId; turn.x = e.clientX; }      // steering + 2nd finger = turn
     return;
   }
-  if (ptrs.size > 2 || gestureLock) return;
   if (state === 'play') { joy.on = true; joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; }
   else { turn.id = e.pointerId; turn.x = e.clientX; }
 });
 window.addEventListener('pointermove', e => {
   const p = ptrs.get(e.pointerId); if (!p) return;
   p.x = e.clientX; p.y = e.clientY;
-  if (pinch && ptrs.size === 2) {
-    const st = pinchState();
+  if (pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)) {
+    const A = ptrs.get(pinch.a), B = ptrs.get(pinch.b); if (!A || !B) return;
+    const st = pinchState(A, B);
     if (pinch.d > 10) cam.zoomT = Math.max(ZMIN, Math.min(ZMAX, pinch.z * pinch.d / Math.max(10, st.d)));   // fingers apart = closer
     let da = st.ang - pinch.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
     cam.yawT = pinch.yaw - da;
@@ -461,8 +494,7 @@ const pEnd = e => {
   ptrs.delete(e.pointerId);
   if (e.pointerId === joy.id) { joy.on = false; joy.id = null; }
   if (e.pointerId === turn.id) turn.id = null;
-  if (ptrs.size < 2) pinch = null;
-  if (ptrs.size === 0) gestureLock = false;
+  if (pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)) pinch = null;
 };
 window.addEventListener('pointerup', pEnd);
 window.addEventListener('pointercancel', pEnd);
@@ -1114,8 +1146,16 @@ document.getElementById('exitBtn').onclick = e => {
   if (me) byId.delete(me.id); me = null; myId = null;
   toast("50K ga yetmagan tokenlar hisobga o'tmaydi"); openMenu();
 };
-document.getElementById('bSpeed').onclick = e => { e.stopPropagation(); send({t: 'speed'}); };
-document.getElementById('bKill').onclick = e => { e.stopPropagation(); openKill(); };
+// buttons fire on touch-down, so they work while the other thumb keeps steering
+function onTap(id, fn, onRelease){
+  // onRelease: audio (mic) needs a real user gesture, which on phones is the finger lifting
+  const el = document.getElementById(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (!onRelease) { el._tap = performance.now(); fn(e); } else el._down = e.pointerId; });
+  if (onRelease) el.addEventListener('pointerup', e => { e.stopPropagation(); if (el._down === e.pointerId) { el._down = null; el._tap = performance.now(); fn(e); } });
+  el.addEventListener('click', e => { e.stopPropagation(); if (performance.now() - (el._tap || 0) > 800) fn(e); });   // keyboard / fallback
+}
+onTap('bSpeed', () => send({t: 'speed'}));
+onTap('bKill', () => openKill());
 ['bSpeed', 'bKill', 'killAlert', 'killPick', 'exitBtn'].forEach(id => document.getElementById(id).addEventListener('pointerdown', e => e.stopPropagation()));
 
 // ---------- loop ----------
@@ -1123,13 +1163,39 @@ let last = performance.now(), perf = 0;
 let clockOff = null;
 const INTERP_MS = 220;            // others are shown this far behind the server clock (absorbs mobile network jitter)
 let fdt = 1 / 60, ftAvg = 16, ftN = 0;
+// ---------- graphics / frame-rate settings (PUBG style) ----------
+const GFX = {auto: ['Avto', 'moslashadi'], smooth: ['Silliq', 'tez'], balanced: ['Balans', ''], hd: ['HD', 'tiniq']};
+const GFX_DPR = {smooth: 1, balanced: 1.5, hd: 3};
+const FPS_OPT = [30, 60, 90, 120];
+var gfx = store.get('gfx', 'auto');
+let fpsCap = store.get('fps', 60), showFps = store.get('showFps', false);
+let displayHz = 60, hzSamples = [], lastDraw = 0, fpsCount = 0, fpsT = 0, fpsNow = 0;
+function applyGfx(){
+  const dev = window.devicePixelRatio || 1;
+  DPR = gfx === 'auto' ? Math.min(dev, 2) : Math.min(dev, GFX_DPR[gfx]);
+  resize(true);
+}
 function frame(t){
+  // measure the screen's real refresh rate during the first frames (60 / 90 / 120 Hz phones)
+  if (hzSamples.length < 90) {
+    hzSamples.push(t);
+    if (hzSamples.length === 90) {
+      const per = (hzSamples[89] - hzSamples[10]) / 79;
+      displayHz = per < 9.5 ? 120 : per < 12.5 ? 90 : per < 20 ? 60 : 30;
+      if (fpsCap > displayHz) fpsCap = displayHz;
+    }
+  }
+  // frame-rate cap
+  if (fpsCap < displayHz - 5 && t - lastDraw < 1000 / fpsCap - 2) { requestAnimationFrame(frame); return; }
+  lastDraw = t;
+  fpsCount++;
+  if (t - fpsT >= 500) { fpsNow = Math.round(fpsCount * 1000 / (t - fpsT)); fpsCount = 0; fpsT = t; if (showFps) document.getElementById('fpsLbl').textContent = fpsNow + ' FPS'; }
   const raw = t - last;
   const dt = Math.min(0.05, raw / 1000); last = t; perf = t; fdt = dt || 1 / 60;
   // slow phone: lower the canvas resolution a little so it stays fluid
-  if (raw > 0 && raw < 200 && state === 'play') {
+  if (gfx === 'auto' && raw > 0 && raw < 200 && state === 'play') {
     ftAvg += (raw - ftAvg) * 0.05;
-    if (++ftN > 120 && ftAvg > 24 && DPR > 1.25) { DPR = Math.max(1.25, DPR - 0.25); resize(true); ftN = 0; }
+    if (++ftN > 120 && ftAvg > Math.max(24, 1500 / fpsCap) && DPR > 1.25) { DPR = Math.max(1.25, DPR - 0.25); resize(true); ftN = 0; }
   }
   if (me && (me.fixX || me.fixZ)) {               // server correction: glide over ~0.15 s instead of jumping
     const g = Math.min(1, dt * 7);
@@ -1169,6 +1235,7 @@ function frame(t){
   if (state === 'play') updHud(); else if (state === 'watch') updWatch();
   render();
   drawMini();
+  document.getElementById('fpsLbl').classList.toggle('hidden', !showFps || (state !== 'play' && state !== 'watch'));
   requestAnimationFrame(frame);
 }
 openMenu();
@@ -1277,13 +1344,13 @@ function drawTalkers(){
 setInterval(drawTalkers, 300);
 (function(){
   const mb = document.getElementById('micBtn');
-  mb.onclick = () => micOn ? micStop() : micStart();
+  onTap('micBtn', () => micOn ? micStop() : micStart(), true);
   mb.addEventListener('contextmenu', e => e.preventDefault());
-  document.getElementById('muteBtn').onclick = () => {
+  onTap('muteBtn', () => {
     voiceMuted = !voiceMuted;
     const b = document.getElementById('muteBtn'); b.textContent = voiceMuted ? '🔇' : '🔊'; b.classList.toggle('off', voiceMuted);
     toast(voiceMuted ? 'Boshqalar ovozi o\'chirildi' : 'Boshqalar ovozi yoqildi');
-  };
+  }, true);
   document.addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume(); }, {passive: true});
   micUi();
 })();
@@ -1420,6 +1487,38 @@ function renderTops(){
 }
 document.getElementById('topsBtn').onclick = openTops;
 document.getElementById('topsBack').onclick = () => { show('tops', false); openMenu(); };
+
+// ---------------------------------------------------------------- settings dialog
+let setDraft = null;
+function renderSettings(){
+  const d = setDraft;
+  document.getElementById('segGfx').innerHTML = Object.entries(GFX).map(([k, [n, sub]]) =>
+    `<button data-g="${k}" class="${d.gfx === k ? 'on' : ''}">${n}${sub ? `<small>${sub}</small>` : ''}</button>`).join('');
+  document.getElementById('segFps').innerHTML = FPS_OPT.map(f =>
+    `<button data-f="${f}" class="${d.fps === f ? 'on' : ''}" ${f > displayHz ? 'disabled' : ''}>${f}<small>${f === 30 ? 'tejamkor' : f === 60 ? 'oddiy' : f === 90 ? 'yuqori' : 'ultra'}</small></button>`).join('');
+  document.getElementById('segShow').innerHTML = [[false, "O'chiq"], [true, 'Yoqiq']].map(([v, n]) =>
+    `<button data-s="${v}" class="${d.show === v ? 'on' : ''}">${n}</button>`).join('');
+  document.getElementById('fpsHint').textContent = `Telefoningiz ekrani: ${displayHz} Hz` +
+    (displayHz < 120 ? ` · ${displayHz} FPS dan yuqorisini bu ekran ko'rsata olmaydi` : '') +
+    '. Telefon qizisa yoki batareya tez tugasa — 30 FPS va «Silliq»ni tanlang.';
+}
+document.getElementById('setBtn').onclick = () => {
+  setDraft = {gfx, fps: Math.min(fpsCap, displayHz), show: showFps};
+  renderSettings(); show('setOv', true);
+};
+document.getElementById('setOv').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.g) setDraft.gfx = b.dataset.g;
+  else if (b.dataset.f) setDraft.fps = +b.dataset.f;
+  else if (b.dataset.s) setDraft.show = b.dataset.s === 'true';
+  else if (b.id === 'setOk') {
+    gfx = setDraft.gfx; fpsCap = setDraft.fps; showFps = setDraft.show;
+    store.set('gfx', gfx); store.set('fps', fpsCap); store.set('showFps', showFps);
+    applyGfx(); show('setOv', false); toast(`✅ ${GFX[gfx][0]} · ${fpsCap} FPS`); return;
+  } else return;
+  renderSettings();
+});
+applyGfx();
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>
