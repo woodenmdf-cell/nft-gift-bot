@@ -66,6 +66,10 @@ BOT_NAMES = ["Sardor", "Jasur", "Malika", "Dilnoza", "ProGamer", "Shoxrux", "Azi
              "Sevara", "Doston", "Xurshid", "Gulnoza", "Otabek", "King777", "Bahrom", "Javohir", "Sitora"]
 
 
+EAT_RATIO = 1.1        # the eater needs at least 10% more mass
+EAT_OVERLAP = 0.25     # ...and must cover the smaller ball until only a quarter of its radius sticks out
+
+
 def rad(m):
     return 0.45 * math.sqrt(m)
 
@@ -87,7 +91,7 @@ CREATE TABLE IF NOT EXISTS payments(charge_id TEXT PRIMARY KEY, uid INTEGER, ite
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 """)
 db.commit()
-for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0", "rp INTEGER DEFAULT 0"):
+for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0", "rp INTEGER DEFAULT 0", "prefs TEXT"):
     try:
         db.execute(f"ALTER TABLE users ADD COLUMN {col}")
     except sqlite3.OperationalError:
@@ -190,6 +194,7 @@ class Account:
             self.tokens, self.stars, self.owned, self.skin, self.best = 0, 0, ["yashil"], "yashil", 0
             self.ref, self.ref_earned, self.sub_bonus = None, 0, 0
             self.rp = 0
+            self.prefs = ""
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
@@ -205,6 +210,7 @@ class Account:
         self.ref, self.ref_earned = r["ref"], r["ref_earned"] or 0
         self.sub_bonus = r["sub_bonus"] or 0
         self.rp = r["rp"] or 0
+        self.prefs = r["prefs"] or ""
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
         if "yashil" not in self.owned:
             self.owned.insert(0, "yashil")
@@ -265,7 +271,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "rank": rank_info(self.rp), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
+                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -732,9 +738,9 @@ class Game:
             if o is b or not o.alive:
                 continue
             d = math.hypot(o.x - b.x, o.z - b.z)
-            if o.m > b.m and d < 12 + rad(o.m) * 2.2 and d < fd:
+            if o.m > b.m * EAT_RATIO and d < 12 + rad(o.m) * 2.2 and d < fd:
                 flee, fd = o, d
-            elif b.m > o.m * 1.05 and d < 22 + r * 2 and d < pd:
+            elif b.m > o.m * EAT_RATIO and d < 22 + r * 2 and d < pd:
                 prey, pd = o, d
         if flee:
             dx, dz = b.x - flee.x, b.z - flee.z
@@ -815,9 +821,11 @@ class Game:
                 continue
             ra = rad(a.m)
             for b in alive:
-                if a is b or not b.alive or a.m <= b.m:
+                # fair swallowing: you must be clearly bigger (10%+) and actually overlap the other ball,
+                # not just brush its edge (with network delay an edge touch looked like eating from afar)
+                if a is b or not b.alive or a.m < b.m * EAT_RATIO:
                     continue
-                if math.hypot(a.x - b.x, a.z - b.z) < ra + rad(b.m):
+                if math.hypot(a.x - b.x, a.z - b.z) < ra + rad(b.m) * EAT_OVERLAP:
                     a.m = min(MAX_M, a.m + b.m)
                     if not b.bot:
                         a.eaten += 1
@@ -1241,6 +1249,12 @@ async def on_message(c, m):
             c.acc.stars -= ANTI_COST
             c.acc.save()
             push_acc(c.acc)
+    elif t == "prefs" and c.acc.uid is not None:   # graphics / FPS settings follow the player to any phone
+        p = m.get("p")
+        if isinstance(p, dict):
+            c.acc.prefs = json.dumps({k: p[k] for k in ("gfx", "fps", "showFps") if k in p})[:200]
+            db.execute("UPDATE users SET prefs=? WHERE uid=?", (c.acc.prefs, c.acc.uid))
+            db.commit()
     elif t == "tops":                               # leaderboard of every rank tier
         tiers = []
         for ti in range(len(RANK_TIERS)):

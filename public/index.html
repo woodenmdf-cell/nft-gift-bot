@@ -634,6 +634,12 @@ function onMsg(m){
     case 'left': if (m.rank) showRank(m.rank); break;
     case 'acc':
       acc = m;
+      if (!prefsLoaded && m.prefs) {
+        prefsLoaded = true;
+        try { const p = JSON.parse(m.prefs);
+          if (p.gfx) gfx = p.gfx; if (p.fps) fpsCap = p.fps; if (p.showFps !== undefined) showFps = p.showFps;
+          store.set('gfx', gfx); store.set('fps', fpsCap); store.set('showFps', showFps); applyGfx(); } catch (e) {}
+      }
       if (resumeAfterReconnect && state === 'menu') { resumeAfterReconnect = false; send({t: 'play', name: nameVal() || acc.name}); }
       if (WATCH && !joined && state === 'menu') { joined = true; openWatch(); }
       if (TOPS && !joined && state === 'menu') { joined = true; openTops(); }
@@ -1161,7 +1167,7 @@ onTap('bKill', () => openKill());
 // ---------- loop ----------
 let last = performance.now(), perf = 0;
 let clockOff = null;
-const INTERP_MS = 220;            // others are shown this far behind the server clock (absorbs mobile network jitter)
+const INTERP_MS = 150;            // others are shown this far behind the server clock (absorbs mobile network jitter)
 let fdt = 1 / 60, ftAvg = 16, ftN = 0;
 // ---------- graphics / frame-rate settings (PUBG style) ----------
 const GFX = {auto: ['Avto', 'moslashadi'], smooth: ['Silliq', 'tez'], balanced: ['Balans', ''], hd: ['HD', 'tiniq']};
@@ -1169,24 +1175,26 @@ const GFX_DPR = {smooth: 1, balanced: 1.5, hd: 3};
 const FPS_OPT = [30, 60, 90, 120];
 var gfx = store.get('gfx', 'auto');
 let fpsCap = store.get('fps', 60), showFps = store.get('showFps', false);
-let displayHz = 60, hzSamples = [], lastDraw = 0, fpsCount = 0, fpsT = 0, fpsNow = 0;
+let displayHz = 60, hzIv = [], lastRaf = 0, lastDraw = 0, fpsCount = 0, fpsT = 0, fpsNow = 0, prefsLoaded = false;
 function applyGfx(){
   const dev = window.devicePixelRatio || 1;
   DPR = gfx === 'auto' ? Math.min(dev, 2) : Math.min(dev, GFX_DPR[gfx]);
   resize(true);
 }
 function frame(t){
-  // measure the screen's real refresh rate during the first frames (60 / 90 / 120 Hz phones)
-  if (hzSamples.length < 90) {
-    hzSamples.push(t);
-    if (hzSamples.length === 90) {
-      const per = (hzSamples[89] - hzSamples[10]) / 79;
-      displayHz = per < 9.5 ? 120 : per < 12.5 ? 90 : per < 20 ? 60 : 30;
-      if (fpsCap > displayHz) fpsCap = displayHz;
-    }
+  // how fast can this screen really draw? (median of recent frame gaps; never below 60 —
+  // a slow start or a busy moment must not make the phone look like a 30 Hz screen)
+  if (lastRaf) { hzIv.push(t - lastRaf); }
+  lastRaf = t;
+  if (hzIv.length >= 60) {
+    const md = hzIv.sort((a, b) => a - b)[30];
+    const hz = md < 9.5 ? 120 : md < 12.5 ? 90 : 60;
+    if (hz > displayHz) displayHz = hz;
+    hzIv = [];
   }
-  // frame-rate cap
-  if (fpsCap < displayHz - 5 && t - lastDraw < 1000 / fpsCap - 2) { requestAnimationFrame(frame); return; }
+  // frame-rate cap (30 FPS etc.): skip screen refreshes until it's time for the next frame
+  const want = Math.min(fpsCap, displayHz);
+  if (want < displayHz - 5 && t - lastDraw < 1000 / want - 3) { requestAnimationFrame(frame); return; }
   lastDraw = t;
   fpsCount++;
   if (t - fpsT >= 500) { fpsNow = Math.round(fpsCount * 1000 / (t - fpsT)); fpsCount = 0; fpsT = t; if (showFps) document.getElementById('fpsLbl').textContent = fpsNow + ' FPS'; }
@@ -1495,15 +1503,15 @@ function renderSettings(){
   document.getElementById('segGfx').innerHTML = Object.entries(GFX).map(([k, [n, sub]]) =>
     `<button data-g="${k}" class="${d.gfx === k ? 'on' : ''}">${n}${sub ? `<small>${sub}</small>` : ''}</button>`).join('');
   document.getElementById('segFps').innerHTML = FPS_OPT.map(f =>
-    `<button data-f="${f}" class="${d.fps === f ? 'on' : ''}" ${f > displayHz ? 'disabled' : ''}>${f}<small>${f === 30 ? 'tejamkor' : f === 60 ? 'oddiy' : f === 90 ? 'yuqori' : 'ultra'}</small></button>`).join('');
+    `<button data-f="${f}" class="${d.fps === f ? 'on' : ''}">${f}<small>${f === 30 ? 'tejamkor' : f === 60 ? 'oddiy' : f === 90 ? 'yuqori' : 'ultra'}</small></button>`).join('');
   document.getElementById('segShow').innerHTML = [[false, "O'chiq"], [true, 'Yoqiq']].map(([v, n]) =>
     `<button data-s="${v}" class="${d.show === v ? 'on' : ''}">${n}</button>`).join('');
-  document.getElementById('fpsHint').textContent = `Telefoningiz ekrani: ${displayHz} Hz` +
-    (displayHz < 120 ? ` · ${displayHz} FPS dan yuqorisini bu ekran ko'rsata olmaydi` : '') +
+  document.getElementById('fpsHint').textContent = `Hozir Telegram o'yinga ${displayHz} FPS gacha ruxsat beryapti` +
+    (d.fps > displayHz ? ` — ${d.fps} tanlansa ham ${displayHz} da ishlaydi (iPhone'da Telegram 60 bilan cheklaydi)` : '') +
     '. Telefon qizisa yoki batareya tez tugasa — 30 FPS va «Silliq»ni tanlang.';
 }
 document.getElementById('setBtn').onclick = () => {
-  setDraft = {gfx, fps: Math.min(fpsCap, displayHz), show: showFps};
+  setDraft = {gfx, fps: fpsCap, show: showFps};
   renderSettings(); show('setOv', true);
 };
 document.getElementById('setOv').addEventListener('click', e => {
@@ -1514,6 +1522,7 @@ document.getElementById('setOv').addEventListener('click', e => {
   else if (b.id === 'setOk') {
     gfx = setDraft.gfx; fpsCap = setDraft.fps; showFps = setDraft.show;
     store.set('gfx', gfx); store.set('fps', fpsCap); store.set('showFps', showFps);
+    send({t: 'prefs', p: {gfx, fps: fpsCap, showFps}});          // kept on the server too (Telegram may wipe phone storage)
     applyGfx(); show('setOv', false); toast(`✅ ${GFX[gfx][0]} · ${fpsCap} FPS`); return;
   } else return;
   renderSettings();
