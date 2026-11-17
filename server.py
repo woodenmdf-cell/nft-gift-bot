@@ -20,6 +20,7 @@ import logging
 import math
 import os
 import random
+import re
 import secrets
 import sqlite3
 import struct
@@ -100,6 +101,14 @@ try:
     db.execute("ALTER TABLE reqs ADD COLUMN gift TEXT")
 except sqlite3.OperationalError:
     pass
+db.executescript("""
+CREATE TABLE IF NOT EXISTS ads(id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER, title TEXT, body TEXT, url TEXT,
+  photo TEXT, views_bought INTEGER DEFAULT 0, views INTEGER DEFAULT 0, clicks INTEGER DEFAULT 0, status TEXT,
+  stars INTEGER DEFAULT 0, charge TEXT, reason TEXT, created INTEGER, started INTEGER, finished INTEGER);
+CREATE TABLE IF NOT EXISTS ad_seen(ad INTEGER, uid INTEGER, clicked INTEGER DEFAULT 0, PRIMARY KEY(ad, uid));
+CREATE TABLE IF NOT EXISTS advertisers(uid INTEGER PRIMARY KEY, phone TEXT, name TEXT, username TEXT, created INTEGER);
+""")
+db.commit()
 # payouts are Telegram gifts (no plain Stars any more): id -> (title, price in ⭐, emoji Telegram uses for it)
 PAY_GIFTS = {"tort": ("Tort", 50, "🎂"), "raketa": ("Raketa", 50, "🚀"),
              "kubok": ("Kubok", 100, "🏆"), "uzuk": ("Uzuk", 100, "💍")}
@@ -271,7 +280,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
+                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "bot": BOT_USERNAME, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -340,6 +349,8 @@ async def bot_loop():
     log.info("bot @%s started, web app: %s", me and me.get("username"), PUBLIC_URL or "(no PUBLIC_URL yet)")
     await tg("setMyCommands", commands=[{"command": "start", "description": "O'yinni ochish"},
                                         {"command": "top", "description": "🏆 Rank TOP"},
+                                        {"command": "reklama", "description": "📢 Reklama berish"},
+                                        {"command": "reklamalarim", "description": "📊 Reklamalarim statistikasi"},
                                         {"command": "ref", "description": "Do'stlarni taklif qilish"},
                                         {"command": "admin", "description": "Admin panel"}])
     if PUBLIC_URL:
@@ -377,16 +388,24 @@ async def handle_update(u):
         await handle_payment(frm["id"], m["successful_payment"])
         return
     text = (m.get("text") or "").strip()
+    if await ad_dialog(m, chat, frm, text):          # advertiser is in the middle of creating an ad
+        return
     if text.startswith("/start"):
         arg = text.split(maxsplit=1)[1] if " " in text else ""
         if arg.startswith("ref_") and arg[4:].isdigit():
             await register_ref(frm, int(arg[4:]))
+        if arg == "reklama":
+            return await ad_start(chat, frm)
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
                       "• Har 50K token hisobingizga o'tadi\n• Har 1M token = 100 ⭐\n• ⭐ larni 🎂🚀🏆💍 Telegram sovg'alariga almashtiring\n"
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
                       f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
+    elif text.startswith("/reklamalarim"):
+        await ad_my_stats(chat, frm["id"])
+    elif text.startswith("/reklama"):
+        await ad_start(chat, frm)
     elif text.startswith("/top"):
         lines = ["🏆 <b>Rank TOP</b>\n"]
         for ti, (name, _) in enumerate(RANK_TIERS[::-1]):
@@ -511,10 +530,21 @@ async def resolve_request(rid, ok):
 
 async def handle_callback(q):
     data, frm = q.get("data", ""), q.get("from", {})
+    if data.startswith("adpkg:"):
+        await ad_choose_package(q, frm)
+        return
+    if data.startswith("adnew:"):
+        await tg("answerCallbackQuery", callback_query_id=q["id"])
+        await ad_start(frm["id"], frm)
+        return
     if frm.get("id") != admin_id() or ":" not in data:
         await tg("answerCallbackQuery", callback_query_id=q["id"], text="Faqat admin")
         return
     action, rid = data.split(":", 1)
+    if action in ("adok", "adno"):
+        msg = await ad_review(int(rid), action == "adok")
+        await tg("answerCallbackQuery", callback_query_id=q["id"], text=msg)
+        return
     if action == "bot":
         okk, msg = await bot_send_gift(int(rid))
         await tg("answerCallbackQuery", callback_query_id=q["id"], text=msg, show_alert=not okk)
@@ -535,6 +565,9 @@ async def handle_payment(uid, sp):
         return                                   # already applied
     db.execute("INSERT INTO payments VALUES(?,?,?,?,?)", (charge, puid, item, sp.get("total_amount", 0), int(time.time())))
     db.commit()
+    if item.startswith("ad:"):
+        await ad_paid(int(item[3:]), puid, charge, sp.get("total_amount", 0))
+        return
     acc = Account.get(puid)
     conn = next((c for c in conns if c.acc is acc), None)
     if item.startswith("skin:"):
@@ -588,6 +621,294 @@ async def notify_admin_request(rid, acc, stars, gift=None):
     if sent:
         db.execute("UPDATE reqs SET admin_chat=?, admin_msg=? WHERE id=?", (adm, sent["message_id"], rid))
         db.commit()
+
+
+# ---------------------------------------------------------------- self-service advertising
+# Advertisers create a banner in the bot, the bot checks it against the advertising law, they pay in Stars,
+# the banner is shown in the game and they can follow views / clicks live with /reklamalarim.
+AD_PACKAGES = [(1000, 50), (5000, 200), (20000, 700)]        # (views, ⭐)
+AD_SEEN_GAP = 1800                                          # one person counts as a new view at most every 30 min
+AD_FORBIDDEN = [
+    (r"kazino|casino|казино|slot|слот|jackpot|джекпот|ruletka|рулетк|poker|покер", "qimor (kazino) reklamasi taqiqlangan — «Reklama to'g'risida»gi qonun, 46-modda"),
+    (r"stavka|ставк|\bbet\b|1xbet|melbet|mostbet|pin-?up|bukmek|букмек|tikish|tikib|прогноз на матч|ekspress\b", "stavka / bukmeker reklamasi taqiqlangan (46-modda)"),
+    (r"lotereya|лотере|lotto|лото\b", "lotereya reklamasi faqat litsenziya bilan mumkin"),
+    (r"kripto|crypto|крипт|bitcoin|биткоин|\busdt\b|\bton\b|airdrop|mining|майнинг|nft\b", "kripto-aktivlar reklamasi cheklangan"),
+    (r"aroq|araq|vino\b|pivo|alkogol|алкогол|водк|пиво|вино\b|виски|konyak|коньяк|shampan", "alkogol reklamasi taqiqlangan"),
+    (r"sigaret|сигарет|tamaki|табак|vape|вейп|elektron sigaret|nos\b|кальян|kalyan|iqos", "tamaki / vape reklamasi taqiqlangan"),
+    (r"dori\b|dorilar|tabletka|таблетк|лекарств|kapsula|biologik faol|бад\b|ozdirish|похуде", "dori va BFQ reklamasi alohida ruxsat talab qiladi"),
+    (r"kredit|кредит|qarz|займ|zaym|mikroqarz|nasiya|рассрочк|investitsiya|инвестиц|daromad kafolat|tez boyi|pul ishlash|заработ", "moliyaviy xizmatlar reklamasi litsenziya talab qiladi"),
+    (r"porno|порно|seks|секс|intim|интим|18\+|eskort|эскорт", "axloqsiz reklama taqiqlangan"),
+    (r"\$|dollar|доллар|\busd\b|€|euro\b|евро|rubl|рубл|₽", "narx faqat so'mda ko'rsatilishi kerak (16-modda)"),
+    (r"qurol|оружи|pichoq sotiladi|narkot|нарко|giyoh", "taqiqlangan mahsulot"),
+]
+AD_UZ_MARKERS = re.compile(r"o['ʻ‘’`]|g['ʻ‘’`]|ў|ғ|қ|ҳ|\b(va|uchun|bilan|bor|yangi|eng|sizga|siz|biz|bizning|chegirma|buyurtma|bepul|"
+                           r"qiling|bo['ʻ‘’`]ling|kanal|obuna|endi|hozir|faqat|sotuv|narx|so['ʻ‘’`]m|ва|учун|билан|янги|энг|сизга|ҳозир|нарх|сўм)\b", re.I)
+ad_drafts = {}               # uid -> {"step":..., ...} while an ad is being written in the bot
+ad_shown = {}                # (ad, uid) -> last time it counted as a view
+
+
+def ad_check(title, body, url):
+    """Automatic law check. Returns a list of problems (empty = fine)."""
+    text = f"{title}\n{body}\n{url}".lower()
+    probs = [why for rx, why in AD_FORBIDDEN if re.search(rx, text)]
+    if not AD_UZ_MARKERS.search(f"{title} {body}"):
+        probs.append("reklama davlat tilida (o'zbek tilida) bo'lishi shart — «Reklama to'g'risida»gi qonun, 6-modda")
+    if not re.match(r"^(https://[\w.-]+\.[a-z]{2,}(/\S*)?|https?://t\.me/\S+|t\.me/\S+|@\w{4,})$", url.strip(), re.I):
+        probs.append("havola noto'g'ri: https://... , t.me/... yoki @username bo'lsin")
+    return list(dict.fromkeys(probs))
+
+
+def ad_norm_url(u):
+    u = u.strip()
+    if u.startswith("@"):
+        return "https://t.me/" + u[1:]
+    if u.startswith("t.me/"):
+        return "https://" + u
+    return u
+
+
+def ad_trusted(uid):
+    """Advertisers with an earlier approved ad go live right after the automatic check."""
+    return db.execute("SELECT 1 FROM ads WHERE uid=? AND status IN ('active','done')", (uid,)).fetchone() is not None
+
+
+async def ad_start(chat, frm):
+    uid = frm["id"]
+    adv = db.execute("SELECT * FROM advertisers WHERE uid=?", (uid,)).fetchone()
+    if not adv:
+        ad_drafts[uid] = {"step": "phone"}
+        await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+                 text="📢 <b>Shar Yutar'da reklama</b>\n\nReklamangiz o'yin menyusida va o'yin tugaganda banner bo'lib chiqadi. "
+                      "Necha kishi ko'rgani va bosgani /reklamalarim da doim ko'rinadi.\n\n"
+                      "🔐 Ishonchli reklama beruvchi bo'lish uchun avval telefon raqamingizni tasdiqlang 👇",
+                 reply_markup={"keyboard": [[{"text": "📱 Raqamni yuborish", "request_contact": True}]],
+                               "resize_keyboard": True, "one_time_keyboard": True})
+        return
+    ad_drafts[uid] = {"step": "title"}
+    await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+             text="✍️ <b>1/4. Sarlavha</b> (40 belgigacha, o'zbek tilida)\n\nMasalan: <i>Yangi telefonlar — 20% chegirma!</i>\n\nBekor qilish: /bekor",
+             reply_markup={"remove_keyboard": True})
+
+
+async def ad_dialog(m, chat, frm, text):
+    uid = frm.get("id")
+    d = ad_drafts.get(uid)
+    if not d:
+        return False
+    if text in ("/bekor", "/cancel"):
+        ad_drafts.pop(uid, None)
+        await tg("sendMessage", chat_id=chat, text="❌ Bekor qilindi.", reply_markup={"remove_keyboard": True})
+        return True
+    if text.startswith("/") and text not in ("/otkaz", "/o'tkaz"):
+        ad_drafts.pop(uid, None)
+        return False
+    step = d["step"]
+    if step == "phone":
+        ct = m.get("contact")
+        if not ct or ct.get("user_id") != uid:
+            await tg("sendMessage", chat_id=chat, text="Iltimos, pastdagi «📱 Raqamni yuborish» tugmasini bosing (o'zingizning raqamingiz).")
+            return True
+        db.execute("INSERT OR REPLACE INTO advertisers VALUES(?,?,?,?,?)",
+                   (uid, ct.get("phone_number", ""), frm.get("first_name", ""), frm.get("username", ""), int(time.time())))
+        db.commit()
+        await tg("sendMessage", chat_id=chat, text="✅ Raqam tasdiqlandi.", reply_markup={"remove_keyboard": True})
+        await ad_start(chat, frm)
+        return True
+    if step == "title":
+        if not 3 <= len(text) <= 40:
+            await tg("sendMessage", chat_id=chat, text="Sarlavha 3–40 belgi bo'lsin. Qaytadan yozing:")
+            return True
+        d.update(title=text, step="body")
+        await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+                 text="✍️ <b>2/4. Matn</b> (200 belgigacha, o'zbek tilida, narxlar faqat so'mda)")
+        return True
+    if step == "body":
+        if not 5 <= len(text) <= 200:
+            await tg("sendMessage", chat_id=chat, text="Matn 5–200 belgi bo'lsin. Qaytadan yozing:")
+            return True
+        d.update(body=text, step="url")
+        await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+                 text="🔗 <b>3/4. Havola</b> — banner bosilganda qayerga o'tsin?\n<code>https://sayt.uz</code>, <code>t.me/kanal</code> yoki <code>@kanal</code>")
+        return True
+    if step == "url":
+        d.update(url=text.strip(), step="photo")
+        await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+                 text="🖼 <b>4/4. Rasm</b> — banner uchun rasm yuboring (ixtiyoriy).\nRasmsiz davom etish: /otkaz")
+        return True
+    if step == "photo":
+        if m.get("photo"):
+            d["photo"] = m["photo"][-1]["file_id"]
+        elif text not in ("/otkaz", "/o'tkaz"):
+            await tg("sendMessage", chat_id=chat, text="Rasm yuboring yoki /otkaz deb yozing.")
+            return True
+        probs = ad_check(d["title"], d["body"], d["url"])
+        if probs:
+            ad_drafts[uid] = {"step": "title"}
+            await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+                     text="⚠️ <b>Reklama qonun talablariga to'g'ri kelmadi:</b>\n\n" + "\n".join("• " + html(p) for p in probs) +
+                          "\n\nTuzatib, qaytadan boshlang. <b>1/4. Sarlavha</b>:")
+            return True
+        cur = db.execute("INSERT INTO ads(uid,title,body,url,photo,status,created) VALUES(?,?,?,?,?,?,?)",
+                         (uid, d["title"], d["body"], ad_norm_url(d["url"]), d.get("photo"), "draft", int(time.time())))
+        db.commit()
+        ad_drafts.pop(uid, None)
+        aid = cur.lastrowid
+        prev = f"📢 <b>{html(d['title'])}</b>\n{html(d['body'])}\n🔗 {html(ad_norm_url(d['url']))}"
+        await tg("sendMessage", chat_id=chat, parse_mode="HTML", disable_web_page_preview=True,
+                 text="✅ <b>Avtomatik tekshiruvdan o'tdi!</b>\n\n" + prev + "\n\n👇 Necha marta ko'rsatilsin?",
+                 reply_markup={"inline_keyboard": [[{"text": f"👁 {v:,} ko'rish — {st} ⭐".replace(",", " "), "callback_data": f"adpkg:{aid}:{i}"}]
+                                                   for i, (v, st) in enumerate(AD_PACKAGES)]})
+        return True
+    return False
+
+
+async def ad_choose_package(q, frm):
+    try:
+        _, aid, i = q["data"].split(":")
+        aid, i = int(aid), int(i)
+        views, stars = AD_PACKAGES[i]
+    except (ValueError, IndexError):
+        return await tg("answerCallbackQuery", callback_query_id=q["id"])
+    ad = db.execute("SELECT * FROM ads WHERE id=? AND uid=?", (aid, frm.get("id"))).fetchone()
+    if not ad or ad["status"] != "draft":
+        return await tg("answerCallbackQuery", callback_query_id=q["id"], text="Bu reklama allaqachon to'langan")
+    db.execute("UPDATE ads SET views_bought=?, stars=? WHERE id=?", (views, stars, aid))
+    db.commit()
+    await tg("answerCallbackQuery", callback_query_id=q["id"])
+    await tg("sendInvoice", chat_id=frm["id"], title=f"Reklama: {views} ko'rish",
+             description=f"«{ad['title'][:40]}» banneri Shar Yutar o'yinida {views} marta ko'rsatiladi",
+             payload=f"ad:{aid}|{frm['id']}|{int(time.time())}", currency="XTR",
+             prices=[{"label": f"{views} ko'rish", "amount": stars}])
+
+
+async def ad_paid(aid, uid, charge, amount):
+    ad = db.execute("SELECT * FROM ads WHERE id=?", (aid,)).fetchone()
+    if not ad or ad["status"] != "draft":
+        return
+    trusted = ad_trusted(uid)
+    status = "active" if trusted else "review"
+    db.execute("UPDATE ads SET status=?, charge=?, stars=?, started=? WHERE id=?",
+               (status, charge, amount, int(time.time()) if trusted else None, aid))
+    db.commit()
+    if trusted:
+        await tg("sendMessage", chat_id=uid, text=f"✅ To'lov qabul qilindi. Reklama #{aid} hozirdan ko'rsatilmoqda!\n📊 Statistika: /reklamalarim")
+    else:
+        await tg("sendMessage", chat_id=uid, text=f"✅ To'lov qabul qilindi. Reklama #{aid} admin tasdig'iga yuborildi (birinchi reklama uchun).\n"
+                                                    f"Rad etilsa, ⭐ to'liq qaytariladi. 📊 /reklamalarim")
+    adm = admin_id()
+    if adm:
+        adv = db.execute("SELECT * FROM advertisers WHERE uid=?", (uid,)).fetchone()
+        who = f"{html(adv['name'] or '')} {'@' + adv['username'] if adv and adv['username'] else ''} 📱 {adv['phone'] if adv else '?'}"
+        txt = (f"📢 <b>Reklama #{aid}</b> {'(ishonchli — avtomatik yoqildi)' if trusted else '— tasdiqlang'}\n👤 {who}\n"
+               f"💫 {amount} ⭐ · {ad['views_bought']} ko'rish\n\n<b>{html(ad['title'])}</b>\n{html(ad['body'])}\n🔗 {html(ad['url'])}")
+        kb = {"inline_keyboard": [[{"text": "✅ Tasdiqlash", "callback_data": f"adok:{aid}"}, {"text": "❌ Rad (⭐ qaytadi)", "callback_data": f"adno:{aid}"}]]} \
+            if not trusted else {"inline_keyboard": [[{"text": "⛔ To'xtatish (⭐ qaytadi)", "callback_data": f"adno:{aid}"}]]}
+        if ad["photo"]:
+            await tg("sendPhoto", chat_id=adm, photo=ad["photo"], caption=txt[:1000], parse_mode="HTML", reply_markup=kb)
+        else:
+            await tg("sendMessage", chat_id=adm, text=txt, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+
+
+async def ad_review(aid, ok):
+    ad = db.execute("SELECT * FROM ads WHERE id=?", (aid,)).fetchone()
+    if not ad or ad["status"] not in ("review", "active"):
+        return "Allaqachon ko'rib chiqilgan"
+    if ok:
+        if ad["status"] == "active":
+            return "Allaqachon faol"
+        db.execute("UPDATE ads SET status='active', started=? WHERE id=?", (int(time.time()), aid))
+        db.commit()
+        await tg("sendMessage", chat_id=ad["uid"], text=f"✅ Reklama #{aid} tasdiqlandi va ko'rsatilmoqda!\n📊 /reklamalarim")
+        return "✅ Tasdiqlandi"
+    # rejected or stopped: give back the stars for the views that were not shown
+    left = max(0, ad["views_bought"] - ad["views"])
+    back = ad["stars"] if ad["views"] == 0 else ad["stars"] * left // max(1, ad["views_bought"])
+    refunded = False
+    if back and ad["charge"] and back == ad["stars"]:
+        refunded = await tg("refundStarPayment", user_id=ad["uid"], telegram_payment_charge_id=ad["charge"]) is not None
+    db.execute("UPDATE ads SET status='rejected', finished=? WHERE id=?", (int(time.time()), aid))
+    db.commit()
+    note = f"{back} ⭐ qaytarildi" if refunded else (f"{back} ⭐ — admin qo'lda qaytaradi" if back else "")
+    await tg("sendMessage", chat_id=ad["uid"], text=f"❌ Reklama #{aid} qonun yoki qoidalarga mos kelmagani uchun to'xtatildi. {note}")
+    return "❌ Rad etildi. " + note
+
+
+def ad_pick(uid):
+    rows = db.execute("SELECT * FROM ads WHERE status='active' AND views < views_bought").fetchall()
+    if not rows:
+        return None
+    now = time.time()
+    # people see a banner they haven't just seen; the more views are left, the more often it is picked
+    fresh = [r for r in rows if now - ad_shown.get((r["id"], uid), 0) > AD_SEEN_GAP] or rows
+    ad = random.choices(fresh, weights=[r["views_bought"] - r["views"] for r in fresh])[0]
+    if uid is not None and now - ad_shown.get((ad["id"], uid), 0) > AD_SEEN_GAP:
+        ad_shown[(ad["id"], uid)] = now
+        db.execute("UPDATE ads SET views=views+1 WHERE id=?", (ad["id"],))
+        db.execute("INSERT OR IGNORE INTO ad_seen(ad, uid) VALUES(?,?)", (ad["id"], uid))
+        if ad["views"] + 1 >= ad["views_bought"]:
+            db.execute("UPDATE ads SET status='done', finished=? WHERE id=?", (int(now), ad["id"]))
+            asyncio.get_event_loop().create_task(ad_finished(ad["id"]))
+        db.commit()
+    return ad
+
+
+def ad_click(aid, uid):
+    if not aid or uid is None:
+        return
+    r = db.execute("SELECT clicked FROM ad_seen WHERE ad=? AND uid=?", (aid, uid)).fetchone()
+    if r and not r["clicked"]:                  # one click per person
+        db.execute("UPDATE ad_seen SET clicked=1 WHERE ad=? AND uid=?", (aid, uid))
+        db.execute("UPDATE ads SET clicks=clicks+1 WHERE id=?", (aid,))
+        db.commit()
+
+
+def ad_stats_text(ad):
+    uniq = db.execute("SELECT COUNT(*) FROM ad_seen WHERE ad=?", (ad["id"],)).fetchone()[0]
+    ctr = ad["clicks"] / ad["views"] * 100 if ad["views"] else 0
+    st = {"draft": "📝 To'lov kutilmoqda", "review": "⏳ Admin tekshiruvida", "active": "🟢 Ko'rsatilmoqda",
+          "done": "✅ Tugadi", "rejected": "❌ To'xtatilgan"}.get(ad["status"], ad["status"])
+    bar = "▓" * int(10 * ad["views"] / max(1, ad["views_bought"])) + "░" * (10 - int(10 * ad["views"] / max(1, ad["views_bought"])))
+    return (f"<b>#{ad['id']} · {html(ad['title'])}</b>\n{st}\n{bar} {ad['views']}/{ad['views_bought']}\n"
+            f"👁 Ko'rishlar: <b>{ad['views']}</b> · 👤 Turli odamlar: <b>{uniq}</b>\n👆 Bosishlar: <b>{ad['clicks']}</b> · CTR {ctr:.1f}%")
+
+
+async def ad_my_stats(chat, uid):
+    rows = db.execute("SELECT * FROM ads WHERE uid=? AND status!='draft' ORDER BY id DESC LIMIT 10", (uid,)).fetchall()
+    if not rows:
+        return await tg("sendMessage", chat_id=chat, text="Sizda hali reklama yo'q. Boshlash: /reklama")
+    await tg("sendMessage", chat_id=chat, parse_mode="HTML", text="📊 <b>Reklamalaringiz</b> (jonli)\n\n" + "\n\n".join(ad_stats_text(r) for r in rows),
+             reply_markup={"inline_keyboard": [[{"text": "➕ Yangi reklama", "callback_data": "adnew:0"}]]})
+
+
+async def ad_finished(aid):
+    ad = db.execute("SELECT * FROM ads WHERE id=?", (aid,)).fetchone()
+    if ad:
+        await tg("sendMessage", chat_id=ad["uid"], parse_mode="HTML",
+                 text="🏁 <b>Reklamangiz yakunlandi!</b>\n\n" + ad_stats_text(ad) + "\n\nYana reklama: /reklama")
+
+
+AD_IMG = {}
+
+
+async def ad_image(aid):
+    hit = AD_IMG.get(aid)
+    if hit:
+        return hit
+    ad = db.execute("SELECT photo FROM ads WHERE id=? AND status IN ('active','done','review')", (aid,)).fetchone()
+    if not ad or not ad["photo"] or not BOT_TOKEN:
+        return None
+    def fetch(fid):
+        f = tg_call("getFile", file_id=fid)
+        with urllib.request.urlopen(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{f['file_path']}", timeout=20) as r:
+            return r.read()
+    try:
+        img = await asyncio.to_thread(fetch, ad["photo"])
+    except Exception:
+        return None
+    if len(AD_IMG) > 50:
+        AD_IMG.clear()
+    AD_IMG[aid] = img
+    return img
 
 
 # ---------------------------------------------------------------- the arena
@@ -1254,6 +1575,13 @@ async def on_message(c, m):
             c.acc.prefs = json.dumps({k: p[k] for k in ("gfx", "fps", "showFps") if k in p})[:200]
             db.execute("UPDATE users SET prefs=? WHERE uid=?", (c.acc.prefs, c.acc.uid))
             db.commit()
+    elif t == "ad":                                 # a banner for the menu / death screen
+        ad = ad_pick(c.acc.uid)
+        if ad:
+            c.send({"t": "ad", "id": ad["id"], "title": ad["title"], "body": ad["body"], "url": ad["url"],
+                    "img": f"/api/adimg?id={ad['id']}" if ad["photo"] else "", "where": m.get("where", "")})
+    elif t == "adclick":
+        ad_click(int(m.get("id", 0) or 0), c.acc.uid)
     elif t == "tops":                               # leaderboard of every rank tier
         tiers = []
         for ti in range(len(RANK_TIERS)):
@@ -1489,6 +1817,18 @@ async def http_handler(reader, writer):
                       f"Sec-WebSocket-Accept: {acc}\r\n\r\n").encode())
         await writer.drain()
         await ws_session(reader, writer)
+        return
+    if path == "/api/adimg":
+        qs = dict(urllib.parse.parse_qsl(full_path.split("?", 1)[1] if "?" in full_path else ""))
+        img = await ad_image(int(qs["id"])) if qs.get("id", "").isdigit() else None
+        if img:
+            writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {len(img)}\r\nCache-Control: public, max-age=86400\r\nConnection: close\r\n\r\n".encode() + img)
+        else:
+            writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        try:
+            await writer.drain()
+        finally:
+            writer.close()
         return
     if path == "/api/avatar":
         qs = dict(urllib.parse.parse_qsl(full_path.split("?", 1)[1] if "?" in full_path else ""))

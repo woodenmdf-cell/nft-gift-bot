@@ -115,6 +115,13 @@
   .seg button.on{background:linear-gradient(#ffd84d,#ffaa00);color:#3a2700}
   .seg button:disabled{opacity:.3}
   #fpsLbl{position:fixed;top:calc(12px + var(--sat));left:50%;transform:translateX(-50%);z-index:4;font:800 12px system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.45);padding:3px 8px;border-radius:8px;pointer-events:none}
+  .adBox{width:min(340px,92vw);margin-top:12px;background:rgba(255,255,255,.95);color:#1b2240;border-radius:16px;padding:10px;display:flex;gap:10px;align-items:center;text-align:left;cursor:pointer;position:relative;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  .adBox img{width:58px;height:58px;border-radius:12px;object-fit:cover;flex:none}
+  .adBox .at{font-weight:900;font-size:14px;line-height:1.2}
+  .adBox .ab{font-size:12px;opacity:.8;margin-top:2px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .adBox .tag{position:absolute;top:-8px;left:10px;background:#ffb300;color:#3a2700;font-size:10px;font-weight:900;border-radius:6px;padding:1px 6px}
+  .adBox .go{flex:none;background:#2a78e0;color:#fff;font-weight:900;font-size:12px;border-radius:10px;padding:7px 10px}
+  .adSell{font-size:11px;opacity:.7;margin-top:6px;text-decoration:underline;cursor:pointer}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -202,6 +209,7 @@
     <button class="subb hidden" id="subBtn">📢 Kanalga obuna bo'ling · <b>+20K 🎁</b></button>
   </div>
   <div class="best" id="bestTxt"></div>
+  <div class="adBox hidden" id="adMenu"></div>
 </div>
 
 <div id="dead" class="screen dead hidden">
@@ -210,6 +218,7 @@
   <div class="stat" id="dBest"></div>
   <div class="stat" id="dKiller" style="opacity:.8;font-size:14px"></div>
   <div class="stat" id="dBank" style="color:#ffe14d;font-size:15px;font-weight:800"></div>
+  <div class="adBox hidden" id="adDead"></div>
   <div class="btnrow">
     <button class="rev" id="revBtn">❤️ Davom etish · 10 ⭐</button>
     <button class="ghost" id="againBtn">Qaytadan boshlash</button>
@@ -551,6 +560,7 @@ function connect(){
     const hello = {t: 'hello', initData: tg ? tg.initData : '', name: nameVal()};
     if (DEV_UID) hello.dev_uid = +DEV_UID;
     send(hello);
+    if (state === 'menu') send({t: 'ad', where: 'menu'});
   };
   ws.onmessage = e => { try { onMsg(JSON.parse(e.data)); } catch (err) { console.error(err); } };
   ws.onclose = () => {
@@ -630,6 +640,7 @@ function onMsg(m){
       document.getElementById('dBank').textContent = m.banked ? "💰 Bu o'yinda hisobga o'tdi: +" + fmt(m.banked) : "💡 50K ga yetgan tokenlargina hisobga o'tadi";
       ['boosts', 'exitBtn'].forEach(id => show(id, false)); show('dead', true);
       if (m.rank) setTimeout(() => showRank(m.rank), 700);
+      send({t: 'ad', where: 'dead'});
       break;
     case 'left': if (m.rank) showRank(m.rank); break;
     case 'acc':
@@ -650,6 +661,7 @@ function onMsg(m){
       break;
     case 'v': voiceIn(m.id, m.n || '', m.d); break;
     case 'tops': topsData = m; renderTops(); break;
+    case 'ad': showAd(m); break;
     case 'toast':
       toast(m.msg);
       if (m.fx && me) { popups.push({x: me.x, z: me.z, t: 0, txt: m.fx === 'bank' ? '+50K 💰' : '+' + (acc.goal_stars || GOAL_STARS) + ' ⭐', big: true}); haptic('heavy'); }
@@ -1092,6 +1104,7 @@ function openMenu(){
   state = 'menu';
   ['score', 'board', 'boosts', 'dead', 'acc', 'exitBtn', 'buyDlg', 'watchBar', 'tops'].forEach(id => show(id, false)); show('menu', true);
   cancelKillUi(); refreshMenu();
+  if (connected) send({t: 'ad', where: 'menu'});
 }
 function openAcc(){
   show('menu', false); show('acc', true);
@@ -1528,6 +1541,26 @@ document.getElementById('setOv').addEventListener('click', e => {
   renderSettings();
 });
 applyGfx();
+
+// ---------------------------------------------------------------- sponsor banners (sold through the bot: /reklama)
+function openExt(url){
+  if (tg && /^https:\/\/t\.me\//.test(url) && tg.openTelegramLink) tg.openTelegramLink(url);
+  else if (tg && tg.openLink) tg.openLink(url);
+  else window.open(url, '_blank');
+}
+function showAd(a){
+  const box = document.getElementById(a.where === 'dead' ? 'adDead' : 'adMenu');
+  box.innerHTML = `<span class="tag">📢 Reklama</span>${a.img ? `<img src="${esc(a.img)}" alt="">` : ''}
+    <div style="flex:1;min-width:0"><div class="at">${esc(a.title)}</div><div class="ab">${esc(a.body)}</div></div><span class="go">O'tish ›</span>`;
+  box.classList.remove('hidden');
+  box.onclick = () => { send({t: 'adclick', id: a.id}); openExt(a.url); };
+  if (a.where !== 'dead' && acc && acc.bot && !document.getElementById('adSell')) {
+    const sell = document.createElement('div'); sell.id = 'adSell'; sell.className = 'adSell';
+    sell.textContent = '📢 Shu yerda reklamangiz bo\'lsin';
+    sell.onclick = () => openExt(`https://t.me/${acc.bot}?start=reklama`);
+    box.after(sell);
+  }
+}
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>
