@@ -1,0 +1,20 @@
+{
+  "name": "shar-yutar-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shar Yutar — Android / iOS ilova (Capacitor)",
+  "scripts": {
+    "sync": "cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0"
+  }
+}

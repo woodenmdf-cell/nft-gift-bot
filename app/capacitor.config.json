@@ -1,0 +1,23 @@
+{
+  "appId": "uz.vizual.sharyutar",
+  "appName": "Shar Yutar",
+  "webDir": "www",
+  "server": {
+    "url": "https://shar-yutar-production.up.railway.app/?app=1",
+    "cleartext": false,
+    "allowNavigation": ["shar-yutar-production.up.railway.app"]
+  },
+  "backgroundColor": "#1e3282",
+  "android": {
+    "backgroundColor": "#1e3282",
+    "allowMixedContent": false
+  },
+  "ios": {
+    "backgroundColor": "#1e3282",
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 1200, "backgroundColor": "#1e3282", "showSpinner": false },
+    "StatusBar": { "overlaysWebView": true, "style": "DARK" }
+  }
+}
