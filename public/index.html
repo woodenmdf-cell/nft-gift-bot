@@ -679,7 +679,7 @@ function onMsg(m){
       if (!document.getElementById('acc').classList.contains('hidden')) openAcc();
       if (killIn) updAntiBtn();
       break;
-    case 'v': voiceIn(m.id, m.n || '', m.d); break;
+    case 'v': if (m.b && !botVoice) break; voiceIn(m.id, m.n || '', m.d); break;
     case 'say': botSays(m); break;
     case 'tops': topsData = m; renderTops(); break;
     case 'applogin': store.set('loginCode', m.code); openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
@@ -1106,6 +1106,7 @@ function watchTarget(){
   return p;
 }
 function openWatch(){
+  try { audioCtx(); } catch (e) {}
   if (!connected) { toast('Serverga ulanmoqda...'); return; }
   state = 'watch'; watchIdx = 0; watchId = null;
   ['menu', 'acc', 'dead', 'boosts', 'exitBtn', 'score', 'buyDlg'].forEach(id => show(id, false));
@@ -1670,7 +1671,7 @@ function botSays(m){
   const p = byId.get(m.id); if (p) p.say = {text: m.text, until: now + 3800};
   if (state !== 'play' && state !== 'watch') return;
   talkers.set('bot' + m.id, {name: m.n, until: now + 2500}); drawTalkers();
-  if (!botVoice || voiceMuted || !window.speechSynthesis) return;
+  if (m.a || !botVoice || voiceMuted || !window.speechSynthesis) return;      // m.a: real audio comes from the server
   try {
     const u = new SpeechSynthesisUtterance(m.text.replace(/[^\p{L}\p{N}\s,.!?'ʻ’-]/gu, ''));
     const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }

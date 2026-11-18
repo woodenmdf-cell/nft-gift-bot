@@ -1521,14 +1521,71 @@ FEMALE_NAMES = {"Malika", "Dilnoza", "Kamola", "Lola", "Zarina", "Madina", "Seva
 TALK = {"next": 0.0, "last": {}}
 
 
+TTS = {"voice": None, "cache": {}}            # server-side speech: espeak-ng -> ffmpeg -> 16 kHz mu-law (same as voice chat)
+
+
+async def tts_voice():
+    if TTS["voice"] is None:
+        TTS["voice"] = ""
+        try:
+            proc = await asyncio.create_subprocess_exec("espeak-ng", "--voices", stdout=asyncio.subprocess.PIPE,
+                                                        stderr=asyncio.subprocess.DEVNULL)
+            out = (await proc.communicate())[0].decode(errors="ignore")
+            langs = {ln.split()[1] for ln in out.splitlines()[1:] if len(ln.split()) > 1}
+            TTS["voice"] = next((v for v in ("uz", "tr", "kk", "az") if v in langs), "")
+            log.info("bot speech voice: %s", TTS["voice"] or "none")
+        except FileNotFoundError:
+            log.info("espeak-ng not installed: bots speak on the phone instead")
+    return TTS["voice"]
+
+
+async def tts(text, female, seed):
+    voice = await tts_voice()
+    if not voice:
+        return None
+    key = (text, female, seed)
+    if key in TTS["cache"]:
+        return TTS["cache"][key]
+    variant = ("f1", "f2", "f3", "f4")[seed % 4] if female else ("m1", "m3", "m4", "m7")[seed % 4]
+    pitch = (62 + seed % 4 * 6) if female else (30 + seed % 4 * 6)
+    cmd = (f'espeak-ng -v {voice}+{variant} -s 155 -p {pitch} -a 180 --stdout "$TXT" | '
+           'ffmpeg -loglevel quiet -i pipe:0 -af "highpass=f=120,volume=1.6" -ar 16000 -ac 1 -f mulaw pipe:1')
+    try:
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+                                                     env={**os.environ, "TXT": text})
+        audio = (await asyncio.wait_for(proc.communicate(), 8))[0]
+    except Exception as e:
+        log.info("tts failed: %s", e)
+        return None
+    if len(TTS["cache"]) > 300:
+        TTS["cache"].clear()
+    TTS["cache"][key] = audio or None
+    return audio or None
+
+
 def bot_say(b, kind, name=""):
     text = random.choice(BOT_LINES[kind]).format(n=name)
     TALK["last"][b.id] = time.time()
-    out = json.dumps({"t": "say", "id": b.id, "n": b.name, "text": text, "f": 1 if b.name in FEMALE_NAMES else 0},
+    asyncio.get_event_loop().create_task(bot_speak(b, text))
+
+
+async def bot_speak(b, text):
+    female = b.name in FEMALE_NAMES
+    audio = await tts(text, female, b.id)
+    out = json.dumps({"t": "say", "id": b.id, "n": b.name, "text": text, "f": 1 if female else 0, "a": 1 if audio else 0},
                      separators=(",", ":"), ensure_ascii=False)
-    for c in list(conns):
-        if c.acc and not c.closed:
-            c.send_raw(out)
+    targets = [c for c in list(conns) if c.acc and not c.closed]
+    for c in targets:
+        c.send_raw(out)
+    if not audio:
+        return
+    # stream it like voice chat: ~200 ms packets, so it plays through the same speaker path that already works
+    for i in range(0, len(audio), 3200):
+        pkt = json.dumps({"t": "v", "id": b.id, "n": b.name, "b": 1, "d": base64.b64encode(audio[i:i + 3200]).decode()},
+                         separators=(",", ":"), ensure_ascii=False)
+        for c in targets:
+            if not c.closed:
+                c.send_raw(pkt)
 
 
 def bot_chatter():
