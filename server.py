@@ -1516,7 +1516,18 @@ BOT_LINES = {
     "even": ["Salom {n}! Kim kuchli ekan?", "{n}, poyga qilamizmi?", "{n}, sendan katta bo'laman!", "{n}, TOP-1 meniki bo'ladi!"],
     "ate": ["{n}, mazali ekansan!", "Rahmat {n}, to'ydim!", "{n}, keyingi safar ehtiyot bo'l!", "Bitta {n} kam!"],
     "top": ["Men TOP-1man, kim tutadi?", "Hammangizni yeyman!", "Hech kim meni ushlay olmaydi!"],
+    "reply": ["Eshitdim, {n}!", "Ha, {n}, qiziq gap!", "{n}, keyin nima qilamiz?", "Xo'p {n}, ketdik!",
+              "{n}, qayerdasan? Seni ko'rmayapman!", "Hahaha, {n}, kuldirding!", "{n}, gapingga qo'shilaman!",
+              "Voy {n}, ovozing zo'r ekan!", "Mayli {n}, lekin baribir men kuchliman!"],
 }
+# two bots talk to each other about a real player, taking turns: (first bot, second bot)
+BOT_DIALOGS = [
+    ("{b}, {n}ni ko'ryapsanmi?", "Ha {a}, u juda tez yuryapti!"),
+    ("{b}, {n}ni birga ushlaymizmi?", "Ketdik {a}, chapdan men kelaman!"),
+    ("{b}, kim TOP-1 bo'ladi?", "Albatta men, {a}! {n} ham yomon emas."),
+    ("{n}, bizga qo'shil, {b} bilan jamoamiz!", "Ha {n}, uchalamiz birga o'ynaymiz!"),
+    ("{b}, {n} katta bo'lib ketdi-ku!", "Qo'rqma {a}, men undan tezroqman!"),
+]
 FEMALE_NAMES = {"Malika", "Dilnoza", "Kamola", "Lola", "Zarina", "Madina", "Sevara", "Gulnoza", "Sitora", "Aziza", "Shahzoda", "Nilufar"}
 TALK = {"next": 0.0, "last": {}}
 
@@ -1563,10 +1574,33 @@ async def tts(text, female, seed):
     return audio or None
 
 
+SPEECH_Q = []              # (bot, text) waiting their turn
+
+
 def bot_say(b, kind, name=""):
     text = random.choice(BOT_LINES[kind]).format(n=name)
     TALK["last"][b.id] = time.time()
-    asyncio.get_event_loop().create_task(bot_speak(b, text))
+    queue_line(b, text)
+
+
+def queue_line(b, text):
+    if len(SPEECH_Q) < 6:
+        SPEECH_Q.append((b, text))
+        if not TALK.get("worker"):
+            TALK["worker"] = asyncio.get_event_loop().create_task(speech_worker())
+
+
+async def speech_worker():
+    """Bots take turns: each line starts only after the previous one has been heard."""
+    try:
+        while SPEECH_Q:
+            b, text = SPEECH_Q.pop(0)
+            if not b.alive:
+                continue
+            secs = await bot_speak(b, text)
+            await asyncio.sleep((secs or 1.5) + 0.6)
+    finally:
+        TALK["worker"] = None
 
 
 async def bot_speak(b, text):
@@ -1578,7 +1612,7 @@ async def bot_speak(b, text):
     for c in targets:
         c.send_raw(out)
     if not audio:
-        return
+        return 0.08 * len(text)
     # stream it like voice chat: ~200 ms packets, so it plays through the same speaker path that already works
     for i in range(0, len(audio), 3200):
         pkt = json.dumps({"t": "v", "id": b.id, "n": b.name, "b": 1, "d": base64.b64encode(audio[i:i + 3200]).decode()},
@@ -1586,17 +1620,38 @@ async def bot_speak(b, text):
         for c in targets:
             if not c.closed:
                 c.send_raw(pkt)
+    return len(audio) / 16000
 
 
 def bot_chatter():
     """Every so often a bot near a real player says something to them by name."""
     now = time.time()
-    if now < TALK["next"]:
-        return
     humans = [p for p in game.players if p.alive and not p.bot and p.conn and not p.conn.closed]
-    if not humans:
+    # someone just finished talking in voice chat: a bot answers them by name
+    for h in humans:
+        c = h.conn
+        if getattr(c, "voice_end", 0) and now - c.voice_end > 1.2 and not getattr(c, "voice_answered", True):
+            c.voice_answered = True
+            if now - TALK.get("last_reply", 0) > 12:
+                bots = [b for b in game.players if b.bot and b.alive]
+                if bots:
+                    b = min(bots, key=lambda q: math.hypot(q.x - h.x, q.z - h.z))
+                    TALK["last_reply"] = now
+                    bot_say(b, "reply", h.name)
+                    return
+    if not humans or now < TALK["next"] or SPEECH_Q:
         return
     TALK["next"] = now + random.uniform(10, 22)
+    if random.random() < 0.3:                        # sometimes two bots chat with each other about a player
+        bots = [b for b in game.players if b.bot and b.alive]
+        if len(bots) >= 2:
+            a, b2 = random.sample(bots, 2)
+            h = random.choice(humans)
+            first, second = random.choice(BOT_DIALOGS)
+            TALK["last"][a.id] = TALK["last"][b2.id] = now
+            queue_line(a, first.format(a=a.name, b=b2.name, n=h.name))
+            queue_line(b2, second.format(a=a.name, b=b2.name, n=h.name))
+            return
     pairs = []
     for b in game.players:
         if not b.bot or not b.alive or now - TALK["last"].get(b.id, 0) < 45:
@@ -1811,6 +1866,12 @@ async def on_message(c, m):
         if c.vbudget < len(d):
             return
         c.vbudget -= len(d)
+        if p and p.alive:                            # remember the moment they stop talking: a bot may answer
+            tn = time.time()
+            if not getattr(c, "voice_end", 0) or tn - c.voice_end > 1.5:
+                c.voice_start = tn
+            c.voice_end = tn
+            c.voice_answered = tn - getattr(c, "voice_start", tn) < 0.8
         out = json.dumps({"t": "v", "id": p.id if p else 0, "n": (p.name if p else c.acc.name)[:14], "d": d},
                          separators=(",", ":"), ensure_ascii=False)
         for o in list(conns):
