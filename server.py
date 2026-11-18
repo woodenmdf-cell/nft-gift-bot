@@ -2362,6 +2362,7 @@ async def main():
             loop.add_signal_handler(sig, on_term)
         except (NotImplementedError, RuntimeError):
             pass
+    await tts_voice()                              # log which speech voice the bots will use
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
     await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed())
