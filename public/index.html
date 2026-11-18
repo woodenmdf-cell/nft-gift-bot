@@ -855,18 +855,44 @@ function paintDome(g, skin, X, Y, R, sa, ca, detail){
     g.restore();
   }
 }
+// pre-drawn food balls, one per colour / size / viewing angle (hundreds of gradients per frame were the slow part)
+const SPRITES = new Map();
+function foodSprite(c, R, sa){
+  // coarse size steps (~19%) and angle steps keep the set of pictures small; drawImage scales to the exact size
+  const rq = Math.pow(2, Math.round(Math.log2(Math.max(0.5, R)) * 4) / 4);
+  const aq = Math.max(0.05, Math.round(sa * 10) / 10);
+  const key = c + '|' + rq + '|' + aq + '|' + DPR;
+  let sp = SPRITES.get(key);
+  if (sp) return sp;
+  if (SPRITES.size > 2500) SPRITES.clear();
+  const ca = Math.sqrt(1 - aq * aq), r = rq;
+  const w = r * 2 + 4, h = r * (ca + aq * 1.1) + 4, ox = r + 2, oy = r * ca + 2;
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.ceil(w * DPR)); cv.height = Math.max(1, Math.ceil(h * DPR));
+  const g = cv.getContext('2d'); g.scale(DPR, DPR);
+  g.fillStyle = 'rgba(0,40,0,.18)';
+  g.beginPath(); g.ellipse(ox + r * 0.04, oy + r * aq * 0.12, r * 0.97, Math.max(0.3, r * aq * 0.97), 0, 0, Math.PI * 2); g.fill();
+  domePath(g, ox, oy, r, aq, ca);
+  const gr = g.createRadialGradient(ox - r * 0.35, oy - r * ca * 0.55, 0, ox, oy, r * 1.2);
+  gr.addColorStop(0, shade(c, 0.45)); gr.addColorStop(0.55, c); gr.addColorStop(1, shade(c, -0.35));
+  g.fillStyle = gr; g.fill();
+  sp = {cv, w, h, ox, oy, r};
+  SPRITES.set(key, sp);
+  return sp;
+}
 function drawBlob(e, simple){
   const P = e.P, R = e.r * P.s;
   if (R < 0.6 || !isFinite(R) || !isFinite(P.x) || !isFinite(P.y)) return;
   const horiz = Math.hypot(e.x - cam.x, e.z - cam.z), va = Math.atan2(cam.y, horiz);
   const sa = Math.sin(va), ca = Math.cos(va);
-  ctx.fillStyle = 'rgba(0,40,0,.18)';
-  ctx.beginPath(); ctx.ellipse(P.x + R * 0.04, P.y + R * sa * 0.12, R * 0.97, R * sa * 0.97, 0, 0, Math.PI * 2); ctx.fill();
-  if (simple) {
-    domePath(ctx, P.x, P.y, R, sa, ca);
-    const g = ctx.createRadialGradient(P.x - R * 0.35, P.y - R * ca * 0.55, 0, P.x, P.y, R * 1.2);
-    g.addColorStop(0, shade(e.c, 0.45)); g.addColorStop(0.55, e.c); g.addColorStop(1, shade(e.c, -0.35));
-    ctx.fillStyle = g; ctx.fill(); return;
+  if (!simple) {
+    ctx.fillStyle = 'rgba(0,40,0,.18)';
+    ctx.beginPath(); ctx.ellipse(P.x + R * 0.04, P.y + R * sa * 0.12, R * 0.97, R * sa * 0.97, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  if (simple) {                        // food: a ready-made picture instead of a fresh gradient every frame
+    const sp = foodSprite(e.c, R, sa), k = R / sp.r;
+    ctx.drawImage(sp.cv, P.x - sp.ox * k, P.y - sp.oy * k, sp.w * k, sp.h * k);
+    return;
   }
   paintDome(ctx, e.skin, P.x, P.y, R, sa, ca, R > 5);
 }
@@ -880,13 +906,32 @@ function drawLabel(p){
   }
   const horiz = Math.hypot(p.x - cam.x, p.z - cam.z), ca = Math.cos(Math.atan2(cam.y, horiz));
   const y = p.P.y - R * ca - 8, fs = Math.max(11, Math.min(26, R * 0.32 + 9));
-  ctx.textAlign = 'center'; ctx.lineJoin = 'round';
-  ctx.font = `900 ${fs}px system-ui,sans-serif`; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(30,20,0,.55)';
-  ctx.fillStyle = p === me ? '#ffd21f' : '#ffe9a8';
-  ctx.strokeText(fmt(p.m * 10), p.P.x, y - fs * 1.05); ctx.fillText(fmt(p.m * 10), p.P.x, y - fs * 1.05);
-  ctx.font = `800 ${fs * 0.9}px system-ui,sans-serif`; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.5)';
+  const fq = fs <= 14 ? 14 : fs <= 19 ? 19 : 26, k = fs / fq;      // 3 cached sizes, scaled to the exact one
+  const sc = textSprite(fmt(p.m * 10), 900, fq, p === me ? '#ffd21f' : '#ffe9a8', 'rgba(30,20,0,.55)');
+  ctx.drawImage(sc.cv, p.P.x - sc.w * k / 2, y - fs * 1.05 - sc.base * k, sc.w * k, sc.h * k);
   const nm = (p.talk > performance.now() ? '🔊 ' : '') + (p.tier >= 0 ? RANKS[p.tier].e + ' ' : '') + p.name;
-  ctx.strokeText(nm, p.P.x, y); ctx.fillText(nm, p.P.x, y);
+  const ns = textSprite(nm, 800, Math.round(fq * 0.9), '#fff', 'rgba(0,0,0,.5)');
+  ctx.drawImage(ns.cv, p.P.x - ns.w * k / 2, y - ns.base * k, ns.w * k, ns.h * k);
+}
+// outlined text drawn once and reused (stroking text every frame was a big cost)
+const TEXTS = new Map();
+function textSprite(txt, weight, fs, fill, stroke){
+  const key = txt + '|' + weight + '|' + fs + '|' + fill + '|' + DPR;
+  let t = TEXTS.get(key);
+  if (t) return t;
+  if (TEXTS.size > 600) TEXTS.clear();
+  const font = `${weight} ${fs}px system-ui,sans-serif`;
+  ctx.font = font;
+  const w = Math.ceil(ctx.measureText(txt).width) + 8, h = Math.ceil(fs * 1.35) + 6, base = Math.ceil(fs * 1.05) + 3;
+  const cv = document.createElement('canvas');
+  cv.width = Math.ceil(w * DPR); cv.height = Math.ceil(h * DPR);
+  const g = cv.getContext('2d'); g.scale(DPR, DPR);
+  g.font = font; g.textAlign = 'center'; g.lineJoin = 'round'; g.lineWidth = 4;
+  g.strokeStyle = stroke; g.fillStyle = fill;
+  g.strokeText(txt, w / 2, base); g.fillText(txt, w / 2, base);
+  t = {cv, w, h, base};
+  TEXTS.set(key, t);
+  return t;
 }
 function quad(a, b, c, d){ ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); }
 
@@ -925,6 +970,7 @@ function render(){
   const x0 = Math.max(-S, tx - R), x1 = Math.min(S, tx + R), z0 = Math.max(-S, tz - R), z1 = Math.min(S, tz + R);
   const maxDepth = R + cam.dist, half = W / (2 * F);
   ctx.fillStyle = '#7ccf3a';
+  ctx.beginPath();                                   // all dark tiles go into one path: one fill instead of hundreds
   for (let j = Math.floor(z0 / T); j < Math.ceil(z1 / T); j++) {
     for (let i = Math.floor(x0 / T); i < Math.ceil(x1 / T); i++) {
       if (((i + j) & 1) !== 0) continue;
@@ -934,9 +980,10 @@ function render(){
       if (dp < 1 || dp > maxDepth || Math.abs(c.lx) > dp * half * 1.25 + T) continue;    // off screen
       const p1 = project(xa, 0, za), p2 = project(xb, 0, za), p3 = project(xb, 0, zb), p4 = project(xa, 0, zb);
       if (!p1 || !p2 || !p3 || !p4) continue;
-      quad(p1, p2, p3, p4); ctx.fill();
+      ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);   // fill() closes each tile
     }
   }
+  ctx.fill();
   // walls on all four sides; the ones between the camera and the player are skipped so they never hide you
   const WH = 8;
   ctx.lineWidth = 1;
@@ -1241,7 +1288,7 @@ function frame(t){
   // slow phone: lower the canvas resolution a little so it stays fluid
   if (gfx === 'auto' && raw > 0 && raw < 200 && state === 'play') {
     ftAvg += (raw - ftAvg) * 0.05;
-    if (++ftN > 120 && ftAvg > Math.max(24, 1500 / fpsCap) && DPR > 1.25) { DPR = Math.max(1.25, DPR - 0.25); resize(true); ftN = 0; }
+    if (++ftN > 90 && ftAvg > 1000 / Math.min(fpsCap, displayHz) * 1.2 && DPR > 1) { DPR = Math.max(1, DPR - 0.25); resize(true); ftN = 0; }
   }
   if (me && (me.fixX || me.fixZ)) {               // server correction: glide over ~0.15 s instead of jumping
     const g = Math.min(1, dt * 7);
