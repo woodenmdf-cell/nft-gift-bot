@@ -1485,8 +1485,11 @@ async def ws_session(reader, writer):
     finally:
         conns.discard(c)
         c.closed = True
-        if c.player:
-            remember(c)
+        if c.player and c.player.alive:
+            # closing the game does not save you: the ball stays on the field for a while and can still be eaten
+            c.player.orphan_until = time.time() + ORPHAN_SEC
+            ORPHANS.add(c)
+        elif c.player:
             game.remove(c.player)
         try:
             writer.close()
@@ -1498,6 +1501,38 @@ RESUME = {}           # uid -> what their blob had when the connection dropped
 RESUME_TTL = 600      # seconds a dropped game can be picked up again
 
 
+ORPHAN_SEC = 20          # seconds a closed player's ball stays in the arena
+ORPHANS = set()          # connections that went away mid-game
+
+
+def tick_orphans():
+    now = time.time()
+    for c in list(ORPHANS):
+        p = c.player
+        if not p or not p.alive:              # eaten while away: the round is lost
+            ORPHANS.discard(c)
+        elif now > getattr(p, "orphan_until", 0):
+            remember(c)                        # survived alone on the field: it may come back later
+            game.remove(p)
+            c.player = None
+            ORPHANS.discard(c)
+
+
+def reattach(c):
+    """The same player opened the game again while their ball is still on the field."""
+    if c.acc.uid is None:
+        return None
+    for oc in list(ORPHANS):
+        p = oc.player
+        if oc.acc and oc.acc.uid == c.acc.uid and p and p.alive:
+            ORPHANS.discard(oc)
+            oc.player = None
+            p.conn, p.orphan_until = c, 0
+            c.player = p
+            return p
+    return None
+
+
 def remember(c):
     p = c.player
     if p and p.alive and c.acc and c.acc.uid is not None and p.m > 12:
@@ -1506,7 +1541,7 @@ def remember(c):
 
 def save_resume_on_exit():
     """Railway stops the old container on every deploy: keep everyone's game for the new one."""
-    for c in list(conns):
+    for c in list(conns) + list(ORPHANS):
         remember(c)
     for a in Account.cache.values():
         a.save()
@@ -1597,6 +1632,11 @@ async def on_message(c, m):
         if m.get("name"):
             c.acc.name = clean_name(m["name"], c.acc.name)
             c.acc.save()
+        back = reattach(c)
+        if back:
+            c.death = None
+            c.send({"t": "spawn", "id": back.id, "x": back.x, "z": back.z, "m": back.m})
+            return c.toast(f"♻️ Sharingiz maydonda kutib turgan edi: {fmt(back.m * 10)}")
         c.player = p = game.spawn_human(c)
         r = RESUME.pop(c.acc.uid, None) if c.acc.uid is not None else None
         if r and time.time() - r["t"] < RESUME_TTL:
@@ -2172,6 +2212,8 @@ async def game_loop():
         dt, last = min(0.1, now - last), now
         try:
             game.step(dt)
+            if n % 10 == 0:
+                tick_orphans()
             n += 1
             if game.meta_dirty:
                 game.meta_dirty = False
