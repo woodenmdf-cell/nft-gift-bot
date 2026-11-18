@@ -313,7 +313,7 @@
   <div class="stk">🎞 Kadr tezligi (FPS)</div><div class="seg" id="segFps"></div>
   <div class="hint" id="fpsHint" style="margin-top:6px;font-size:12px;opacity:.75"></div>
   <div class="stk">📊 FPS hisoblagich</div><div class="seg" id="segShow"></div>
-  <div class="stk">🤖 Botlar ovozi</div><div class="seg" id="segBotV"></div>
+  <div class="stk hidden">🤖 Botlar ovozi</div><div class="seg hidden" id="segBotV"></div>
   <button class="play" id="setOk" style="width:100%;margin-top:16px;font-size:18px;padding:12px">Saqlash</button>
 </div></div>
 <div id="fpsLbl" class="hidden"></div>
@@ -1671,7 +1671,7 @@ function botSays(m){
   const p = byId.get(m.id); if (p) p.say = {text: m.text, until: now + 3800};
   if (state !== 'play' && state !== 'watch') return;
   talkers.set('bot' + m.id, {name: m.n, until: now + 2500}); drawTalkers();
-  if (m.a || !botVoice || voiceMuted || !window.speechSynthesis) return;      // m.a: real audio comes from the server
+  return;                                          // bot voices are switched off: speech bubble only
   try {
     const u = new SpeechSynthesisUtterance(m.text.replace(/[^\p{L}\p{N}\s,.!?'ʻ’-]/gu, ''));
     const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }

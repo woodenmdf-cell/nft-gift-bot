@@ -1635,9 +1635,12 @@ async def speech_worker():
         TALK["worker"] = None
 
 
+BOT_AUDIO = False          # owner turned bot voices off: bots only show speech bubbles
+
+
 async def bot_speak(b, text):
     female = b.name in FEMALE_NAMES
-    audio = await tts(text, female, b.id)
+    audio = await tts(text, female, b.id) if BOT_AUDIO else None
     out = json.dumps({"t": "say", "id": b.id, "n": b.name, "text": text, "f": 1 if female else 0, "a": 1 if audio else 0},
                      separators=(",", ":"), ensure_ascii=False)
     targets = [c for c in list(conns) if c.acc and not c.closed]
@@ -2455,12 +2458,7 @@ async def main():
             loop.add_signal_handler(sig, on_term)
         except (NotImplementedError, RuntimeError):
             pass
-    await tts_voice()                              # log which speech voice the bots will use
 
-    async def tts_selftest():
-        a = await tts_edge("Salom, men Shar Yutar botiman!", True, 1)
-        log.info("natural uzbek voice: %s", f"ok ({len(a) / 16000:.1f} s)" if a else "unavailable")
-    asyncio.get_running_loop().create_task(tts_selftest())
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
     await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed())
