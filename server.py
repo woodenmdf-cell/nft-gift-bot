@@ -101,6 +101,7 @@ try:
     db.execute("ALTER TABLE reqs ADD COLUMN gift TEXT")
 except sqlite3.OperationalError:
     pass
+FREE_AD_PACKAGES = [1000, 3000, 10000]          # views the admin can give a partner for free
 db.executescript("""
 CREATE TABLE IF NOT EXISTS ads(id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER, title TEXT, body TEXT, url TEXT,
   photo TEXT, views_bought INTEGER DEFAULT 0, views INTEGER DEFAULT 0, clicks INTEGER DEFAULT 0, status TEXT,
@@ -110,6 +111,11 @@ CREATE TABLE IF NOT EXISTS advertisers(uid INTEGER PRIMARY KEY, phone TEXT, name
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid INTEGER, created INTEGER);
 """)
 db.commit()
+try:
+    db.execute("ALTER TABLE ads ADD COLUMN share TEXT")
+    db.commit()
+except sqlite3.OperationalError:
+    pass
 # payouts are Telegram gifts (no plain Stars any more): id -> (title, price in ⭐, emoji Telegram uses for it)
 PAY_GIFTS = {"tort": ("Tort", 50, "🎂"), "raketa": ("Raketa", 50, "🚀"),
              "kubok": ("Kubok", 100, "🏆"), "uzuk": ("Uzuk", 100, "💍")}
@@ -408,6 +414,11 @@ async def handle_update(u):
     elif text.startswith("/ochirish"):
         await tg("sendMessage", chat_id=chat, text="⚠️ Akkauntingiz, tokenlar, ⭐ balans va rank butunlay o'chiriladi. Bu qaytarib bo'lmaydi.",
                  reply_markup={"inline_keyboard": [[{"text": "🗑 Ha, o'chirish", "callback_data": "delme:1"}]]})
+    elif text.startswith("/reklama_bepul"):
+        if frm.get("id") == admin_id():
+            await ad_start(chat, frm, free=True)
+        else:
+            await tg("sendMessage", chat_id=chat, text="Bu buyruq faqat admin uchun. Reklama berish: /reklama")
     elif text.startswith("/reklamalarim"):
         await ad_my_stats(chat, frm["id"])
     elif text.startswith("/reklama"):
@@ -543,6 +554,23 @@ async def handle_callback(q):
         await delete_account(frm["id"])
         await tg("answerCallbackQuery", callback_query_id=q["id"], text="O'chirildi")
         await tg("sendMessage", chat_id=frm["id"], text="🗑 Akkauntingiz va ma'lumotlaringiz o'chirildi.")
+        return
+    if data.startswith("adfree:"):
+        if frm.get("id") != admin_id():
+            return await tg("answerCallbackQuery", callback_query_id=q["id"], text="Faqat admin")
+        _, aid, views = data.split(":")
+        ad = db.execute("SELECT * FROM ads WHERE id=? AND status='draft'", (int(aid),)).fetchone()
+        if not ad:
+            return await tg("answerCallbackQuery", callback_query_id=q["id"], text="Allaqachon yoqilgan")
+        share = secrets.token_urlsafe(8)
+        db.execute("UPDATE ads SET status='active', views_bought=?, stars=0, started=?, share=? WHERE id=?",
+                   (int(views), int(time.time()), share, ad["id"]))
+        db.commit()
+        await tg("answerCallbackQuery", callback_query_id=q["id"], text="✅ Yoqildi")
+        link = f"{PUBLIC_URL}/adstat?id={ad['id']}&k={share}"
+        await tg("sendMessage", chat_id=frm["id"], parse_mode="HTML", disable_web_page_preview=True,
+                 text=f"✅ <b>Reklama #{ad['id']} yoqildi</b> — {int(views)} ko'rish, bepul.\n\n"
+                      f"📊 Hamkoringizga shu havolani yuboring — u ko'rishlar va bosishlarni jonli ko'radi:\n{link}")
         return
     if data.startswith("adnew:"):
         await tg("answerCallbackQuery", callback_query_id=q["id"])
@@ -698,8 +726,12 @@ def ad_trusted(uid):
     return db.execute("SELECT 1 FROM ads WHERE uid=? AND status IN ('active','done')", (uid,)).fetchone() is not None
 
 
-async def ad_start(chat, frm):
+async def ad_start(chat, frm, free=False):
     uid = frm["id"]
+    if free:                                         # admin places a partner's banner without payment
+        ad_drafts[uid] = {"step": "title", "free": True}
+        return await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+                        text="🎁 <b>Bepul hamkor reklamasi</b> (admin)\n\n✍️ <b>1/4. Sarlavha</b> (40 belgigacha, o'zbek tilida)\n\nBekor qilish: /bekor")
     adv = db.execute("SELECT * FROM advertisers WHERE uid=?", (uid,)).fetchone()
     if not adv:
         ad_drafts[uid] = {"step": "phone"}
@@ -769,7 +801,7 @@ async def ad_dialog(m, chat, frm, text):
             return True
         probs = ad_check(d["title"], d["body"], d["url"])
         if probs:
-            ad_drafts[uid] = {"step": "title"}
+            ad_drafts[uid] = {"step": "title", "free": d.get("free", False)}
             await tg("sendMessage", chat_id=chat, parse_mode="HTML",
                      text="⚠️ <b>Reklama qonun talablariga to'g'ri kelmadi:</b>\n\n" + "\n".join("• " + html(p) for p in probs) +
                           "\n\nTuzatib, qaytadan boshlang. <b>1/4. Sarlavha</b>:")
@@ -780,6 +812,11 @@ async def ad_dialog(m, chat, frm, text):
         ad_drafts.pop(uid, None)
         aid = cur.lastrowid
         prev = f"📢 <b>{html(d['title'])}</b>\n{html(d['body'])}\n🔗 {html(ad_norm_url(d['url']))}"
+        if d.get("free"):
+            return await tg("sendMessage", chat_id=chat, parse_mode="HTML", disable_web_page_preview=True,
+                            text="✅ <b>Avtomatik tekshiruvdan o'tdi!</b>\n\n" + prev + "\n\n🎁 Necha ko'rish bepul berilsin?",
+                            reply_markup={"inline_keyboard": [[{"text": f"👁 {v:,} ko'rish — bepul".replace(",", " "), "callback_data": f"adfree:{aid}:{v}"}]
+                                                              for v in FREE_AD_PACKAGES]})
         await tg("sendMessage", chat_id=chat, parse_mode="HTML", disable_web_page_preview=True,
                  text="✅ <b>Avtomatik tekshiruvdan o'tdi!</b>\n\n" + prev + "\n\n👇 Necha marta ko'rsatilsin?",
                  reply_markup={"inline_keyboard": [[{"text": f"👁 {v:,} ko'rish — {st} ⭐".replace(",", " "), "callback_data": f"adpkg:{aid}:{i}"}]
@@ -911,6 +948,26 @@ async def ad_finished(aid):
     if ad:
         await tg("sendMessage", chat_id=ad["uid"], parse_mode="HTML",
                  text="🏁 <b>Reklamangiz yakunlandi!</b>\n\n" + ad_stats_text(ad) + "\n\nYana reklama: /reklama")
+
+
+def ad_stats_page(ad):
+    if not ad:
+        return "<!DOCTYPE html><meta charset=utf-8><p style='font-family:sans-serif;padding:30px'>Reklama topilmadi.</p>"
+    uniq = db.execute("SELECT COUNT(*) FROM ad_seen WHERE ad=?", (ad["id"],)).fetchone()[0]
+    ctr = ad["clicks"] / ad["views"] * 100 if ad["views"] else 0
+    pct = min(100, ad["views"] * 100 // max(1, ad["views_bought"]))
+    st = {"active": "🟢 Ko'rsatilmoqda", "done": "✅ Yakunlandi", "rejected": "❌ To'xtatilgan", "review": "⏳ Tekshiruvda"}.get(ad["status"], ad["status"])
+    return f"""<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="30"><title>Reklama statistikasi — Shar Yutar</title>
+<style>body{{font-family:system-ui,sans-serif;background:#1e3282;color:#fff;margin:0;padding:24px 16px;text-align:center}}
+.c{{max-width:420px;margin:0 auto;background:rgba(255,255,255,.1);border-radius:20px;padding:20px}}h1{{font-size:20px;margin:0 0 4px}}
+.g{{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}}.g div{{background:rgba(255,255,255,.12);border-radius:14px;padding:14px}}
+.g b{{display:block;font-size:28px;color:#ffd84d}}.bar{{height:12px;background:rgba(255,255,255,.2);border-radius:8px;overflow:hidden;margin-top:14px}}
+.bar i{{display:block;height:100%;width:{pct}%;background:linear-gradient(90deg,#ffd84d,#ffaa00)}}small{{opacity:.7}}</style></head><body><div class="c">
+<small>📢 Shar Yutar · reklama #{ad['id']}</small><h1>{html(ad['title'])}</h1><div>{st}</div>
+<div class="bar"><i></i></div><small>{ad['views']} / {ad['views_bought']} ko'rish ({pct}%)</small>
+<div class="g"><div><b>{ad['views']}</b>ko'rishlar</div><div><b>{uniq}</b>turli odamlar</div><div><b>{ad['clicks']}</b>bosishlar</div><div><b>{ctr:.1f}%</b>CTR</div></div>
+<p><small>Sahifa har 30 soniyada yangilanadi</small></p></div></body></html>"""
 
 
 AD_IMG = {}
@@ -1916,6 +1973,18 @@ async def http_handler(reader, writer):
             writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {len(img)}\r\nCache-Control: public, max-age=86400\r\nConnection: close\r\n\r\n".encode() + img)
         else:
             writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        try:
+            await writer.drain()
+        finally:
+            writer.close()
+        return
+    if path == "/adstat":
+        qs = dict(urllib.parse.parse_qsl(full_path.split("?", 1)[1] if "?" in full_path else ""))
+        ad = db.execute("SELECT * FROM ads WHERE id=? AND share=?", (int(qs.get("id", "0") or 0) if qs.get("id", "").isdigit() else 0,
+                                                                     qs.get("k", "") or "-")).fetchone()
+        body = ad_stats_page(ad).encode()
+        writer.write(f"HTTP/1.1 {'200 OK' if ad else '404 Not Found'}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(body)}\r\n"
+                     "Cache-Control: no-store\r\nConnection: close\r\n\r\n".encode() + body)
         try:
             await writer.drain()
         finally:
