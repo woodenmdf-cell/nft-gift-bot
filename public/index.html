@@ -8,7 +8,7 @@
   :root{--sat:env(safe-area-inset-top)}
   /* tablets (iPad) in fullscreen: everything a bit bigger */
   @media (min-width:700px) and (min-height:600px){
-    #score,#board,#exitBtn,#mini,#voice,#camBtns,#talkers,#boosts,#killAlert,#killOut,#watchBar,#toast,.screen>*,.ov>*{zoom:1.3}
+    #score,#board,#exitBtn,#mini,#voice,#camBtns,#chatFeed,#talkers,#boosts,#killAlert,#killOut,#watchBar,#toast,.screen>*,.ov>*{zoom:1.3}
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   html,body{margin:0;height:100%;overflow:hidden;background:#8ec9ff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:none}
@@ -126,6 +126,9 @@
   body.app #skins{display:flex;justify-content:center}
   body:not(.app) .appOnly{display:none!important}
   #loginBox{text-align:center;margin:-2px 0 10px}
+  #chatFeed{position:fixed;left:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:3;width:min(270px,70vw);pointer-events:none;display:flex;flex-direction:column;gap:4px}
+  #chatFeed div{background:rgba(15,30,80,.7);color:#fff;border-radius:10px;padding:5px 9px;font:700 12px system-ui,sans-serif;line-height:1.3;transition:opacity .6s}
+  #chatFeed b{color:#ffd84d}
   .best{margin-top:14px;opacity:.85;font-size:14px}
   .dead h2{background:#e8476b;padding:8px 26px;border-radius:12px;margin:0 0 14px;font-size:24px}
   .stat{font-size:18px;margin:4px 0}
@@ -191,6 +194,7 @@
 <canvas id="mini" class="hidden"></canvas>
 <div id="voice" class="hidden"><button id="micBtn">🎤<small>yoqish</small></button><button id="muteBtn">🔊</button></div>
 <div id="talkers"></div>
+<div id="chatFeed"></div>
 <div id="camBtns" class="hidden"><button id="camL">⟲</button><button id="camR">⟳</button></div>
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
@@ -1666,11 +1670,19 @@ function pickVoice(){
   return voicesCache;
 }
 if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { voicesCache = null; };
+const feed = [];
+function drawFeed(){
+  const el = document.getElementById('chatFeed'), now = performance.now();
+  while (feed.length && (feed.length > 4 || feed[0].until < now)) feed.shift();
+  const on = state === 'play' || state === 'watch';
+  el.innerHTML = on ? feed.map(f => `<div style="opacity:${Math.min(1, (f.until - now) / 1500)}"><b>🤖 ${esc(f.n)}:</b> ${esc(f.text)}</div>`).join('') : '';
+}
+setInterval(drawFeed, 250);
 function botSays(m){
   const now = performance.now();
   const p = byId.get(m.id); if (p) p.say = {text: m.text, until: now + 3800};
+  feed.push({n: m.n, text: m.text, until: now + 9000}); drawFeed();
   if (state !== 'play' && state !== 'watch') return;
-  talkers.set('bot' + m.id, {name: m.n, until: now + 2500}); drawTalkers();
   return;                                          // bot voices are switched off: speech bubble only
   try {
     const u = new SpeechSynthesisUtterance(m.text.replace(/[^\p{L}\p{N}\s,.!?'ʻ’-]/gu, ''));

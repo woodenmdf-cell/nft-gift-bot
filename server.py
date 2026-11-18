@@ -1522,11 +1522,16 @@ BOT_LINES = {
 }
 # two bots talk to each other about a real player, taking turns: (first bot, second bot)
 BOT_DIALOGS = [
-    ("{b}, {n}ni ko'ryapsanmi?", "Ha {a}, u juda tez yuryapti!"),
-    ("{b}, {n}ni birga ushlaymizmi?", "Ketdik {a}, chapdan men kelaman!"),
-    ("{b}, kim TOP-1 bo'ladi?", "Albatta men, {a}! {n} ham yomon emas."),
-    ("{n}, bizga qo'shil, {b} bilan jamoamiz!", "Ha {n}, uchalamiz birga o'ynaymiz!"),
-    ("{b}, {n} katta bo'lib ketdi-ku!", "Qo'rqma {a}, men undan tezroqman!"),
+    ("{b}, {n}ni ko'ryapsanmi?", "Ha {a}, u juda tez yuryapti!", "Unda men oldindan to'saman!"),
+    ("{b}, {n}ni birga ushlaymizmi?", "Ketdik {a}, chapdan men kelaman!", "Men o'ngdan! {n}, qochib qutulolmaysan!"),
+    ("{b}, kim TOP-1 bo'ladi?", "Albatta men, {a}!", "Hali ko'ramiz! {n} ham yomon emas."),
+    ("{n}, bizga qo'shil, {b} bilan jamoamiz!", "Ha {n}, uchalamiz birga o'ynaymiz!", "Faqat meni yemanglar!"),
+    ("{b}, {n} katta bo'lib ketdi-ku!", "Qo'rqma {a}, men undan tezroqman!", "Tezroq bo'lsang, qoch unda!"),
+    ("{b}, bugun nechta shar yeding?", "Uchta! Sen-chi, {a}?", "Men beshta! {n} esa o'ntaga yaqin."),
+    ("{b}, donachalar qayerda ko'p?", "Markazda, {a}! Lekin u yerda {n} bor.", "Voy, unda chetdan aylanaman."),
+    ("{b}, menga yordam ber!", "Nima bo'ldi, {a}?", "Orqamdan katta shar quvyapti!", "Qoch, men chalg'itaman!"),
+    ("{n}, nega jimsan?", "{a}, u o'yinga berilib ketgan!", "To'g'ri, {n} haqiqiy chempion!"),
+    ("{b}, 2x tezlikni ishlatdingmi?", "Ha, {a}, zo'r ekan!", "Men {n}dan qochganda ishlataman."),
 ]
 FEMALE_NAMES = {"Malika", "Dilnoza", "Kamola", "Lola", "Zarina", "Madina", "Sevara", "Gulnoza", "Sitora", "Aziza", "Shahzoda", "Nilufar"}
 TALK = {"next": 0.0, "last": {}}
@@ -1641,13 +1646,14 @@ BOT_AUDIO = False          # owner turned bot voices off: bots only show speech 
 async def bot_speak(b, text):
     female = b.name in FEMALE_NAMES
     audio = await tts(text, female, b.id) if BOT_AUDIO else None
-    out = json.dumps({"t": "say", "id": b.id, "n": b.name, "text": text, "f": 1 if female else 0, "a": 1 if audio else 0},
+    # "a": 1 tells every client (old cached pages too) not to read it aloud: bots talk in text only
+    out = json.dumps({"t": "say", "id": b.id, "n": b.name, "text": text, "f": 1 if female else 0, "a": 1},
                      separators=(",", ":"), ensure_ascii=False)
     targets = [c for c in list(conns) if c.acc and not c.closed]
     for c in targets:
         c.send_raw(out)
     if not audio:
-        return 0.08 * len(text)
+        return max(2.2, 0.07 * len(text))            # time to read the bubble before the next bot answers
     # stream it like voice chat: ~200 ms packets, so it plays through the same speaker path that already works
     for i in range(0, len(audio), 3200):
         pkt = json.dumps({"t": "v", "id": b.id, "n": b.name, "b": 1, "d": base64.b64encode(audio[i:i + 3200]).decode()},
@@ -1676,16 +1682,15 @@ def bot_chatter():
                     return
     if not humans or now < TALK["next"] or SPEECH_Q:
         return
-    TALK["next"] = now + random.uniform(10, 22)
-    if random.random() < 0.3:                        # sometimes two bots chat with each other about a player
+    TALK["next"] = now + random.uniform(8, 16)
+    if random.random() < 0.6:                        # sometimes two bots chat with each other about a player
         bots = [b for b in game.players if b.bot and b.alive]
         if len(bots) >= 2:
             a, b2 = random.sample(bots, 2)
             h = random.choice(humans)
-            first, second = random.choice(BOT_DIALOGS)
             TALK["last"][a.id] = TALK["last"][b2.id] = now
-            queue_line(a, first.format(a=a.name, b=b2.name, n=h.name))
-            queue_line(b2, second.format(a=a.name, b=b2.name, n=h.name))
+            for i, line in enumerate(random.choice(BOT_DIALOGS)):      # they take turns: a, b, a, b...
+                queue_line(a if i % 2 == 0 else b2, line.format(a=a.name, b=b2.name, n=h.name))
             return
     pairs = []
     for b in game.players:
