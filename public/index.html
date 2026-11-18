@@ -313,6 +313,7 @@
   <div class="stk">🎞 Kadr tezligi (FPS)</div><div class="seg" id="segFps"></div>
   <div class="hint" id="fpsHint" style="margin-top:6px;font-size:12px;opacity:.75"></div>
   <div class="stk">📊 FPS hisoblagich</div><div class="seg" id="segShow"></div>
+  <div class="stk">🤖 Botlar ovozi</div><div class="seg" id="segBotV"></div>
   <button class="play" id="setOk" style="width:100%;margin-top:16px;font-size:18px;padding:12px">Saqlash</button>
 </div></div>
 <div id="fpsLbl" class="hidden"></div>
@@ -679,6 +680,7 @@ function onMsg(m){
       if (killIn) updAntiBtn();
       break;
     case 'v': voiceIn(m.id, m.n || '', m.d); break;
+    case 'say': botSays(m); break;
     case 'tops': topsData = m; renderTops(); break;
     case 'applogin': store.set('loginCode', m.code); openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
     case 'session': store.set('session', m.token); store.set('loginCode', ''); break;
@@ -912,6 +914,7 @@ function drawLabel(p){
   const nm = (p.talk > performance.now() ? '🔊 ' : '') + (p.tier >= 0 ? RANKS[p.tier].e + ' ' : '') + p.name;
   const ns = textSprite(nm, 800, Math.round(fq * 0.9), '#fff', 'rgba(0,0,0,.5)');
   ctx.drawImage(ns.cv, p.P.x - ns.w * k / 2, y - ns.base * k, ns.w * k, ns.h * k);
+  if (p.say && p.say.until > performance.now()) drawBubble(p.say.text, p.P.x, y - fs * 2.3);
 }
 // outlined text drawn once and reused (stroking text every frame was a big cost)
 const TEXTS = new Map();
@@ -1204,6 +1207,7 @@ function openAcc(){
 }
 function startGame(){
   try { audioCtx(); } catch (e) {}
+  unlockSpeech();
   if (!connected) { toast('Serverga ulanmoqda...'); return; }
   store.set('name', nameVal());
   send({t: 'play', name: nameVal()});
@@ -1591,12 +1595,14 @@ function renderSettings(){
     `<button data-f="${f}" class="${d.fps === f ? 'on' : ''}">${f}<small>${f === 30 ? 'tejamkor' : f === 60 ? 'oddiy' : f === 90 ? 'yuqori' : 'ultra'}</small></button>`).join('');
   document.getElementById('segShow').innerHTML = [[false, "O'chiq"], [true, 'Yoqiq']].map(([v, n]) =>
     `<button data-s="${v}" class="${d.show === v ? 'on' : ''}">${n}</button>`).join('');
+  document.getElementById('segBotV').innerHTML = [[false, "O'chiq"], [true, 'Yoqiq']].map(([v, n]) =>
+    `<button data-bv="${v}" class="${d.botv === v ? 'on' : ''}">${n}</button>`).join('');
   document.getElementById('fpsHint').textContent = `Hozir Telegram o'yinga ${displayHz} FPS gacha ruxsat beryapti` +
     (d.fps > displayHz ? ` — ${d.fps} tanlansa ham ${displayHz} da ishlaydi (iPhone'da Telegram 60 bilan cheklaydi)` : '') +
     '. Telefon qizisa yoki batareya tez tugasa — 30 FPS va «Silliq»ni tanlang.';
 }
 document.getElementById('setBtn').onclick = () => {
-  setDraft = {gfx, fps: fpsCap, show: showFps};
+  setDraft = {gfx, fps: fpsCap, show: showFps, botv: botVoice};
   renderSettings(); show('setOv', true);
 };
 document.getElementById('setOv').addEventListener('click', e => {
@@ -1604,8 +1610,9 @@ document.getElementById('setOv').addEventListener('click', e => {
   if (b.dataset.g) setDraft.gfx = b.dataset.g;
   else if (b.dataset.f) setDraft.fps = +b.dataset.f;
   else if (b.dataset.s) setDraft.show = b.dataset.s === 'true';
+  else if (b.dataset.bv) setDraft.botv = b.dataset.bv === 'true';
   else if (b.id === 'setOk') {
-    gfx = setDraft.gfx; fpsCap = setDraft.fps; showFps = setDraft.show;
+    gfx = setDraft.gfx; fpsCap = setDraft.fps; showFps = setDraft.show; botVoice = setDraft.botv; store.set('botVoice', botVoice);
     store.set('gfx', gfx); store.set('fps', fpsCap); store.set('showFps', showFps);
     send({t: 'prefs', p: {gfx, fps: fpsCap, showFps}});          // kept on the server too (Telegram may wipe phone storage)
     applyGfx(); show('setOv', false); toast(`✅ ${GFX[gfx][0]} · ${fpsCap} FPS`); return;
@@ -1642,6 +1649,45 @@ document.getElementById('appDelete').onclick = () => {
   if (!confirm("Akkauntingiz, tokenlar va rank butunlay o'chiriladi. Bu qaytarib bo'lmaydi. Davom etasizmi?")) return;
   send({t: 'delete_account'}); store.set('session', '');
 };
+
+// ---------------------------------------------------------------- talking bots (phone's own speech engine)
+let botVoice = store.get('botVoice', true), speechReady = false, voicesCache = null;
+function unlockSpeech(){
+  if (speechReady || !window.speechSynthesis) return;
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); speechReady = true; } catch (e) {}
+}
+function pickVoice(){
+  if (voicesCache) return voicesCache;
+  const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  if (!vs.length) return null;
+  // Uzbek if the phone has it, otherwise Turkish (reads Uzbek Latin well), then Russian
+  voicesCache = vs.find(v => /^uz/i.test(v.lang)) || vs.find(v => /^tr/i.test(v.lang)) || vs.find(v => /^kk|^az/i.test(v.lang)) || vs.find(v => /^ru/i.test(v.lang)) || vs[0];
+  return voicesCache;
+}
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { voicesCache = null; };
+function botSays(m){
+  const now = performance.now();
+  const p = byId.get(m.id); if (p) p.say = {text: m.text, until: now + 3800};
+  if (state !== 'play' && state !== 'watch') return;
+  talkers.set('bot' + m.id, {name: m.n, until: now + 2500}); drawTalkers();
+  if (!botVoice || voiceMuted || !window.speechSynthesis) return;
+  try {
+    const u = new SpeechSynthesisUtterance(m.text.replace(/[^\p{L}\p{N}\s,.!?'ʻ’-]/gu, ''));
+    const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }
+    const seed = (m.id * 37) % 10 / 10;                        // every bot keeps its own voice
+    u.pitch = m.f ? 1.35 + seed * 0.3 : 0.75 + seed * 0.3; u.rate = 1.05; u.volume = 1;
+    if (speechSynthesis.speaking) speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function drawBubble(text, x, y){
+  const t = textSprite(text, 800, 15, '#1b2240', 'rgba(255,255,255,0)');
+  const w = t.w + 10, h = t.h + 4, bx = x - w / 2, by = y - h;
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  ctx.beginPath(); ctx.roundRect(bx, by, w, h, 12); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 7, by + h); ctx.lineTo(x + 7, by + h); ctx.lineTo(x, by + h + 8); ctx.fill();
+  ctx.drawImage(t.cv, bx + 5, by + 2, t.w, t.h);
+}
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>

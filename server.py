@@ -75,6 +75,9 @@ def rad(m):
     return 0.45 * math.sqrt(m)
 
 
+BOT_CHASE_K, BOT_FLEE_K, BOT_WANDER_K = 0.82, 0.88, 0.6     # bots move slower than a player at full speed
+
+
 def speed_of(m):
     return 9 * (m / 10) ** -0.2
 
@@ -1153,12 +1156,12 @@ class Game:
             if abs(b.z) > S - 15:
                 dz -= math.copysign(15, b.z)
             l = math.hypot(dx, dz) or 1
-            b.dx, b.dz, b.k = dx / l, dz / l, 1.0
+            b.dx, b.dz, b.k = dx / l, dz / l, BOT_FLEE_K
             return
         if prey and random.random() < 0.85:
             dx, dz = prey.x + prey.vx * 0.4 - b.x, prey.z + prey.vz * 0.4 - b.z
             l = math.hypot(dx, dz) or 1
-            b.dx, b.dz, b.k = dx / l, dz / l, 1.0
+            b.dx, b.dz, b.k = dx / l, dz / l, BOT_CHASE_K
             return
         cx, cz = self.cell(b.x, b.z)
         best, bd = None, 1e9
@@ -1174,10 +1177,11 @@ class Game:
         if best is not None:
             dx, dz = self.fx[best] - b.x, self.fz[best] - b.z
             l = math.hypot(dx, dz) or 1
-            b.dx, b.dz = dx / l + random.uniform(-.25, .25), dz / l + random.uniform(-.25, .25)
+            dx, dz = dx / l + random.uniform(-.25, .25), dz / l + random.uniform(-.25, .25)
         else:
-            b.dx, b.dz = random.uniform(-1, 1), random.uniform(-1, 1)
-        b.k = 0.8
+            dx, dz = random.uniform(-1, 1), random.uniform(-1, 1)
+        l = math.hypot(dx, dz) or 1                  # unit direction: wandering bots were faster than players
+        b.dx, b.dz, b.k = dx / l, dz / l, BOT_WANDER_K
 
     # --- one simulation step
     def step(self, dt):
@@ -1267,6 +1271,8 @@ class Game:
             b.respawn_at = time.monotonic() + 1.5
             return
         c = b.conn
+        if by.bot and random.random() < 0.8:
+            bot_say(by, "ate", b.name)
         if c:
             c.death = {"m": b.m, "at": time.monotonic()}
             sc = b.round_bank + int(b.m * 10)
@@ -1499,6 +1505,57 @@ async def ws_session(reader, writer):
 
 RESUME = {}           # uid -> what their blob had when the connection dropped
 RESUME_TTL = 600      # seconds a dropped game can be picked up again
+
+
+# ---------------------------------------------------------------- talking bots
+BOT_LINES = {
+    "chase": ["{n}, qochib qutulolmaysan!", "{n}, hozir seni yeyman!", "Ehe, {n}, kel bu yoqqa!", "{n}, sen mening tushligimsan!",
+              "{n}, qayoqqa qochyapsan?", "Ushla {n}ni!"],
+    "fear": ["{n}, iltimos meni yema!", "Voy, {n} kelyapti, qochdim!", "{n}, do'st bo'laylik!", "{n}, sen juda kattasan-ku!",
+             "Yordam bering, {n} quvyapti!"],
+    "even": ["Salom {n}! Kim kuchli ekan?", "{n}, poyga qilamizmi?", "{n}, sendan katta bo'laman!", "{n}, TOP-1 meniki bo'ladi!"],
+    "ate": ["{n}, mazali ekansan!", "Rahmat {n}, to'ydim!", "{n}, keyingi safar ehtiyot bo'l!", "Bitta {n} kam!"],
+    "top": ["Men TOP-1man, kim tutadi?", "Hammangizni yeyman!", "Hech kim meni ushlay olmaydi!"],
+}
+FEMALE_NAMES = {"Malika", "Dilnoza", "Kamola", "Lola", "Zarina", "Madina", "Sevara", "Gulnoza", "Sitora", "Aziza", "Shahzoda", "Nilufar"}
+TALK = {"next": 0.0, "last": {}}
+
+
+def bot_say(b, kind, name=""):
+    text = random.choice(BOT_LINES[kind]).format(n=name)
+    TALK["last"][b.id] = time.time()
+    out = json.dumps({"t": "say", "id": b.id, "n": b.name, "text": text, "f": 1 if b.name in FEMALE_NAMES else 0},
+                     separators=(",", ":"), ensure_ascii=False)
+    for c in list(conns):
+        if c.acc and not c.closed:
+            c.send_raw(out)
+
+
+def bot_chatter():
+    """Every so often a bot near a real player says something to them by name."""
+    now = time.time()
+    if now < TALK["next"]:
+        return
+    humans = [p for p in game.players if p.alive and not p.bot and p.conn and not p.conn.closed]
+    if not humans:
+        return
+    TALK["next"] = now + random.uniform(10, 22)
+    pairs = []
+    for b in game.players:
+        if not b.bot or not b.alive or now - TALK["last"].get(b.id, 0) < 45:
+            continue
+        for h in humans:
+            d = math.hypot(b.x - h.x, b.z - h.z)
+            if d < 30 + rad(b.m) + rad(h.m):
+                pairs.append((d, b, h))
+    if not pairs:
+        top = max((p for p in game.players if p.alive), key=lambda p: p.m, default=None)
+        if top and top.bot and now - TALK["last"].get(top.id, 0) > 60:
+            bot_say(top, "top")
+        return
+    _, b, h = min(pairs, key=lambda t: t[0])
+    kind = "chase" if b.m > h.m * EAT_RATIO else "fear" if h.m > b.m * EAT_RATIO else "even"
+    bot_say(b, kind, h.name)
 
 
 ORPHAN_SEC = 20          # seconds a closed player's ball stays in the arena
@@ -2214,6 +2271,7 @@ async def game_loop():
             game.step(dt)
             if n % 10 == 0:
                 tick_orphans()
+                bot_chatter()
             n += 1
             if game.meta_dirty:
                 game.meta_dirty = False
