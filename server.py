@@ -1550,13 +1550,45 @@ async def tts_voice():
     return TTS["voice"]
 
 
-async def tts(text, female, seed):
-    voice = await tts_voice()
-    if not voice:
+EDGE_VOICES = {True: "uz-UZ-MadinaNeural", False: "uz-UZ-SardorNeural"}     # natural Uzbek neural voices
+
+
+async def tts_edge(text, female, seed):
+    """Microsoft's online neural voices (edge-tts). Returns 16 kHz mu-law or None if the service is unreachable."""
+    if TTS.get("edge_off", 0) > time.time():
         return None
+    pitch = (seed % 5 - 2) * 6                       # every bot sounds a little different
+    rate = (seed % 3) * 5
+    tmp = f"/tmp/tts_{secrets.token_hex(4)}.mp3"
+    cmd = (f'edge-tts --voice {EDGE_VOICES[female]} --pitch={pitch:+d}Hz --rate=+{rate}% --text "$TXT" --write-media {tmp} >/dev/null 2>&1 && '
+           f'ffmpeg -loglevel quiet -i {tmp} -af "volume=1.4" -ar 16000 -ac 1 -f mulaw pipe:1; rm -f {tmp}')
+    try:
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+                                                     env={**os.environ, "TXT": text})
+        audio = (await asyncio.wait_for(proc.communicate(), 10))[0]
+    except Exception as e:
+        log.info("edge tts failed: %s", e)
+        audio = b""
+    if len(audio) < 1600:                           # failed: use the offline voice for a while
+        TTS["edge_off"] = time.time() + 300
+        log.info("edge tts unavailable, falling back to espeak for 5 min")
+        return None
+    return audio
+
+
+async def tts(text, female, seed):
     key = (text, female, seed)
     if key in TTS["cache"]:
         return TTS["cache"][key]
+    audio = await tts_edge(text, female, seed)
+    if audio:
+        if len(TTS["cache"]) > 300:
+            TTS["cache"].clear()
+        TTS["cache"][key] = audio
+        return audio
+    voice = await tts_voice()
+    if not voice:
+        return None
     variant = ("f1", "f2", "f3", "f4")[seed % 4] if female else ("m1", "m3", "m4", "m7")[seed % 4]
     pitch = (62 + seed % 4 * 6) if female else (30 + seed % 4 * 6)
     cmd = (f'espeak-ng -v {voice}+{variant} -s 155 -p {pitch} -a 180 --stdout "$TXT" | '
@@ -2424,6 +2456,11 @@ async def main():
         except (NotImplementedError, RuntimeError):
             pass
     await tts_voice()                              # log which speech voice the bots will use
+
+    async def tts_selftest():
+        a = await tts_edge("Salom, men Shar Yutar botiman!", True, 1)
+        log.info("natural uzbek voice: %s", f"ok ({len(a) / 16000:.1f} s)" if a else "unavailable")
+    asyncio.get_running_loop().create_task(tts_selftest())
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
     await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed())
