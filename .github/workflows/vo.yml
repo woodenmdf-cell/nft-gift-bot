@@ -1,20 +1,13 @@
-name: vo-fetch
+name: vo-cleanup
 on:
   push:
     branches: [vo-tmp]
 permissions:
   contents: write
 jobs:
-  fetch:
+  clean:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Download
-        run: |
-          mkdir out
-          while read n u; do curl -sSfL -o "out/v$n.mp3" "$u"; done < urls.txt
-          ls -la out
-      - name: Release
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create vo-tmp out/*.mp3 --target vo-tmp --title vo-tmp --notes tmp --prerelease
+        run: gh release delete vo-tmp --cleanup-tag -y -R ${{ github.repository }}
