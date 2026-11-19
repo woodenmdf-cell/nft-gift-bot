@@ -50,6 +50,15 @@ TOKEN_GOAL = 1000000      # every 1M account tokens -> 100 stars (same rate: 10K
 GOAL_STARS = 100
 WITHDRAW_MIN = 50        # smallest withdraw request in stars
 SPEED_COST = 1000         # round tokens for 30 s of 2x speed
+# ⛏ Mining subscription: paid straight to the bot in Telegram Stars (never from the game balance)
+MINE_PRICE = 200          # ⭐ for 30 days
+MINE_DAYS = 30
+MINE_RATE = 10            # ⛏ mined per hour while the subscription is on
+MINE_SPEED = 1.08         # miners move 8% faster
+MINE_FOOD = 1.25          # and grow 25% faster from food
+MINE_BOOST_COST = 100     # ⛏ for one in-game boost
+MINE_BOOST_MASS = 100     # = +1K tokens on the ball
+MINE_BOOST_GAP = 60       # seconds between boosts
 KILL_COST = ANTI_COST = REVIVE_COST = 10
 KILL_TIME = 10.0
 BOT_LIMIT = 50000         # a bot reaching this many tokens leaves the arena
@@ -95,7 +104,8 @@ CREATE TABLE IF NOT EXISTS payments(charge_id TEXT PRIMARY KEY, uid INTEGER, ite
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 """)
 db.commit()
-for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0", "rp INTEGER DEFAULT 0", "prefs TEXT"):
+for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0", "rp INTEGER DEFAULT 0", "prefs TEXT",
+            "mine_until INTEGER DEFAULT 0", "mine_bal REAL DEFAULT 0", "mine_last INTEGER DEFAULT 0"):
     try:
         db.execute(f"ALTER TABLE users ADD COLUMN {col}")
     except sqlite3.OperationalError:
@@ -214,6 +224,8 @@ class Account:
             self.ref, self.ref_earned, self.sub_bonus = None, 0, 0
             self.rp = 0
             self.prefs = ""
+            self.mine_until = self.mine_last = 0
+            self.mine_bal = 0.0
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
@@ -230,6 +242,7 @@ class Account:
         self.sub_bonus = r["sub_bonus"] or 0
         self.rp = r["rp"] or 0
         self.prefs = r["prefs"] or ""
+        self.mine_until, self.mine_bal, self.mine_last = r["mine_until"] or 0, r["mine_bal"] or 0.0, r["mine_last"] or 0
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
         if "yashil" not in self.owned:
             self.owned.insert(0, "yashil")
@@ -249,8 +262,9 @@ class Account:
     def save(self):
         if self.uid is None:
             return
-        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=?, rp=? WHERE uid=?",
-                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.sub_bonus, self.rp, self.uid))
+        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=?, rp=?, mine_until=?, mine_bal=?, mine_last=? WHERE uid=?",
+                   (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.sub_bonus, self.rp,
+                    self.mine_until, self.mine_bal, self.mine_last, self.uid))
         db.commit()
 
     def add_tokens(self, n):
@@ -269,6 +283,25 @@ class Account:
             return []
         rows = db.execute("SELECT stars, status, created, gift FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
         return [{"stars": r["stars"], "gift": gift_label(r["gift"], r["stars"]), "status": STATUS.get(r["status"], r["status"]), "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
+
+    # --- mining
+    def mining(self):
+        return self.mine_until > time.time()
+
+    def mine_update(self):
+        """Adds what was mined since the last look (only the hours inside the paid period count)."""
+        now = time.time()
+        if self.mine_last and self.mine_until > self.mine_last:
+            upto = min(now, self.mine_until)
+            if upto > self.mine_last:
+                self.mine_bal += (upto - self.mine_last) / 3600 * MINE_RATE
+        self.mine_last = int(now) if self.mine_until > now else self.mine_until
+
+    def mine_public(self):
+        self.mine_update()
+        return {"on": self.mining(), "until": self.mine_until, "bal": int(self.mine_bal), "rate": MINE_RATE,
+                "price": MINE_PRICE, "days": MINE_DAYS, "speed": MINE_SPEED, "food": MINE_FOOD,
+                "boost_cost": MINE_BOOST_COST, "boost_tokens": MINE_BOOST_MASS * 10}
 
     def finish_round(self, p):
         """Adds the round's RP and returns what the client animates."""
@@ -290,7 +323,7 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "bot": BOT_USERNAME, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
+                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "mine": self.mine_public(), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "bot": BOT_USERNAME, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -629,6 +662,15 @@ async def handle_payment(uid, sp):
             acc.save()
             if conn:
                 conn.toast(f"KIL tugagan edi — {ANTI_COST} ⭐ balansingizga qo'shildi")
+    elif item == "mine":
+        acc.mine_update()
+        acc.mine_until = int(max(time.time(), acc.mine_until) + MINE_DAYS * 86400)
+        acc.mine_last = int(time.time())
+        acc.save()
+        if conn:
+            conn.toast(f"⛏ Mayning yoqildi! {time.strftime('%d.%m.%Y', time.localtime(acc.mine_until))} gacha")
+        await tg("sendMessage", chat_id=puid, text=f"⛏ Mayning {MINE_DAYS} kunga yoqildi! Har soatda {MINE_RATE} ⛏ yig'iladi.\n"
+                                                    f"O'yinda: +{round((MINE_SPEED - 1) * 100)}% tezlik va +{round((MINE_FOOD - 1) * 100)}% tezroq o'sish.")
     elif item == "revive":
         if not (conn and game.revive(conn)):
             acc.stars += REVIVE_COST
@@ -1120,7 +1162,7 @@ class Game:
         p.last_pos = now
         # movement allowance builds up over time, so packets that arrive bunched together
         # on a shaky mobile network are not clipped (clipping made blobs jump back = "lag")
-        v = speed_of(p.m) * (2 if p.speed_t > 0 else 1)
+        v = speed_of(p.m) * (2 if p.speed_t > 0 else 1) * (MINE_SPEED if p.conn and p.conn.acc.mining() and not getattr(p.conn, "app", False) else 1)
         p.mbudget = min(v * 1.5 + 3, getattr(p, "mbudget", v) + v * dt * 1.3)
         dx, dz = x - p.x, z - p.z
         d = math.hypot(dx, dz)
@@ -1220,7 +1262,10 @@ class Game:
                     for f in list(cellset):
                         dx, dz = self.fx[f] - p.x, self.fz[f] - p.z
                         if dx * dx + dz * dz < r * r:
-                            p.m = min(MAX_M, p.m + (5 if self.fbig[f] else 1))
+                            gain = 5 if self.fbig[f] else 1
+                            if not p.bot and p.conn and p.conn.acc.mining() and not getattr(p.conn, "app", False):
+                                gain *= MINE_FOOD
+                            p.m = min(MAX_M, p.m + gain)
                             self.place_food(f)
         # blobs touching: the bigger one swallows the smaller one whole
         alive = self.alive()
@@ -1917,6 +1962,18 @@ async def on_message(c, m):
         for o in list(conns):
             if o is not c and o.acc:
                 o.send_raw(out)
+    elif t == "mineboost" and p and p.alive:        # spend mined ⛏ for a quick growth
+        c.acc.mine_update()
+        if c.acc.mine_bal < MINE_BOOST_COST:
+            return c.toast(f"⛏ Kamida {MINE_BOOST_COST} ⛏ kerak")
+        if time.time() - getattr(p, "mboost_t", 0) < MINE_BOOST_GAP:
+            return c.toast("⛏ Bir daqiqada bir marta ishlatiladi")
+        p.mboost_t = time.time()
+        c.acc.mine_bal -= MINE_BOOST_COST
+        c.acc.save()
+        p.m = min(MAX_M, p.m + MINE_BOOST_MASS)
+        c.send({"t": "mineboost", "add": MINE_BOOST_MASS * 10})
+        push_acc(c.acc)
     elif t == "speed" and p and p.alive:
         if p.speed_t > 0:
             return
@@ -1991,6 +2048,8 @@ async def on_message(c, m):
             price, title = ANTI_COST, "ANTI-KIL"
         elif item == "revive":
             price, title = REVIVE_COST, "Davom etish"
+        elif item == "mine":
+            price, title = MINE_PRICE, f"⛏ Mayning — {MINE_DAYS} kun"
         else:
             return
         link = await tg("createInvoiceLink", title=title, description=f"Shar Yutar: {title}",
@@ -2038,7 +2097,7 @@ async def on_message(c, m):
         asyncio.create_task(notify_admin_request(cur.lastrowid, c.acc, price, gift))
 
 
-APP_BLOCKED = {"invoice", "withdraw", "kill", "anti", "v"}
+APP_BLOCKED = {"invoice", "withdraw", "kill", "anti", "v", "mineboost"}
 LOGIN_CODES = {}            # code -> (conn, created)
 LOGIN_DONE = {}             # code -> (session token, time): picked up when the app reconnects
 

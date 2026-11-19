@@ -24,6 +24,7 @@
   .bbtn{pointer-events:auto;border:0;border-radius:14px;padding:9px 13px;font-weight:800;font-size:13px;color:#fff;box-shadow:0 4px 0 rgba(0,0,0,.2);display:flex;align-items:center;gap:6px}
   .bbtn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.2)}
   .bbtn.speed{background:linear-gradient(#4aa8ff,#2a78e0)}
+  .bbtn.mine{background:linear-gradient(#ffb84d,#e0820f)}
   .bbtn.kill{background:linear-gradient(#ff5a6e,#d81f3c)}
   .ov{position:fixed;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;background:rgba(5,10,35,.55);padding:16px}
   .kcard{background:#1d2f7a;color:#fff;border-radius:18px;padding:18px 16px;width:min(340px,94vw);text-align:center}
@@ -199,6 +200,7 @@
 <div id="board" class="hud hidden"></div>
 <div id="boosts" class="hidden">
   <button class="bbtn speed" id="bSpeed">⚡ 2x tezlik <span class="tag" id="tSpeed">BEPUL</span></button>
+  <button class="bbtn mine tgOnly hidden" id="bMine">⛏ +1K <span class="tag" id="tMine">100 ⛏</span></button>
   <button class="bbtn kill tgOnly" id="bKill">🎯 KIL <span class="tag">10 ⭐</span></button>
 </div>
 
@@ -252,6 +254,13 @@
     <div class="bar"><i id="accBar" style="width:0%"></i></div>
     <div class="hint" id="accLeft"></div>
     <div class="hint">O'yinda har 50K token yig'ilganda avtomatik hisobga o'tadi. 50K ga yetmagani o'tmaydi.</div>
+  </div>
+  <div class="card tgOnly" id="mineCard">
+    <div class="k">⛏ Mayning</div>
+    <div class="v" id="mineBal">0 ⛏</div>
+    <div class="hint" id="mineInfo"></div>
+    <button class="wd" id="mineBuy">⛏ 30 kun — 200 ⭐</button>
+    <div class="hint" style="font-size:11px;opacity:.7">To'lov Telegram Stars orqali to'g'ridan-to'g'ri qilinadi (o'yin balansidan yechilmaydi).</div>
   </div>
   <div class="card tgOnly">
     <div class="k">Balans</div>
@@ -686,6 +695,7 @@ function onMsg(m){
     case 'v': if (m.b && !botVoice) break; voiceIn(m.id, m.n || '', m.d); break;
     case 'say': botSays(m); break;
     case 'tops': topsData = m; renderTops(); break;
+    case 'mineboost': if (me) popups.push({x: me.x, z: me.z - rad(me.m), t: 0, txt: '⛏ +' + fmt(m.add), big: true}); haptic('medium'); break;
     case 'applogin': store.set('loginCode', m.code); openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
     case 'session': store.set('session', m.token); store.set('loginCode', ''); break;
     case 'ad': showAd(m); break;
@@ -720,7 +730,7 @@ function onMsg(m){
 // ---------- local movement of my own blob (the server checks the speed) ----------
 function moveMe(dt){
   const d = inputDir();
-  let sp = speedOf(me.m) * d.k * (speedLeft > 0 ? 2 : 1);
+  let sp = speedOf(me.m) * d.k * (speedLeft > 0 ? 2 : 1) * (acc.mine && acc.mine.on && !APP ? acc.mine.speed : 1);
   const a = Math.min(1, dt * 6);
   me.vx = (me.vx || 0) + (d.x * sp - (me.vx || 0)) * a;
   me.vz = (me.vz || 0) + (d.z * sp - (me.vz || 0)) * a;
@@ -745,6 +755,8 @@ function updHud(){
   if (rank > 5) h += `<div class="sep">···</div><div class="me"><span>${rank}. ${esc(me.name)}</span><span>${fmt(me.m * 10)}</span></div>`;
   document.getElementById('board').innerHTML = h;
   document.getElementById('bSpeed').classList.toggle('on', speedLeft > 0);
+  const mn = acc.mine; show('bMine', !!(mn && !APP && (mn.on || mn.bal >= mn.boost_cost)));
+  if (mn) { document.getElementById('bMine').classList.toggle('dis', mn.bal < mn.boost_cost); document.getElementById('tMine').textContent = mn.bal + ' ⛏'; }
   document.getElementById('tSpeed').textContent = speedLeft > 0 ? Math.ceil(speedLeft) + 's' : '1K token';
   // KIL opens only when you are in the top 3 yourself
   document.getElementById('bKill').classList.toggle('dis', !(rank >= 1 && rank <= 3));
@@ -1195,6 +1207,14 @@ function openAcc(){
   if (APP) { show('appLogout', !acc.guest); show('appDelete', !acc.guest); }
   document.getElementById('goalHint').textContent = `Har ${goal >= 1e6 ? goal / 1e6 + 'M' : fmt(goal)} token avtomatik ${gst} ⭐ ga aylanib, balansga tushadi.`;
   document.getElementById('accStars').textContent = acc.stars + ' ⭐';
+  const mn = acc.mine;
+  if (mn) {
+    document.getElementById('mineBal').textContent = mn.bal + ' ⛏';
+    document.getElementById('mineInfo').innerHTML = mn.on
+      ? `🟢 Faol — ${new Date(mn.until * 1000).toLocaleDateString('ru-RU')} gacha<br>Har soatda +${mn.rate} ⛏ · o'yinda +${Math.round((mn.speed - 1) * 100)}% tezlik, +${Math.round((mn.food - 1) * 100)}% tezroq o'sish<br>O'yinda «⛏ +1K» tugmasi: ${mn.boost_cost} ⛏ → +${fmt(mn.boost_tokens)} token`
+      : `Mayning har soatda ${mn.rate} ⛏ yig'adi (oyiga ~${mn.rate * 24 * 30} ⛏).<br>⛏ bilan o'yinda sharingizni tez kattalashtirasiz, mayning paytida +${Math.round((mn.speed - 1) * 100)}% tezlik va +${Math.round((mn.food - 1) * 100)}% tezroq o'sish.`;
+    document.getElementById('mineBuy').textContent = (mn.on ? '⛏ Yana 30 kun qo\'shish — ' : '⛏ 30 kun — ') + mn.price + ' ⭐';
+  }
   const gifts = acc.gifts || [];
   document.getElementById('giftGrid').innerHTML = gifts.map(g =>
     `<button class="gcard" data-gift="${g.id}" ${acc.guest || acc.stars < g.price ? 'disabled' : ''}><span class="ge">${g.emoji}</span>${esc(g.title)}<span class="gp">${g.price} ⭐</span></button>`).join('');
@@ -1701,6 +1721,13 @@ function drawBubble(text, x, y){
   ctx.beginPath(); ctx.moveTo(x - 7, by + h); ctx.lineTo(x + 7, by + h); ctx.lineTo(x, by + h + 8); ctx.fill();
   ctx.drawImage(t.cv, bx + 5, by + 2, t.w, t.h);
 }
+
+// ---------------------------------------------------------------- mining
+document.getElementById('mineBuy').onclick = () => {
+  if (!tg) return toast("To'lov faqat Telegram ichida ishlaydi");
+  send({t: 'invoice', item: 'mine'});
+};
+onTap('bMine', () => send({t: 'mineboost'}));
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
 </script>
