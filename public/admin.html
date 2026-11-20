@@ -141,9 +141,10 @@ function render(){
     ['🟢 Hozir o\'ynayapti', s.online, `${s.bots} ta bot maydonda`],
     ['💰 Stars to\'lovlari', s.paid_total + ' ⭐', `bugun ${s.paid_today} ⭐ · ${s.payments_n} ta`, 'good'],
     ['🎁 Berilgan sovg\'alar', s.sent_stars + ' ⭐', 'so\'rovlar bo\'yicha'],
+    ['🏦 Sovg\'a fondi', (s.fund || 0) + ' ⭐', 'to\'lovlarning 70% · navbat shundan', 'good'],
     ['⏳ Kutilayotgan so\'rov', s.pending_n, `${s.pending_stars} ⭐`, s.pending_n ? 'warn' : ''],
     ['⭐ Balanslardagi jami', s.stars_balance + ' ⭐', 'yechib olinishi mumkin', s.stars_balance ? 'warn' : ''],
-    ['🪙 Hisoblardagi token', fmt(s.tokens), 'har 1M = 100 ⭐'],
+    ['🪙 Hisoblardagi token', fmt(s.tokens), 'har 2M = 100 ⭐'],
     ['🔗 Taklif bilan kelgan', s.refs, 'referal'],
   ];
   $('statGrid').innerHTML = cards.map(([k, v, sub, cls]) => `<div class="st ${cls || ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join('');

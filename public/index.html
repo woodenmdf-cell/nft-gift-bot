@@ -265,10 +265,11 @@
   <div class="card tgOnly">
     <div class="k">Balans</div>
     <div class="v" id="accStars">0 ⭐</div>
-    <div class="hint" id="goalHint">Har 1M token avtomatik 100 ⭐ ga aylanib, balansga tushadi.</div>
+    <div class="hint" id="goalHint">Har 2M token avtomatik 100 ⭐ ga aylanib, balansga tushadi.</div>
     <div class="k" style="margin-top:12px">🎁 Sovg'a olish</div>
     <div id="giftGrid"></div>
     <div class="hint" id="wdHint"></div>
+    <div class="hint tgOnly" id="fundHint" style="margin-top:6px"></div>
   </div>
   <div class="card" id="refCard">
     <div class="k">👥 Do'stlarni taklif qiling</div>
@@ -578,7 +579,7 @@ let acc = {tokens: 0, stars: 0, owned: ['yashil'], skin: 'yashil', reqs: [], bes
 let state = 'menu', speedLeft = 0, killIn = null, killOut = null;
 const SKIN_BY_ID = Object.fromEntries(SKINS.map(s => [s.id, s]));
 const skinOf = id => SKIN_BY_ID[id] || (id && id[0] === '#' ? {type: 'solid', c: id} : SKINS[0]);
-const KILL_COST = 10, ANTI_COST = 10, TOKEN_GOAL = 1000000, GOAL_STARS = 100;
+const KILL_COST = 10, ANTI_COST = 10, TOKEN_GOAL = 2000000, GOAL_STARS = 100;
 
 function send(o){ if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 const nameVal = () => document.getElementById('name').value.trim().slice(0, 14);
@@ -1221,6 +1222,8 @@ function openAcc(){
   const cheapest = gifts.length ? Math.min(...gifts.map(g => g.price)) : 50;
   document.getElementById('wdHint').textContent = acc.guest ? "Mehmon rejimi: tokenlar saqlanmaydi. O'yinni Telegram bot orqali oching."
     : acc.stars < cheapest ? `Sovg'a olish uchun kamida ${cheapest} ⭐ kerak (yana ${cheapest - acc.stars} ⭐)` : "Sovg'ani tanlang — u Telegram profilingizga yuboriladi";
+  document.getElementById('fundHint').textContent = acc.fund === undefined ? '' :
+    `🏦 Sovg'a fondi: ${acc.fund} ⭐ · navbatda ${acc.queue || 0} ta so'rov. Sovg'alar fonddan navbat bilan yuboriladi; fond o'yindagi xaridlarning ${acc.fund_pct || 70}% idan yig'iladi.`;
   const ref = acc.ref || {};
   show('refCard', !acc.guest && !!ref.link);
   document.getElementById('refInfo').textContent = `Do'stingiz har 50K token yig'ganda sizga +${fmt(50000 * (ref.pct || 10) / 100)} token (${ref.pct || 10}%)`;

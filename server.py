@@ -46,8 +46,9 @@ S = 130.0
 FOOD_N = 1800             # keeps the old food density
 MAX_M = 8000.0            # 80K tokens
 BANK_STEP = 50000         # whole 50K chunks of a round go to the account
-TOKEN_GOAL = 1000000      # every 1M account tokens -> 100 stars (same rate: 10K tokens = 1 star)
+TOKEN_GOAL = 2000000      # every 2M account tokens -> 100 stars (20K tokens = 1 star)
 GOAL_STARS = 100
+FUND_PCT = 70             # share of every real Stars payment that goes to the gift fund
 WITHDRAW_MIN = 50        # smallest withdraw request in stars
 SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 # ⛏ Mining subscription: paid straight to the bot in Telegram Stars (never from the game balance)
@@ -154,6 +155,24 @@ def setting(k, default=None):
 def set_setting(k, v):
     db.execute("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, str(v)))
     db.commit()
+
+
+def fund_get():
+    try:
+        return float(setting("fund", 0) or 0)
+    except ValueError:
+        return 0.0
+
+
+def fund_add(x):
+    """Gift fund: real Stars income share; gifts to players are paid only from it."""
+    v = max(0.0, fund_get() + x)
+    set_setting("fund", round(v, 2))
+    return v
+
+
+def queue_pos(rid):
+    return db.execute("SELECT COUNT(*) FROM reqs WHERE status='pending' AND id<=?", (rid,)).fetchone()[0]
 
 
 def admin_id():
@@ -281,8 +300,10 @@ class Account:
     def reqs(self):
         if self.uid is None:
             return []
-        rows = db.execute("SELECT stars, status, created, gift FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
-        return [{"stars": r["stars"], "gift": gift_label(r["gift"], r["stars"]), "status": STATUS.get(r["status"], r["status"]), "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
+        rows = db.execute("SELECT id, stars, status, created, gift FROM reqs WHERE uid=? ORDER BY id DESC LIMIT 10", (self.uid,))
+        return [{"stars": r["stars"], "gift": gift_label(r["gift"], r["stars"]),
+                 "status": f"⏳ Navbatda: {queue_pos(r['id'])}-o'rin" if r["status"] == "pending" else STATUS.get(r["status"], r["status"]),
+                 "date": time.strftime("%d.%m.%Y", time.localtime(r["created"]))} for r in rows]
 
     # --- mining
     def mining(self):
@@ -323,7 +344,8 @@ class Account:
 
     def public(self):
         return {"t": "acc", "tokens": self.tokens, "stars": self.stars, "owned": self.owned, "skin": self.skin,
-                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "mine": self.mine_public(), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "bot": BOT_USERNAME, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS,
+                "best": self.best, "rank": rank_info(self.rp), "prefs": self.prefs, "mine": self.mine_public(), "reqs": self.reqs(), "guest": self.uid is None, "name": self.name, "wmin": WITHDRAW_MIN, "bot": BOT_USERNAME, "gifts": [{"id": k, "title": v[0], "price": v[1], "emoji": v[2]} for k, v in PAY_GIFTS.items()], "goal": TOKEN_GOAL, "goal_stars": GOAL_STARS, "fund": int(fund_get()), "fund_pct": FUND_PCT,
+                "queue": db.execute("SELECT COUNT(*) FROM reqs WHERE status='pending'").fetchone()[0],
                 "ref": {"link": self.ref_link(), "count": self.ref_count(), "earned": self.ref_earned, "pct": REF_PCT},
                 "sub": {"claimed": bool(self.sub_bonus), "bonus": SUB_BONUS,
                         "link": f"https://t.me/{CHANNEL.lstrip('@')}" if CHANNEL.startswith("@") else ""}}
@@ -443,7 +465,7 @@ async def handle_update(u):
             return await finish_app_login(arg[6:], frm, chat)
         await tg("sendMessage", chat_id=chat, reply_markup=play_keyboard(),
                  text="🎮 <b>Shar Yutar</b>\n\nDonachalarni ye, kattalash, kichiklarni yut!\n"
-                      "• Har 50K token hisobingizga o'tadi\n• Har 1M token = 100 ⭐\n• ⭐ larni 🎂🚀🏆💍 Telegram sovg'alariga almashtiring\n"
+                      "• Har 50K token hisobingizga o'tadi\n• Har 2M token = 100 ⭐\n• ⭐ larni 🎂🚀🏆💍 Telegram sovg'alariga almashtiring\n"
                       "• 🎯 KIL bilan TOP-3 dagilarning tokenini oling\n"
                       f"• 📢 Kanalimiz {CHANNEL}: obuna bo'lsangiz +{SUB_BONUS // 1000}K token 🎁\n\nBoshlash uchun pastdagi tugmani bosing 👇",
                  parse_mode="HTML")
@@ -483,6 +505,18 @@ async def handle_update(u):
                  reply_markup={"inline_keyboard": [[{"text": "📤 Do'stlarga yuborish",
                                                      "url": "https://t.me/share/url?" + urllib.parse.urlencode(
                                                          {"url": acc.ref_link(), "text": "Shar Yutar o'ynaymiz! Sharlar jangi va Telegram yulduzlari 🎮⭐"})}]]})
+    elif text.startswith("/fond") and frm["id"] == admin_id():
+        parts = text.split()
+        if parts[0] == "/fond_qosh" and len(parts) > 1 and parts[1].lstrip("-").isdigit():
+            fund_add(int(parts[1]))
+            asyncio.create_task(process_queue())
+        pend = db.execute("SELECT COUNT(*) c, COALESCE(SUM(stars),0) s FROM reqs WHERE status='pending'").fetchone()
+        bal = await tg("getMyStarBalance")
+        await tg("sendMessage", chat_id=chat,
+                 text=f"🏦 Sovg'a fondi: {int(fund_get())} ⭐\n🤖 Botning Stars balansi: {(bal or {}).get('amount', '?')} ⭐\n"
+                      f"⏳ Navbatda: {pend['c']} ta so'rov ({pend['s']} ⭐)\n\n"
+                      f"Har bir to'lovning {FUND_PCT}% fondga tushadi, navbat fonddan avtomatik yuboriladi.\n"
+                      f"Fondga qo'lda qo'shish: /fond_qosh 100")
     elif text.startswith("/admin"):
         adm = admin_id()
         if adm is None:
@@ -497,7 +531,7 @@ async def handle_update(u):
             kb = {"inline_keyboard": [[{"text": "📊 Admin panel", "web_app": {"url": PUBLIC_URL + "/admin"}}]]} if PUBLIC_URL else None
             await tg("sendMessage", chat_id=chat, reply_markup=kb,
                      text=f"📊 O'yinchilar: {users}\n🟢 Hozir o'ynayapti: {online}\n"
-                          f"⏳ Kutilayotgan so'rovlar: {pend['c']} ta ({pend['s']} ⭐)\n💰 Jami Stars to'lovlari: {paid} ⭐\n👥 Taklif orqali kelganlar: {refs}")
+                          f"⏳ Kutilayotgan so'rovlar: {pend['c']} ta ({pend['s']} ⭐)\n🏦 Sovg'a fondi: {int(fund_get())} ⭐ (to'lovlarning {FUND_PCT}%)\n💰 Jami Stars to'lovlari: {paid} ⭐\n👥 Taklif orqali kelganlar: {refs}")
         else:
             await tg("sendMessage", chat_id=chat, text="Bu buyruq faqat admin uchun.")
 
@@ -552,8 +586,48 @@ async def bot_send_gift(rid):
     res = await tg("sendGift", user_id=r["uid"], gift_id=pick["id"], text="Shar Yutar o'yinidan sovg'a 🎮")
     if res is None:
         return False, "Bot sovg'ani yubora olmadi (botda ⭐ yetmasligi mumkin) — qo'lda yuboring"
+    fund_add(-price)
     await resolve_request(rid, True)
     return True, f"🤖 {emoji} {title} bot orqali yuborildi"
+
+
+QUEUE_LOCK = asyncio.Lock()
+_queue_warn = [0.0]
+
+
+async def process_queue():
+    """Pays pending gift requests in order (oldest first) while the gift fund covers them."""
+    if not BOT_TOKEN or QUEUE_LOCK.locked():
+        return
+    async with QUEUE_LOCK:
+        for _ in range(10):
+            r = db.execute("SELECT * FROM reqs WHERE status='pending' AND gift IS NOT NULL ORDER BY id LIMIT 1").fetchone()
+            if not r or r["gift"] not in PAY_GIFTS or fund_get() < r["stars"]:
+                return
+            bal = await tg("getMyStarBalance")
+            if not bal or bal.get("amount", 0) < PAY_GIFTS[r["gift"]][1]:
+                if time.time() - _queue_warn[0] > 6 * 3600 and admin_id():
+                    _queue_warn[0] = time.time()
+                    await tg("sendMessage", chat_id=admin_id(),
+                             text=f"⚠️ Sovg'a fondida {int(fund_get())} ⭐ bor, lekin botning Stars balansi yetmayapti "
+                                  f"({(bal or {}).get('amount', '?')} ⭐). Navbat to'xtab turibdi.")
+                return
+            ok, msg = await bot_send_gift(r["id"])
+            if not ok:
+                log.warning("queue: request %s not sent: %s", r["id"], msg)
+                if time.time() - _queue_warn[0] > 6 * 3600 and admin_id():
+                    _queue_warn[0] = time.time()
+                    await tg("sendMessage", chat_id=admin_id(), text=f"⚠️ Navbatdagi so'rov #{r['id']} yuborilmadi: {msg}")
+                return
+
+
+async def queue_loop():
+    while True:
+        await asyncio.sleep(120)
+        try:
+            await process_queue()
+        except Exception:
+            log.exception("queue")
 
 
 async def resolve_request(rid, ok):
@@ -640,6 +714,8 @@ async def handle_payment(uid, sp):
         return                                   # already applied
     db.execute("INSERT INTO payments VALUES(?,?,?,?,?)", (charge, puid, item, sp.get("total_amount", 0), int(time.time())))
     db.commit()
+    fund_add(sp.get("total_amount", 0) * FUND_PCT / 100)
+    asyncio.create_task(process_queue())
     if item.startswith("ad:"):
         await ad_paid(int(item[3:]), puid, charge, sp.get("total_amount", 0))
         return
@@ -697,7 +773,8 @@ async def notify_admin_request(rid, acc, stars, gift=None):
         who += f" (@{r['username']})"
     sent = await tg("sendMessage", chat_id=adm,
              text=f"🎁 Sovg'a so'rovi #{rid}\n👤 {who}\n🆔 {acc.uid}\n🎁 {gift_label(gift, stars)} ({stars} ⭐)\n\n"
-                  f"Shu sovg'ani o'yinchiga yuboring, keyin «Yuborildi»ni bosing.\n"
+                  f"📋 Navbat: {queue_pos(rid)}-o'rin · 🏦 Fond: {int(fund_get())} ⭐\n"
+                  f"Fond yetganda bot o'zi navbat bilan yuboradi. Qo'lda yuborsangiz — «Yuborildi»ni bosing.\n"
                   f"«🤖 Bot yuborsin» — sovg'ani bot o'z ⭐ balansidan avtomatik yuboradi.",
              reply_markup={"inline_keyboard": [[{"text": "🤖 Bot yuborsin", "callback_data": f"bot:{rid}"}],
                                                [{"text": "✅ Yuborildi", "callback_data": f"ok:{rid}"},
@@ -934,6 +1011,8 @@ async def ad_review(aid, ok):
     refunded = False
     if back and ad["charge"] and back == ad["stars"]:
         refunded = await tg("refundStarPayment", user_id=ad["uid"], telegram_payment_charge_id=ad["charge"]) is not None
+        if refunded:
+            fund_add(-back * FUND_PCT / 100)
     db.execute("UPDATE ads SET status='rejected', finished=? WHERE id=?", (int(time.time()), aid))
     db.commit()
     note = f"{back} ⭐ qaytarildi" if refunded else (f"{back} ⭐ — admin qo'lda qaytaradi" if back else "")
@@ -1341,7 +1420,7 @@ class Game:
             pay_referrer(p.conn.acc, BANK_STEP)
             p.conn.toast("💰 50K token hisobingizga o'tdi!", fx="bank")
             if conv:
-                p.conn.toast(f"🎉 1M token → {conv} ⭐ balansga tushdi!", fx="stars")
+                p.conn.toast(f"🎉 2M token → {conv} ⭐ balansga tushdi!", fx="stars")
             push_acc(p.conn.acc)
         if p.m < 10:
             p.m = 10
@@ -1434,7 +1513,7 @@ def pay_referrer(acc, banked):
         if c.acc is inv:
             c.toast(f"👥 {acc.name} 50K yig'di — sizga +{fmt(bonus)} token!")
             if conv:
-                c.toast(f"🎉 1M token → {conv} ⭐ balansga tushdi!", fx="stars")
+                c.toast(f"🎉 2M token → {conv} ⭐ balansga tushdi!", fx="stars")
     push_acc(inv)
 
 
@@ -2074,7 +2153,7 @@ async def on_message(c, m):
             conv = c.acc.add_tokens(SUB_BONUS)
             c.toast(f"🎁 Rahmat! +{fmt(SUB_BONUS)} token hisobingizga tushdi")
             if conv:
-                c.toast(f"🎉 1M token → {conv} ⭐ balansga tushdi!")
+                c.toast(f"🎉 2M token → {conv} ⭐ balansga tushdi!")
             push_acc(c.acc)
         else:
             c.toast("Avval kanalga obuna bo'ling, keyin tekshiring")
@@ -2093,7 +2172,8 @@ async def on_message(c, m):
                          (c.acc.uid, price, "pending", int(time.time()), gift))
         db.commit()
         push_acc(c.acc)
-        c.toast(f"So'rov yuborildi! {emoji} {title} tez orada Telegram'ingizga keladi")
+        c.toast(f"{emoji} {title} so'rovi navbatga qo'shildi: {queue_pos(cur.lastrowid)}-o'rin. Sovg'alar fonddan navbat bilan yuboriladi")
+        asyncio.create_task(process_queue())
         asyncio.create_task(notify_admin_request(cur.lastrowid, c.acc, price, gift))
 
 
@@ -2168,6 +2248,7 @@ def admin_overview(q=""):
         "paid_today": one("SELECT COALESCE(SUM(stars),0) FROM payments WHERE created>=?", day0),
         "payments_n": one("SELECT COUNT(*) FROM payments"),
         "refs": one("SELECT COUNT(*) FROM users WHERE ref IS NOT NULL"),
+        "fund": int(fund_get()),
     }
     sql = ("SELECT u.uid, u.name, u.username, u.tokens, u.stars, u.best, u.created, u.ref_earned, "
            "(SELECT COUNT(*) FROM users r WHERE r.ref=u.uid) refs, "
@@ -2525,7 +2606,7 @@ async def main():
 
     server = await asyncio.start_server(http_handler, "0.0.0.0", PORT)
     log.info("listening on :%s, data in %s, admin=%s", PORT, DATA_DIR, admin_id())
-    await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed())
+    await asyncio.gather(server.serve_forever(), game_loop(), bot_loop(), channel_loop(), stream_feed(), queue_loop())
 
 
 if __name__ == "__main__":
