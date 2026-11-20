@@ -169,6 +169,8 @@
   .wwho span{font-size:12px;color:#ffe14d;font-weight:800}
   .subb{font-size:14px;font-weight:800;padding:10px 18px;border:0;border-radius:14px;color:#fff;background:linear-gradient(90deg,#2aa3ef,#7b5cff);box-shadow:0 4px 0 rgba(0,0,0,.25);animation:pulse 1.6s infinite}
   .subb b{color:#ffe14d}
+  .mineb{font-size:14px;font-weight:800;padding:10px 16px;border:0;border-radius:14px;color:#3a2200;background:linear-gradient(90deg,#ffd23f,#ff9f1c);box-shadow:0 4px 0 rgba(0,0,0,.25);line-height:1.25}
+  .mineb small{display:block;font-size:11px;font-weight:700;opacity:.85}
   @keyframes pulse{50%{transform:scale(1.04)}}
   #voice{position:fixed;top:calc(100px + var(--sat));left:10px;width:116px;display:flex;gap:8px;z-index:3}
   #voice button{border:0;border-radius:14px;color:#fff;font:800 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
@@ -218,6 +220,7 @@
     <button class="play" id="playBtn">▶ O'YNASH</button>
     <button class="accb" id="accBtn">💰 HISOB</button>
     <div style="display:flex;gap:10px"><button class="watchb" id="watchBtn" style="padding:10px 18px">👁 KUZATISH</button><button class="watchb" id="topsBtn" style="padding:10px 18px">🏆 TOP</button></div>
+    <button class="mineb tgOnly hidden" id="mineMenu">⛏ Mayning — 30 kun 200 ⭐<small>+8% tezlik · +25% tez o'sish · soatiga 10 ⛏</small></button>
     <button class="subb hidden" id="subBtn">📢 Kanalga obuna bo'ling · <b>+20K 🎁</b></button>
   </div>
   <div class="best" id="bestTxt"></div>
@@ -230,6 +233,7 @@
   <div class="stat" id="dBest"></div>
   <div class="stat" id="dKiller" style="opacity:.8;font-size:14px"></div>
   <div class="stat" id="dBank" style="color:#ffe14d;font-size:15px;font-weight:800"></div>
+  <button class="mineb tgOnly hidden" id="mineDead" style="margin:10px auto 0;display:block">⛏ Mayning bilan tezroq kattalashing<small>+8% tezlik · +25% tez o'sish · 30 kun 200 ⭐</small></button>
   <div class="adBox hidden" id="adDead"></div>
   <div class="btnrow">
     <button class="rev tgOnly" id="revBtn">❤️ Davom etish · 10 ⭐</button>
@@ -1095,6 +1099,10 @@ document.getElementById('bdCancel').onclick = () => show('buyDlg', false);
 let subOpened = false;
 function refreshSub(){
   const sub = acc.sub || {};
+  const mn0 = acc.mine, offer = !!(mn0 && !mn0.on && !acc.guest && !APP);
+  show('mineMenu', offer); show('mineDead', offer);
+  if (mn0) { document.getElementById('mineMenu').firstChild.textContent = `⛏ Mayning — 30 kun ${mn0.price} ⭐`;
+    document.getElementById('mineDead').lastChild.textContent = `+${Math.round((mn0.speed - 1) * 100)}% tezlik · +${Math.round((mn0.food - 1) * 100)}% tez o'sish · 30 kun ${mn0.price} ⭐`; }
   const btn = document.getElementById('subBtn');
   show('subBtn', !acc.guest && sub.link && !sub.claimed);
   btn.innerHTML = subOpened ? "✅ Obuna bo'ldim — tekshirish" : `📢 Kanalga obuna bo'ling · <b>+${fmt(sub.bonus || 20000)} 🎁</b>`;
@@ -1726,10 +1734,11 @@ function drawBubble(text, x, y){
 }
 
 // ---------------------------------------------------------------- mining
-document.getElementById('mineBuy').onclick = () => {
+const buyMine = () => {
   if (!tg) return toast("To'lov faqat Telegram ichida ishlaydi");
   send({t: 'invoice', item: 'mine'});
 };
+['mineBuy', 'mineMenu', 'mineDead'].forEach(id => document.getElementById(id).onclick = buyMine);
 onTap('bMine', () => send({t: 'mineboost'}));
 window.__net = {get state(){ return state; }, get me(){ return me; }, get acc(){ return acc; }, players: () => players, send};
 })();
