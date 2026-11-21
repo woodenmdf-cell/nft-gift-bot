@@ -368,6 +368,27 @@ def tg_call(method, **params):
     return out["result"]
 
 
+def tg_upload(method, field, path, filename, **params):
+    """multipart upload (sendDocument with a local file)"""
+    boundary = secrets.token_hex(16)
+    parts = []
+    for k, v in params.items():
+        v = json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    with open(path, "rb") as f:
+        data = f.read()
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
+                 f'Content-Type: application/vnd.android.package-archive\r\n\r\n'.encode() + data + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(f"https://api.telegram.org/bot{BOT_TOKEN}/{method}", data=b"".join(parts),
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=180) as r:
+        out = json.loads(r.read())
+    if not out.get("ok"):
+        raise RuntimeError(f"{method}: {out}")
+    return out["result"]
+
+
 async def tg(method, **params):
     try:
         return await asyncio.to_thread(tg_call, method, **params)
@@ -400,7 +421,8 @@ def play_keyboard():
         return None
     return {"inline_keyboard": [[{"text": "🎮 O'ynash", "web_app": {"url": PUBLIC_URL}}],
                                 [{"text": "🏆 Rank TOP", "web_app": {"url": PUBLIC_URL + "/?tops=1"}},
-                                 {"text": "👁 Kuzatish", "web_app": {"url": PUBLIC_URL + "/?watch=1"}}]]}
+                                 {"text": "👁 Kuzatish", "web_app": {"url": PUBLIC_URL + "/?watch=1"}}],
+                                [{"text": "📱 Ilova — Android / iPhone", "callback_data": "app:menu"}]]}
 
 
 async def bot_loop():
@@ -414,6 +436,7 @@ async def bot_loop():
     log.info("bot @%s started, web app: %s", me and me.get("username"), PUBLIC_URL or "(no PUBLIC_URL yet)")
     await tg("setMyCommands", commands=[{"command": "start", "description": "O'yinni ochish"},
                                         {"command": "top", "description": "🏆 Rank TOP"},
+                                        {"command": "ilova", "description": "📱 Ilovani yuklab olish (Android / iPhone)"},
                                         {"command": "reklama", "description": "📢 Reklama berish"},
                                         {"command": "reklamalarim", "description": "📊 Reklamalarim statistikasi"},
                                         {"command": "ref", "description": "Do'stlarni taklif qilish"},
@@ -481,6 +504,8 @@ async def handle_update(u):
         await ad_my_stats(chat, frm["id"])
     elif text.startswith("/reklama"):
         await ad_start(chat, frm)
+    elif text.startswith("/ilova"):
+        await app_menu(chat)
     elif text.startswith("/top"):
         lines = ["🏆 <b>Rank TOP</b>\n"]
         for ti, (name, _) in enumerate(RANK_TIERS[::-1]):
@@ -655,8 +680,73 @@ async def resolve_request(rid, ok):
     return note
 
 
+STATIC_FILES = {"/manifest.webmanifest": "application/manifest+json", "/icon-192.png": "image/png",
+                "/icon-512.png": "image/png", "/apple-touch-icon.png": "image/png"}
+APK_PATH = os.path.join(HERE, "dist", "shar-yutar.apk")
+APK_VER = "1"                    # bump when dist/shar-yutar.apk changes, so the cached Telegram file is re-uploaded
+
+
+async def app_menu(chat):
+    await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+             text="📱 <b>Shar Yutar ilovasi</b>\n\nO'yinni telefoningizga ilova qilib o'rnating — Play Market va App Store'siz, "
+                  "to'g'ridan-to'g'ri shu yerdan.\n\nTelefoningizni tanlang 👇",
+             reply_markup={"inline_keyboard": [[{"text": "🤖 ANDROID", "callback_data": "app:android"},
+                                                {"text": "🍏 iPhone (iOS)", "callback_data": "app:ios"}]]})
+
+
+async def send_android(chat):
+    await tg("sendMessage", chat_id=chat, parse_mode="HTML",
+             text="🤖 <b>Android'ga o'rnatish</b>\n\n"
+                  "1️⃣ Pastdagi <b>shar-yutar.apk</b> faylini bosing — yuklab olinadi.\n"
+                  "2️⃣ Yuklangach, faylni yana bosing.\n"
+                  "3️⃣ Telefon «Noma'lum manbalardan o'rnatish»ga ruxsat so'rasa: <b>Sozlamalar</b> → "
+                  "<b>Telegram</b> uchun <b>Ruxsat berish</b>ni yoqing va orqaga qayting.\n"
+                  "4️⃣ <b>O'rnatish</b>ni bosing. Play Protect ogohlantirsa — <b>Baribir o'rnatish</b>.\n"
+                  "5️⃣ Ilovani oching va <b>«Telegram orqali kirish»</b>ni bosing — natijalaringiz va rankingiz saqlanadi.\n\n"
+                  "ℹ️ Ilova bepul. ⭐ to'lovlar va sovg'alar Telegram ichidagi o'yinda ishlaydi.")
+    fid = setting("apk_file_id_" + APK_VER)
+    if fid:
+        if await tg("sendDocument", chat_id=chat, document=fid, caption="📥 Shar Yutar — Android ilova"):
+            return
+    await tg("sendChatAction", chat_id=chat, action="upload_document")
+    try:
+        msg = await asyncio.to_thread(tg_upload, "sendDocument", "document", APK_PATH, "shar-yutar.apk",
+                                      chat_id=chat, caption="📥 Shar Yutar — Android ilova")
+        doc = (msg or {}).get("document") or {}
+        if doc.get("file_id"):
+            set_setting("apk_file_id_" + APK_VER, doc["file_id"])
+    except Exception as e:
+        log.warning("apk upload failed: %s", str(e).replace(BOT_TOKEN, "***"))
+        await tg("sendMessage", chat_id=chat, text="⚠️ Faylni yuborib bo'lmadi, birozdan keyin qayta urinib ko'ring: /ilova")
+
+
+async def send_ios(chat):
+    url = (PUBLIC_URL or "") + "/?app=1"
+    await tg("sendMessage", chat_id=chat, parse_mode="HTML", disable_web_page_preview=True,
+             text="🍏 <b>iPhone'ga o'rnatish</b>\n\n"
+                  "Apple iPhone'ga fayl orqali ilova o'rnatishga ruxsat bermaydi, shuning uchun o'yin "
+                  "<b>Bosh ekranga</b> qo'shiladi — ilova kabi belgisi bilan, to'liq ekranda ochiladi.\n\n"
+                  "1️⃣ Pastdagi <b>«Safari'da ochish»</b> tugmasini bosing.\n"
+                  "2️⃣ Telegram ichida ochilsa — pastdagi 🧭 (yoki ⋯) belgisini bosib <b>Safari'da ochish</b>ni tanlang.\n"
+                  "3️⃣ Safari'da pastdagi <b>Ulashish</b> tugmasini bosing (kvadrat va yuqoriga strelka ⬆️).\n"
+                  "4️⃣ Ro'yxatdan <b>«Bosh ekranga qo'shish»</b> (Add to Home Screen) → <b>Qo'shish</b>.\n"
+                  "5️⃣ Ekranda <b>Shar Yutar</b> belgisi paydo bo'ladi. Uni oching va <b>«Telegram orqali kirish»</b>ni bosing.",
+             reply_markup={"inline_keyboard": [[{"text": "🧭 Safari'da ochish", "url": url}]]})
+
+
 async def handle_callback(q):
     data, frm = q.get("data", ""), q.get("from", {})
+    if data.startswith("app:"):
+        await tg("answerCallbackQuery", callback_query_id=q["id"])
+        chat = (q.get("message") or {}).get("chat", {}).get("id") or frm.get("id")
+        kind = data[4:]
+        if kind == "android":
+            await send_android(chat)
+        elif kind == "ios":
+            await send_ios(chat)
+        else:
+            await app_menu(chat)
+        return
     if data.startswith("adpkg:"):
         await ad_choose_package(q, frm)
         return
@@ -2427,6 +2517,10 @@ async def http_handler(reader, writer):
     elif path in ("/privacy", "/terms", "/delete-account"):
         with open(os.path.join(HERE, "public", path.strip("/") + ".html"), "rb") as f:
             body, ctype = f.read(), "text/html; charset=utf-8"
+        status = "200 OK"
+    elif path in STATIC_FILES:
+        with open(os.path.join(HERE, "public", path.lstrip("/")), "rb") as f:
+            body, ctype = f.read(), STATIC_FILES[path]
         status = "200 OK"
     elif path == "/favicon.ico":
         body, ctype, status = b"", "image/x-icon", "204 No Content"

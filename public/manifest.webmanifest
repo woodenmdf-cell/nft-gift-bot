@@ -1,0 +1,14 @@
+{
+  "name": "Shar Yutar",
+  "short_name": "Shar Yutar",
+  "start_url": "/?app=1",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#2a58c8",
+  "theme_color": "#2a58c8",
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
