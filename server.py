@@ -54,7 +54,9 @@ SPEED_COST = 1000         # round tokens for 30 s of 2x speed
 # ⛏ Mining subscription: paid straight to the bot in Telegram Stars (never from the game balance)
 MINE_PRICE = 200          # ⭐ for 30 days
 MINE_DAYS = 30
-MINE_RATE = 10            # ⛏ mined per hour while the subscription is on
+MINE_RATE = 10            # ⛏ mined per hour while the subscription is on (outside the game)
+MINE_PLAY_RATE = 10       # ⛏ per minute while actually playing in the arena
+MINE_BOOST_DAY = 30       # at most this many ⛏ +1K boosts a day
 MINE_SPEED = 1.08         # miners move 8% faster
 MINE_FOOD = 1.25          # and grow 25% faster from food
 MINE_BOOST_COST = 100     # ⛏ for one in-game boost
@@ -106,7 +108,8 @@ CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 """)
 db.commit()
 for col in ("ref INTEGER", "ref_earned INTEGER DEFAULT 0", "sub_bonus INTEGER DEFAULT 0", "rp INTEGER DEFAULT 0", "prefs TEXT",
-            "mine_until INTEGER DEFAULT 0", "mine_bal REAL DEFAULT 0", "mine_last INTEGER DEFAULT 0"):
+            "mine_until INTEGER DEFAULT 0", "mine_bal REAL DEFAULT 0", "mine_last INTEGER DEFAULT 0",
+            "mine_bday INTEGER DEFAULT 0", "mine_bn INTEGER DEFAULT 0"):
     try:
         db.execute(f"ALTER TABLE users ADD COLUMN {col}")
     except sqlite3.OperationalError:
@@ -155,6 +158,10 @@ def setting(k, default=None):
 def set_setting(k, v):
     db.execute("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, str(v)))
     db.commit()
+
+
+def tash_day():
+    return int((time.time() + 5 * 3600) // 86400)          # calendar day in Tashkent
 
 
 def fund_get():
@@ -245,6 +252,7 @@ class Account:
             self.prefs = ""
             self.mine_until = self.mine_last = 0
             self.mine_bal = 0.0
+            self.mine_bday = self.mine_bn = 0
             return
         r = db.execute("SELECT * FROM users WHERE uid=?", (uid,)).fetchone()
         if not r:
@@ -262,6 +270,7 @@ class Account:
         self.rp = r["rp"] or 0
         self.prefs = r["prefs"] or ""
         self.mine_until, self.mine_bal, self.mine_last = r["mine_until"] or 0, r["mine_bal"] or 0.0, r["mine_last"] or 0
+        self.mine_bday, self.mine_bn = r["mine_bday"] or 0, r["mine_bn"] or 0
         self.owned = [s for s in json.loads(r["owned"] or "[]") if s in SKIN_PRICES] or ["yashil"]
         if "yashil" not in self.owned:
             self.owned.insert(0, "yashil")
@@ -281,9 +290,9 @@ class Account:
     def save(self):
         if self.uid is None:
             return
-        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=?, rp=?, mine_until=?, mine_bal=?, mine_last=? WHERE uid=?",
+        db.execute("UPDATE users SET tokens=?, stars=?, owned=?, skin=?, best=?, name=?, ref_earned=?, sub_bonus=?, rp=?, mine_until=?, mine_bal=?, mine_last=?, mine_bday=?, mine_bn=? WHERE uid=?",
                    (self.tokens, self.stars, json.dumps(self.owned), self.skin, self.best, self.name, self.ref_earned, self.sub_bonus, self.rp,
-                    self.mine_until, self.mine_bal, self.mine_last, self.uid))
+                    self.mine_until, self.mine_bal, self.mine_last, self.mine_bday, self.mine_bn, self.uid))
         db.commit()
 
     def add_tokens(self, n):
@@ -318,9 +327,13 @@ class Account:
                 self.mine_bal += (upto - self.mine_last) / 3600 * MINE_RATE
         self.mine_last = int(now) if self.mine_until > now else self.mine_until
 
+    def boosts_left(self):
+        return MINE_BOOST_DAY - (self.mine_bn if self.mine_bday == tash_day() else 0)
+
     def mine_public(self):
         self.mine_update()
         return {"on": self.mining(), "until": self.mine_until, "bal": int(self.mine_bal), "rate": MINE_RATE,
+                "play_rate": MINE_PLAY_RATE, "boost_day": MINE_BOOST_DAY, "boost_left": self.boosts_left(),
                 "price": MINE_PRICE, "days": MINE_DAYS, "speed": MINE_SPEED, "food": MINE_FOOD,
                 "boost_cost": MINE_BOOST_COST, "boost_tokens": MINE_BOOST_MASS * 10}
 
@@ -835,7 +848,7 @@ async def handle_payment(uid, sp):
         acc.save()
         if conn:
             conn.toast(f"⛏ Mayning yoqildi! {time.strftime('%d.%m.%Y', time.localtime(acc.mine_until))} gacha")
-        await tg("sendMessage", chat_id=puid, text=f"⛏ Mayning {MINE_DAYS} kunga yoqildi! Har soatda {MINE_RATE} ⛏ yig'iladi.\n"
+        await tg("sendMessage", chat_id=puid, text=f"⛏ Mayning {MINE_DAYS} kunga yoqildi! O'yinda har daqiqada {MINE_PLAY_RATE} ⛏, o'yindan tashqarida soatiga {MINE_RATE} ⛏ yig'iladi.\n"
                                                     f"O'yinda: +{round((MINE_SPEED - 1) * 100)}% tezlik va +{round((MINE_FOOD - 1) * 100)}% tezroq o'sish.")
     elif item == "revive":
         if not (conn and game.revive(conn)):
@@ -2137,7 +2150,12 @@ async def on_message(c, m):
             return c.toast(f"⛏ Kamida {MINE_BOOST_COST} ⛏ kerak")
         if time.time() - getattr(p, "mboost_t", 0) < MINE_BOOST_GAP:
             return c.toast("⛏ Bir daqiqada bir marta ishlatiladi")
+        if c.acc.boosts_left() <= 0:
+            return c.toast(f"⛏ Bugungi {MINE_BOOST_DAY} ta +1K tugadi — ertaga yana! ⛏ yig'ilishda davom etadi")
         p.mboost_t = time.time()
+        day = tash_day()
+        c.acc.mine_bn = (c.acc.mine_bn if c.acc.mine_bday == day else 0) + 1
+        c.acc.mine_bday = day
         c.acc.mine_bal -= MINE_BOOST_COST
         c.acc.save()
         p.m = min(MAX_M, p.m + MINE_BOOST_MASS)
@@ -2444,7 +2462,7 @@ async def admin_api(body):
             if c.acc is acc:
                 c.toast(note)
         if days:
-            await tg("sendMessage", chat_id=target, text=note + f"\nHar soatda {MINE_RATE} ⛏ yig'iladi, o'yinda +{round((MINE_SPEED - 1) * 100)}% tezlik "
+            await tg("sendMessage", chat_id=target, text=note + f"\nO'yinda har daqiqada {MINE_PLAY_RATE} ⛏ yig'iladi, o'yinda +{round((MINE_SPEED - 1) * 100)}% tezlik "
                                                            f"va +{round((MINE_FOOD - 1) * 100)}% tezroq o'sish 🚀")
     return admin_overview(str(m.get("q", ""))[:40])
 
@@ -2681,6 +2699,20 @@ async def stream_feed():
         await asyncio.sleep(10)
 
 
+def tick_mining(sec):
+    """Once a second: miners who are playing right now dig MINE_PLAY_RATE ⛏ a minute (on top of the hourly rate)."""
+    extra = MINE_PLAY_RATE / 60 - MINE_RATE / 3600
+    for c in list(conns):
+        p, a = c.player, c.acc
+        if not (p and p.alive and a and a.uid and not getattr(c, "app", False) and a.mining()):
+            continue
+        a.mine_bal += extra
+        if sec % 6 == 0:
+            c.send({"t": "mbal", "bal": int(a.mine_bal), "left": a.boosts_left()})
+        if sec % 60 == 0:
+            a.save()
+
+
 async def game_loop():
     last = time.monotonic()
     n = 0
@@ -2693,6 +2725,8 @@ async def game_loop():
             if n % 10 == 0:
                 tick_orphans()
                 bot_chatter()
+            if n % 20 == 0:
+                tick_mining(n // 20)
             n += 1
             if game.meta_dirty:
                 game.meta_dirty = False

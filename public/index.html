@@ -227,7 +227,7 @@
     <button class="play" id="playBtn">▶ O'YNASH</button>
     <button class="accb" id="accBtn">💰 HISOB</button>
     <div style="display:flex;gap:10px"><button class="watchb" id="watchBtn" style="padding:10px 18px">👁 KUZATISH</button><button class="watchb" id="topsBtn" style="padding:10px 18px">🏆 TOP</button></div>
-    <button class="mineb tgOnly hidden" id="mineMenu">⛏ Mayning — 30 kun 200 ⭐<small>+8% tezlik · +25% tez o'sish · soatiga 10 ⛏</small></button>
+    <button class="mineb tgOnly hidden" id="mineMenu">⛏ Mayning — 30 kun 200 ⭐<small>+8% tezlik · +25% tez o'sish · o'yinda daqiqasiga 10 ⛏</small></button>
     <button class="subb hidden" id="subBtn">📢 Kanalga obuna bo'ling · <b>+20K 🎁</b></button>
   </div>
   <div class="best" id="bestTxt"></div>
@@ -707,6 +707,7 @@ function onMsg(m){
     case 'v': if (m.b && !botVoice) break; voiceIn(m.id, m.n || '', m.d); break;
     case 'say': botSays(m); break;
     case 'tops': topsData = m; renderTops(); break;
+    case 'mbal': if (acc.mine) { acc.mine.bal = m.bal; acc.mine.boost_left = m.left; hudT = 0; } break;
     case 'mineboost': if (me) popups.push({x: me.x, z: me.z - rad(me.m), t: 0, txt: '⛏ +' + fmt(m.add), big: true}); haptic('medium'); break;
     case 'applogin': store.set('loginCode', m.code); openExt(`https://t.me/${m.bot}?start=login_${m.code}`); toast('Telegram ochildi — botda «Start» ni bosing'); break;
     case 'session': store.set('session', m.token); store.set('loginCode', ''); break;
@@ -768,7 +769,7 @@ function updHud(){
   document.getElementById('board').innerHTML = h;
   document.getElementById('bSpeed').classList.toggle('on', speedLeft > 0);
   const mn = acc.mine; show('bMine', !!(mn && !APP && (mn.on || mn.bal >= mn.boost_cost)));
-  if (mn) { document.getElementById('bMine').classList.toggle('dis', mn.bal < mn.boost_cost); document.getElementById('tMine').textContent = mn.bal + ' ⛏'; }
+  if (mn) { document.getElementById('bMine').classList.toggle('dis', mn.bal < mn.boost_cost || mn.boost_left <= 0); document.getElementById('tMine').textContent = mn.bal + ' ⛏'; }
   document.getElementById('tSpeed').textContent = speedLeft > 0 ? Math.ceil(speedLeft) + 's' : '1K token';
   // KIL opens only when you are in the top 3 yourself
   document.getElementById('bKill').classList.toggle('dis', !(rank >= 1 && rank <= 3));
@@ -1227,8 +1228,8 @@ function openAcc(){
   if (mn) {
     document.getElementById('mineBal').textContent = mn.bal + ' ⛏';
     document.getElementById('mineInfo').innerHTML = mn.on
-      ? `🟢 Faol — ${new Date(mn.until * 1000).toLocaleDateString('ru-RU')} gacha<br>Har soatda +${mn.rate} ⛏ · o'yinda +${Math.round((mn.speed - 1) * 100)}% tezlik, +${Math.round((mn.food - 1) * 100)}% tezroq o'sish<br>O'yinda «⛏ +1K» tugmasi: ${mn.boost_cost} ⛏ → +${fmt(mn.boost_tokens)} token`
-      : `Mayning har soatda ${mn.rate} ⛏ yig'adi (oyiga ~${mn.rate * 24 * 30} ⛏).<br>⛏ bilan o'yinda sharingizni tez kattalashtirasiz, mayning paytida +${Math.round((mn.speed - 1) * 100)}% tezlik va +${Math.round((mn.food - 1) * 100)}% tezroq o'sish.`;
+      ? `🟢 Faol — ${new Date(mn.until * 1000).toLocaleDateString('ru-RU')} gacha<br>O'yinda har daqiqada +${mn.play_rate || 10} ⛏, tashqarida soatiga +${mn.rate} ⛏ · +${Math.round((mn.speed - 1) * 100)}% tezlik, +${Math.round((mn.food - 1) * 100)}% tezroq o'sish<br>«⛏ +1K» tugmasi: ${mn.boost_cost} ⛏ → +${fmt(mn.boost_tokens)} token · bugun yana ${mn.boost_left ?? mn.boost_day} ta`
+      : `O'yinda har daqiqada ${mn.play_rate || 10} ⛏ yig'iladi (har 10 daqiqada bitta «⛏ +1K»), o'yindan tashqarida soatiga ${mn.rate} ⛏.<br>Mayning paytida +${Math.round((mn.speed - 1) * 100)}% tezlik va +${Math.round((mn.food - 1) * 100)}% tezroq o'sish. Kuniga ${mn.boost_day || 30} ta «+1K».`;
     document.getElementById('mineBuy').textContent = (mn.on ? '⛏ Yana 30 kun qo\'shish — ' : '⛏ 30 kun — ') + mn.price + ' ⭐';
   }
   const gifts = acc.gifts || [];
