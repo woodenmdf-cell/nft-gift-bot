@@ -2340,7 +2340,7 @@ def admin_overview(q=""):
         "refs": one("SELECT COUNT(*) FROM users WHERE ref IS NOT NULL"),
         "fund": int(fund_get()),
     }
-    sql = ("SELECT u.uid, u.name, u.username, u.tokens, u.stars, u.best, u.created, u.ref_earned, "
+    sql = ("SELECT u.uid, u.name, u.username, u.tokens, u.stars, u.best, u.created, u.ref_earned, u.mine_until, "
            "(SELECT COUNT(*) FROM users r WHERE r.ref=u.uid) refs, "
            "(SELECT COALESCE(SUM(stars),0) FROM payments p WHERE p.uid=u.uid) paid FROM users u")
     args = ()
@@ -2349,6 +2349,10 @@ def admin_overview(q=""):
         args = (f"%{q}%",) * 3
     sql += " ORDER BY u.stars DESC, u.tokens DESC LIMIT 300"
     users = [dict(r) | {"online": r["uid"] in on} for r in db.execute(sql, args)]
+    for u in users:                      # online accounts may hold newer mining state than the table
+        a = Account.cache.get(u["uid"])
+        if a:
+            u["mine_until"] = a.mine_until
     reqs = [dict(r) for r in db.execute(
         "SELECT q.id, q.uid, q.stars, q.gift, q.status, q.created, u.name, u.username FROM reqs q LEFT JOIN users u ON u.uid=q.uid "
         "ORDER BY (q.status='pending') DESC, q.id DESC LIMIT 50")]
@@ -2417,6 +2421,31 @@ async def admin_api(body):
         for c in conns:
             if c.acc is acc:
                 c.toast(f"⭐ Admin balansingizni o'zgartirdi: {'+' if delta > 0 else ''}{delta} ⭐")
+    elif act == "mine":
+        target = int(m.get("uid", 0))
+        if not db.execute("SELECT 1 FROM users WHERE uid=?", (target,)).fetchone():
+            return {"ok": False, "error": "O'yinchi topilmadi"}
+        acc = Account.get(target)
+        days = max(0, min(365, int(m.get("days", 0))))
+        now = int(time.time())
+        acc.mine_update()
+        if days:
+            if not acc.mining():
+                acc.mine_last = now
+            acc.mine_until = max(now, acc.mine_until) + days * 86400
+            note = f"⛏ Admin sizga {days} kunlik mayning sovg'a qildi! {time.strftime('%d.%m.%Y', time.localtime(acc.mine_until))} gacha"
+        else:
+            acc.mine_until = now
+            note = "⛏ Mayningingiz admin tomonidan o'chirildi"
+        acc.save()
+        push_acc(acc)
+        log.info("admin mining %s: %s days", target, days)
+        for c in conns:
+            if c.acc is acc:
+                c.toast(note)
+        if days:
+            await tg("sendMessage", chat_id=target, text=note + f"\nHar soatda {MINE_RATE} ⛏ yig'iladi, o'yinda +{round((MINE_SPEED - 1) * 100)}% tezlik "
+                                                           f"va +{round((MINE_FOOD - 1) * 100)}% tezroq o'sish 🚀")
     return admin_overview(str(m.get("q", ""))[:40])
 
 

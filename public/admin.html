@@ -95,6 +95,7 @@
       <button class="btn ok" id="udPlay">🎮 O'ynash — yoniga kirish</button>
       <button class="btn" id="udTg">👤 Telegram profili</button>
       <button class="btn gold" id="udStars">⭐ Balansni o'zgartirish</button>
+      <button class="btn gold" id="udMine">⛏ Mayning berish</button>
       <button class="btn" id="udClose" style="background:transparent">Yopish</button>
     </div>
   </div>
@@ -108,6 +109,18 @@
       <button class="btn ok" data-d="10">+10</button><button class="btn ok" data-d="50">+50</button>
     </div>
     <button class="btn" id="sdClose" style="width:100%">Yopish</button>
+  </div>
+</div>
+<div id="mineDlg" class="modal hidden">
+  <div class="mcard">
+    <h3 id="mdName"></h3>
+    <div class="sub" id="mdState"></div>
+    <div class="steps">
+      <button class="btn ok" data-md="7">+7 kun</button><button class="btn ok" data-md="30">+30 kun</button>
+      <button class="btn ok" data-md="90">+90 kun</button>
+    </div>
+    <button class="btn no" data-md="0" style="width:100%;margin-bottom:8px">⛔ Mayningni o'chirish</button>
+    <button class="btn" id="mdClose" style="width:100%">Yopish</button>
   </div>
 </div>
 <div id="toast"></div>
@@ -190,10 +203,21 @@ function fillUser(uid){
   }
   $('udName').textContent = u.name;
   $('udSub').innerHTML = (u.username ? '@' + esc(u.username) + ' · ' : '') + 'ID ' + u.uid + (u.online ? ' · <span style="color:#2fd06a">🟢 hozir o\'ynayapti</span>' : ' · oflayn');
-  $('udGrid').innerHTML = `<div><b>${u.stars} ⭐</b>balans</div><div><b>${fmt(u.tokens)}</b>token</div><div><b>${fmt(u.best)}</b>rekord (1 o'yinda)</div><div><b>${u.paid} ⭐</b>to'lagan</div><div><b>${u.refs}</b>taklif qilgan</div><div><b>${ago(u.created)}</b>qo'shilgan</div>`;
+  $('udGrid').innerHTML = `<div><b>${u.stars} ⭐</b>balans</div><div><b>${fmt(u.tokens)}</b>token</div><div><b>${fmt(u.best)}</b>rekord (1 o'yinda)</div><div><b>${u.paid} ⭐</b>to'lagan</div><div><b>${u.refs}</b>taklif qilgan</div><div><b>${ago(u.created)}</b>qo'shilgan</div><div><b>${mineTxt(u)}</b>mayning</div>`;
   $('udPlay').classList.toggle('hidden', !u.online);
   $('udTg').textContent = u.username ? '👤 Telegram profili (@' + u.username + ')' : '👤 Telegram profili';
 }
+function mineTxt(u){ const t = (u.mine_until || 0) * 1000; return t > Date.now() ? '⛏ ' + new Date(t).toLocaleDateString('ru-RU') + ' gacha' : "yo'q"; }
+function fillMine(){ const u = data.users.find(x => x.uid === openUid); if (!u) return;
+  $('mdName').textContent = '⛏ ' + u.name; $('mdState').textContent = 'Hozir: ' + (mineTxt(u) === "yo'q" ? "mayning yo'q" : mineTxt(u)); }
+$('udMine').onclick = () => { fillMine(); $('mineDlg').classList.remove('hidden'); };
+$('mdClose').onclick = () => $('mineDlg').classList.add('hidden');
+$('mineDlg').addEventListener('click', async e => {
+  const b = e.target.closest('[data-md]'); if (!b) return;
+  const days = +b.dataset.md;
+  const go = async () => { if (await api({action: 'mine', uid: openUid, days})) { fillMine(); fillUser(openUid); toast(days ? '⛏ +' + days + ' kun mayning berildi' : '⛔ Mayning o\'chirildi'); } };
+  if (!days && tg && tg.showConfirm) tg.showConfirm('Mayningni o\'chirasizmi?', y => y && go()); else go();
+});
 function openUser(uid){ openUid = uid; fillUser(uid); $('userDlg').classList.remove('hidden'); }
 $('udClose').onclick = () => { $('userDlg').classList.add('hidden'); openUid = null; };
 $('udStars').onclick = () => { const u = data.users.find(x => x.uid === openUid); starUid = openUid; $('sdName').textContent = u.name; $('sdBal').textContent = 'Hozirgi balans: ' + u.stars + ' ⭐'; $('starDlg').classList.remove('hidden'); };
